@@ -23,7 +23,7 @@ use node_template_runtime::Block;
 
 impl SubstrateCli for Cli {
 	fn impl_name() -> String {
-		"Substrate Node".into()
+		"Mint Layer Node".into()
 	}
 
 	fn impl_version() -> String {
@@ -35,15 +35,15 @@ impl SubstrateCli for Cli {
 	}
 
 	fn author() -> String {
-		env!("CARGO_PKG_AUTHORS").into()
+		"Mint Layer".into()
 	}
 
 	fn support_url() -> String {
-		"support.anonymous.an".into()
+		"https://github.com/mintlayer/core/issues/new".into()
 	}
 
 	fn copyright_start_year() -> i32 {
-		2017
+		2021
 	}
 
 	fn load_spec(&self, id: &str) -> Result<Box<dyn sc_service::ChainSpec>, String> {
