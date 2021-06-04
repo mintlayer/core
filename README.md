@@ -4,6 +4,9 @@
 Code base uses the substrate node v3.0.0 template as a base.
 More information can be found on substrate.dev
 
+NOTE: to build this you need the BLS repo in the parent directory.
+for example in the dir ~/dev you should have both core and BLS.
+
 To build this use cargo build --release
 
 To build and run use cargo run --release -- --dev --tmp
