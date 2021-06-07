@@ -1,3 +1,4 @@
+
 name: build
 
 on:
@@ -17,11 +18,12 @@ jobs:
     - name: Install nightly
       uses: actions-rs/toolchain@v1
       with:
+        profile: minimal
         toolchain: nightly-2021-05-20
-        target: wasm32-unknown-unknown --toolchain nightly-2021-05-20
-        override: true
-        components: rustfmt, clippy
+        target: wasm32-unknown-unknown
+        components: rustfmt
+        default: true
     - name: Build
-      run: cargo +nightly-2021-05-20 build --verbose
+      run: cargo build --release
     - name: Run tests
-      run: cargo +nightly-2021-05-20 test --verbose
+      run: cargo test
