@@ -12,7 +12,7 @@ To purge the chain ./target/release/node-template purge-chain --dev
 
 
 ## Substrate Node Template
-
+ s
 [![Try on playground](https://img.shields.io/badge/Playground-Node_Template-brightgreen?logo=Parity%20Substrate)](https://playground.substrate.dev/?deploy=node-template)
 
 A fresh FRAME-based [Substrate](https://www.substrate.io/) node, ready for hacking :rocket:
