@@ -1,0 +1,29 @@
+
+name: build
+
+on:
+  pull_request:
+    branches: [ master ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install nightly
+      uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: nightly-2021-05-20
+        target: wasm32-unknown-unknown
+        components: rustfmt
+        default: true
+    - name: Build
+      run: cargo build --release
+    - name: Run tests
+      run: cargo test
