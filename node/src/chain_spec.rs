@@ -147,8 +147,9 @@ fn testnet_genesis(
 
 	// only Alice contains 400 million coins.
 	let genesis= endowed_utxos.first().map(|x| {
+		// may need to create a const variable to represent 1_000 and 100_000_000
 		pallet_utxo::TransactionOutput::new(
-			1_000 * 400_000_000 as pallet_utxo::Value,
+			1_000 * 100_000_000 * 400_000_000 as pallet_utxo::Value,
 			H256::from_slice(x.as_slice())
 		)
 	}).unwrap();
