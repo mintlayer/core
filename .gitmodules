@@ -1,0 +1,4 @@
+[submodule "pallets/utxo"]
+	path = pallets/utxo
+	url = https://github.com/mintlayer/pallet-utxo.git
+	branch = benchmark_with_mintlayer_node

@@ -212,3 +212,12 @@ by appending your own. A few useful ones are as follow.
 # Check whether the code is compilable
 ./scripts/docker_run.sh cargo check
 ```
+
+### pallet-utxo
+found at branch `pallet-utxo`:
+```bash
+# it is imported via a submodule.
+cd pallets/utxo
+git submodule init
+git submodule update # --init --recursive
+```
