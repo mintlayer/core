@@ -1,12 +1,14 @@
 use sp_core::{Pair, Public, sr25519};
 use node_template_runtime::{
 	AccountId, AuraConfig, BalancesConfig, GenesisConfig, GrandpaConfig,
-	SudoConfig, SystemConfig, WASM_BINARY, Signature
-};
+	SudoConfig, SystemConfig, WASM_BINARY, Signature,
+	pallet_utxo, UtxoConfig};
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_finality_grandpa::AuthorityId as GrandpaId;
 use sp_runtime::traits::{Verify, IdentifyAccount};
 use sc_service::ChainType;
+
+use sp_core::H256;
 
 // The URL for the telemetry server.
 // const STAGING_TELEMETRY_URL: &str = "wss://telemetry.polkadot.io/submit/";
@@ -62,6 +64,10 @@ pub fn development_config() -> Result<ChainSpec, String> {
 				get_account_id_from_seed::<sr25519::Public>("Alice//stash"),
 				get_account_id_from_seed::<sr25519::Public>("Bob//stash"),
 			],
+			vec![
+				get_from_seed::<sr25519::Public>("Alice"),
+				get_from_seed::<sr25519::Public>("Bob")
+			],
 			true,
 		),
 		// Bootnodes
@@ -110,6 +116,10 @@ pub fn local_testnet_config() -> Result<ChainSpec, String> {
 				get_account_id_from_seed::<sr25519::Public>("Eve//stash"),
 				get_account_id_from_seed::<sr25519::Public>("Ferdie//stash"),
 			],
+			vec![
+				get_from_seed::<sr25519::Public>("Alice"),
+				get_from_seed::<sr25519::Public>("Bob")
+			],
 			true,
 		),
 		// Bootnodes
@@ -131,8 +141,19 @@ fn testnet_genesis(
 	initial_authorities: Vec<(AuraId, GrandpaId)>,
 	root_key: AccountId,
 	endowed_accounts: Vec<AccountId>,
+	endowed_utxos: Vec<sr25519::Public>,
 	_enable_println: bool,
 ) -> GenesisConfig {
+
+	// only Alice contains 400 million coins.
+	let genesis= endowed_utxos.first().map(|x| {
+		// may need to create a const variable to represent 1_000 and 100_000_000
+		pallet_utxo::TransactionOutput::new(
+			1_000 * 100_000_000 * 400_000_000 as pallet_utxo::Value,
+			H256::from_slice(x.as_slice())
+		)
+	}).unwrap();
+
 	GenesisConfig {
 		frame_system: SystemConfig {
 			// Add Wasm runtime to storage.
@@ -153,5 +174,10 @@ fn testnet_genesis(
 			// Assign network admin rights.
 			key: root_key,
 		},
+
+		pallet_utxo: UtxoConfig {
+			genesis_utxos: vec![genesis],
+			_marker: Default::default()
+		}
 	}
 }
