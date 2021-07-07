@@ -23,6 +23,8 @@ jobs:
         target: wasm32-unknown-unknown
         components: rustfmt
         default: true
+    - name: Checkout submodules
+      uses: textbook/git-checkout-submodule-action@2.1.1
     - name: Build
       run: cargo build --release
     - name: Run tests
