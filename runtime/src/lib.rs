@@ -7,7 +7,7 @@
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
 use sp_std::prelude::*;
-use sp_core::{crypto::KeyTypeId, OpaqueMetadata};
+use sp_core::{crypto::KeyTypeId, OpaqueMetadata, H256};
 use sp_runtime::{
 	ApplyExtrinsicResult, generic, create_runtime_str, impl_opaque_keys, MultiSignature,
 	transaction_validity::{TransactionValidity, TransactionSource},
@@ -31,7 +31,7 @@ pub use pallet_balances::Call as BalancesCall;
 pub use sp_runtime::{Permill, Perbill};
 pub use frame_support::{
 	construct_runtime, parameter_types, StorageValue,
-	traits::{KeyOwnerProofSystem, Randomness},
+	traits::{KeyOwnerProofSystem, Randomness, IsSubType},
 	weights::{
 		Weight, IdentityFee,
 		constants::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight, WEIGHT_PER_SECOND},
@@ -41,6 +41,9 @@ use pallet_transaction_payment::CurrencyAdapter;
 
 /// Import the template pallet.
 pub use pallet_template;
+
+pub use pallet_utxo;
+use sp_runtime::transaction_validity::{TransactionValidityError, InvalidTransaction};
 
 /// An index to a block.
 pub type BlockNumber = u32;
@@ -111,7 +114,8 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 /// up by `pallet_aura` to implement `fn slot_duration()`.
 ///
 /// Change this to adjust the block time.
-pub const MILLISECS_PER_BLOCK: u64 = 60_000;
+pub const MILLISECS_PER_BLOCK: u64 = 60_000;//1 min
+
 
 // NOTE: Currently it is not possible to change the slot duration after the chain has started.
 //       Attempting to do so will brick block production.
@@ -136,11 +140,11 @@ const NORMAL_DISPATCH_RATIO: Perbill = Perbill::from_percent(75);
 parameter_types! {
 	pub const Version: RuntimeVersion = VERSION;
 	pub const BlockHashCount: BlockNumber = 2400;
-	/// We allow for 2 seconds of compute with a 6 second average block time.
+	/// We allow for 6 seconds of compute with a 60 second average block time.
 	pub BlockWeights: frame_system::limits::BlockWeights = frame_system::limits::BlockWeights
-		::with_sensible_defaults(2 * WEIGHT_PER_SECOND, NORMAL_DISPATCH_RATIO);
+		::with_sensible_defaults(6 * WEIGHT_PER_SECOND, NORMAL_DISPATCH_RATIO);
 	pub BlockLength: frame_system::limits::BlockLength = frame_system::limits::BlockLength
-		::max_with_normal_ratio(5 * 1024 * 1024, NORMAL_DISPATCH_RATIO);
+		::max_with_normal_ratio(1024 * 1024, NORMAL_DISPATCH_RATIO); //1MB
 	pub const SS58Prefix: u8 = 42;
 }
 
@@ -270,6 +274,22 @@ impl pallet_template::Config for Runtime {
 	type Event = Event;
 }
 
+impl pallet_utxo::Config for Runtime {
+	type Event = Event;
+	type Call = Call;
+	type WeightInfo = pallet_utxo::weights::WeightInfo<Runtime>;
+
+	fn authorities() -> Vec<H256> {
+		Aura::authorities()
+			.iter()
+			.map(|x| {
+				let r: &sp_core::sr25519::Public = x.as_ref();
+				r.0.into()
+			})
+			.collect()
+	}
+}
+
 // Create the runtime by composing the FRAME pallets that were previously configured.
 construct_runtime!(
 	pub enum Runtime where
@@ -287,6 +307,7 @@ construct_runtime!(
 		Sudo: pallet_sudo::{Pallet, Call, Config<T>, Storage, Event<T>},
 		// Include the custom logic from the pallet-template in the runtime.
 		TemplateModule: pallet_template::{Pallet, Call, Storage, Event<T>},
+		Utxo: pallet_utxo::{Pallet, Call, Config<T>, Storage, Event<T>},
 	}
 );
 
@@ -374,6 +395,16 @@ impl_runtime_apis! {
 			source: TransactionSource,
 			tx: <Block as BlockT>::Extrinsic,
 		) -> TransactionValidity {
+			if let Some(pallet_utxo::Call::spend(ref tx)) =
+			IsSubType::<pallet_utxo::Call::<Runtime>>::is_sub_type(&tx.function) {
+				match pallet_utxo::validate_transaction::<Runtime>(&tx) {
+					Ok(valid_tx) => { return Ok(valid_tx); }
+					Err(_) => {
+						return Err(TransactionValidityError::Invalid(InvalidTransaction::Custom(1)));
+					}
+				}
+			}
+
 			Executive::validate_transaction(source, tx)
 		}
 	}
@@ -483,6 +514,7 @@ impl_runtime_apis! {
 			add_benchmark!(params, batches, pallet_balances, Balances);
 			add_benchmark!(params, batches, pallet_timestamp, Timestamp);
 			add_benchmark!(params, batches, pallet_template, TemplateModule);
+			add_benchmark!(params, batches, pallet_utxo, Utxo);
 
 			if batches.is_empty() { return Err("Benchmark not found for this pallet.".into()) }
 			Ok(batches)
