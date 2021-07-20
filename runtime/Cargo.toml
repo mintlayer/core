@@ -45,9 +45,14 @@ sp-std = {default-features = false, version = '3.0.0', git = 'https://github.com
 sp-transaction-pool = {default-features = false, version = '3.0.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
 sp-version = {default-features = false, version = '3.0.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
 
+
 # local dependencies
 pallet-template = {default-features = false, version = '3.0.0', path = '../pallets/template'}
 pallet-utxo = {default-features = false, path = "../pallets/utxo" }
+
+# Bech32 dependecies
+bech32-no_std = {default-features = false,  version = "0.7.3"}
+bitcoin_hashes = {version = "0.10.0"}
 
 [features]
 default = ['std']

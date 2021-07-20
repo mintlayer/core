@@ -16,3 +16,8 @@ Cargo.lock
 
 # direnv cache
 .direnv
+/.idea/vcs.xml
+/core.iml
+/.idea/misc.xml
+/.idea/modules.xml
+/.idea/workspace.xml
