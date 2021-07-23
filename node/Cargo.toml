@@ -26,6 +26,7 @@ structopt = '0.3.8'
 frame-benchmarking = {version = '3.1.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
 frame-benchmarking-cli = {version = '3.0.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
 pallet-transaction-payment-rpc = {version = '3.0.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
+pallet-atomic-swap = {version = '3.0.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
 sc-basic-authorship = {version = '0.9.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
 sc-cli = {features = ['wasmtime'], version = '0.9.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
 sc-client-api = {version = '3.0.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}

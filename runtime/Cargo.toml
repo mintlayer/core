@@ -15,6 +15,7 @@ substrate-wasm-builder={version = '4.0.0', git = 'https://github.com/paritytech/
 
 [dependencies]
 # external dependencies
+log = "0.4.14"
 codec = {default-features = false, features = ['derive'], package = 'parity-scale-codec', version = '2.0.0'}
 hex-literal= {optional = true, version = '0.3.1'}
 
@@ -25,10 +26,14 @@ frame-support = {default-features = false, version = '3.0.0', git = 'https://git
 frame-system = {default-features = false, version = '3.0.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
 frame-system-benchmarking = {default-features = false, optional = true, version = '3.0.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
 frame-system-rpc-runtime-api = {default-features = false, version = '3.0.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
+pallet-atomic-swap = {default-features = false, version = '3.0', git = "https://github.com/paritytech/substrate.git", tag = "monthly-2021-05"}
 pallet-aura = {default-features = false, version = '3.0.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
 pallet-balances = {default-features = false, version = '3.0.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
 pallet-grandpa = {default-features = false, version = '3.0.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
 pallet-randomness-collective-flip = {default-features = false, version = '3.0.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
+pallet-scheduler = { default-features = false, version = '3.0.0', git = "https://github.com/paritytech/substrate", tag = 'monthly-2021-05' }
+pallet-session = { default-features = false, version = '3.0.0', git = "https://github.com/paritytech/substrate", tag = 'monthly-2021-05' }
+pallet-staking = { default-features = false, version = '3.0.0', git = "https://github.com/paritytech/substrate", tag = "monthly-2021-05" }
 pallet-sudo = {default-features = false, version = '3.0.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
 pallet-timestamp = {default-features = false, version = '3.0.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
 pallet-transaction-payment = {default-features = false, version = '3.0.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
@@ -73,6 +78,9 @@ std = [
     'pallet-balances/std',
     'pallet-grandpa/std',
     'pallet-randomness-collective-flip/std',
+    'pallet-scheduler/std',
+    'pallet-session/std',
+    'pallet-staking/std',
     'pallet-sudo/std',
     'pallet-template/std',
     'pallet-timestamp/std',

@@ -13,7 +13,7 @@ use sp_runtime::{
 	transaction_validity::{TransactionValidity, TransactionSource},
 };
 use sp_runtime::traits::{
-	BlakeTwo256, Block as BlockT, AccountIdLookup, Verify, IdentifyAccount, NumberFor,
+	BlakeTwo256, Block as BlockT, AccountIdLookup, Verify, IdentifyAccount, NumberFor, OpaqueKeys
 };
 use sp_api::impl_runtime_apis;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
@@ -44,6 +44,7 @@ pub use pallet_template;
 
 pub use pallet_utxo;
 use sp_runtime::transaction_validity::{TransactionValidityError, InvalidTransaction};
+use pallet_atomic_swap::{SwapAction, BalanceSwapAction};
 
 /// An index to a block.
 pub type BlockNumber = u32;
@@ -94,15 +95,15 @@ pub mod opaque {
 // To learn more about runtime versioning and what each of the following value means:
 //   https://substrate.dev/docs/en/knowledgebase/runtime/upgrades#runtime-versioning
 pub const VERSION: RuntimeVersion = RuntimeVersion {
-	spec_name: create_runtime_str!("node-template"),
-	impl_name: create_runtime_str!("node-template"),
+	spec_name: create_runtime_str!("mintlayer-template"),
+	impl_name: create_runtime_str!("mintlayer-template"),
 	authoring_version: 1,
 	// The version of the runtime specification. A full node will not attempt to use its native
 	//   runtime in substitute for the on-chain Wasm runtime unless all of `spec_name`,
 	//   `spec_version`, and `authoring_version` are the same between Wasm and native.
 	// This value is set to 100 to notify Polkadot-JS App (https://polkadot.js.org/apps) to use
 	//   the compatible custom types.
-	spec_version: 100,
+	spec_version: 102,
 	impl_version: 1,
 	apis: RUNTIME_API_VERSIONS,
 	transaction_version: 1,
@@ -270,9 +271,9 @@ impl pallet_sudo::Config for Runtime {
 }
 
 /// Configure the pallet-template in pallets/template.
-impl pallet_template::Config for Runtime {
-	type Event = Event;
-}
+// impl pallet_template::Config for Runtime {
+// 	type Event = Event;
+// }
 
 impl pallet_utxo::Config for Runtime {
 	type Event = Event;
@@ -290,6 +291,54 @@ impl pallet_utxo::Config for Runtime {
 	}
 }
 
+parameter_types! {
+	pub const DisabledValidatorsThreshold: Perbill = Perbill::from_percent(17);
+	pub const Period: u32 = u32::MAX;
+	pub const Offset: u32 = u32::MAX;
+}
+
+impl pallet_session::Config for Runtime {
+	type Event = Event;
+	type ValidatorId = AccountId;
+	type ValidatorIdOf = ();
+	type ShouldEndSession = pallet_session::PeriodicSessions<Period, Offset>;
+	type NextSessionRotation = ();
+	type SessionManager = ();
+	type SessionHandler = <opaque::SessionKeys as OpaqueKeys>::KeyTypeIdProviders;
+	type Keys = opaque::SessionKeys;
+	type DisabledValidatorsThreshold = DisabledValidatorsThreshold;
+	type WeightInfo = ();
+}
+
+parameter_types! {
+	pub MaximumSchedulerWeight: Weight = 10_000_000;
+	pub const MaxScheduledPerBlock: u32 = 50;
+}
+
+impl pallet_scheduler::Config for Runtime {
+	type Event = Event;
+	type Origin = Origin;
+	type PalletsOrigin = OriginCaller;
+	type Call = Call;
+	type MaximumWeight = MaximumSchedulerWeight;
+	type ScheduleOrigin = frame_system::EnsureRoot<AccountId>;
+	type MaxScheduledPerBlock = MaxScheduledPerBlock;
+	type WeightInfo = ();
+}
+
+parameter_types! {
+	pub const ProofLimit: u32 = 1024;
+}
+
+impl pallet_atomic_swap::Config for Runtime {
+	type Event = Event;
+	type SwapAction = BalanceSwapAction<Self::AccountId, Balances>;
+	type ProofLimit = ProofLimit;
+}
+
+
+
+
 // Create the runtime by composing the FRAME pallets that were previously configured.
 construct_runtime!(
 	pub enum Runtime where
@@ -306,8 +355,11 @@ construct_runtime!(
 		TransactionPayment: pallet_transaction_payment::{Pallet, Storage},
 		Sudo: pallet_sudo::{Pallet, Call, Config<T>, Storage, Event<T>},
 		// Include the custom logic from the pallet-template in the runtime.
-		TemplateModule: pallet_template::{Pallet, Call, Storage, Event<T>},
+		// TemplateModule: pallet_template::{Pallet, Call, Storage, Event<T>},
 		Utxo: pallet_utxo::{Pallet, Call, Config<T>, Storage, Event<T>},
+		Session: pallet_session::{Pallet, Call, Storage, Event, Config<T>},
+		Scheduler: pallet_scheduler::{Pallet, Call, Storage, Event<T>},
+		AtomicSwap: pallet_atomic_swap::{Pallet, Call, Event<T>},
 	}
 );
 
@@ -395,15 +447,29 @@ impl_runtime_apis! {
 			source: TransactionSource,
 			tx: <Block as BlockT>::Extrinsic,
 		) -> TransactionValidity {
-			if let Some(pallet_utxo::Call::spend(ref tx)) =
-			IsSubType::<pallet_utxo::Call::<Runtime>>::is_sub_type(&tx.function) {
-				match pallet_utxo::validate_transaction::<Runtime>(&tx) {
-					Ok(valid_tx) => { return Ok(valid_tx); }
-					Err(_) => {
-						return Err(TransactionValidityError::Invalid(InvalidTransaction::Custom(1)));
-					}
-				}
-			}
+			log::debug!("CARLA CARLA CARLA SOURCE: {:?}",source);
+			log::debug!("CARLA CARLA CARLA TX: {:?}",tx);
+			// match IsSubType::<pallet_utxo::Call::<Runtime>>::is_sub_type(&tx.function) {
+			// 	Some(pallet_utxo::Call::spend(ref tx)) => {
+			// 		match pallet_utxo::validate_transaction::<Runtime>(&tx) {
+			// 			Ok(valid_tx) => { return Ok(valid_tx); }
+			// 			Err(_) => {
+			// 				return Err(TransactionValidityError::Invalid(InvalidTransaction::Custom(1)));
+			// 			}
+			// 		}
+			// 	},
+			//
+			// 	Some(x) => {
+			// 		log::debug!("CARLA CARLA CARLA SOME X: {:?}",x);
+			//
+			// 		return Err(TransactionValidityError::Invalid(InvalidTransaction::Custom(2)));
+			// 	},
+			//
+			// 	None => {
+			// 		return Err(TransactionValidityError::Invalid(InvalidTransaction::Custom(3)));
+			// 	}
+			// }
+
 
 			Executive::validate_transaction(source, tx)
 		}
@@ -513,7 +579,7 @@ impl_runtime_apis! {
 			add_benchmark!(params, batches, frame_system, SystemBench::<Runtime>);
 			add_benchmark!(params, batches, pallet_balances, Balances);
 			add_benchmark!(params, batches, pallet_timestamp, Timestamp);
-			add_benchmark!(params, batches, pallet_template, TemplateModule);
+			// add_benchmark!(params, batches, pallet_template, TemplateModule);
 			add_benchmark!(params, batches, pallet_utxo, Utxo);
 
 			if batches.is_empty() { return Err("Benchmark not found for this pallet.".into()) }
