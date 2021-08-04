@@ -221,3 +221,14 @@ cd pallets/utxo
 git submodule init
 git submodule update # --init --recursive
 ```
+
+### Firewall rules
+
+The node uses TCP port 30333 for communications, this needs to be opened if you want to allow
+inbound connections.
+
+Using UFW:
+`sudo ufw allow 30333/tcp`
+
+Using iptables:
+`sudo iptables -A INPUT -p tcp --dport 30333 -j ACCEPT`
