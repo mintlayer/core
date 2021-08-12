@@ -31,6 +31,9 @@ mod tests;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 
+use frame_support::dispatch::Vec;
+use contract_provider::ContractProvider;
+
 #[frame_support::pallet]
 pub mod pallet {
 	use frame_support::{dispatch::{DispatchResult}, pallet_prelude::*};
@@ -136,5 +139,11 @@ pub mod pallet {
     #[pallet::genesis_build]
     impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
         fn build(&self) {}
+    }
+}
+
+impl<T: Config> ContractProvider for Pallet<T> {
+    fn create(_code: &Vec<u8>) -> Result<(), &'static str> {
+        Ok(())
     }
 }

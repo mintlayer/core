@@ -14,9 +14,9 @@
 // limitations under the License.
 //
 // Author(s): C. Yap
-
 use crate as pallet_utxo;
 use pallet_utxo::TransactionOutput;
+use contract_provider::ContractProvider;
 
 use frame_support::{
     parameter_types,
@@ -28,7 +28,7 @@ use frame_support::{
     traits::GenesisBuild,
 };
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-use sp_core::{sp_std::vec, sr25519::Public, testing::SR25519, H256};
+use sp_core::{sp_std::{vec, marker::PhantomData}, sr25519::Public, testing::SR25519, H256};
 use sp_keystore::{testing::KeyStore, KeystoreExt, SyncCryptoStore};
 
 // need to manually import this crate since its no include by default
@@ -43,6 +43,15 @@ pub const ALICE_PHRASE: &str =
 // BlakeHash of TransactionOutput::new(100, H256::from(alice_pub_key)) in fn new_test_ext()
 pub const GENESIS_UTXO: [u8; 32] =
     hex!("01a9fbfde6f0584e88dcff57b5cf4fc9d538bca4e91b1945437b325af7860b3a");
+
+// Dummy programmable pool for testing
+pub struct MockPool<T>(PhantomData<T>);
+
+impl<T: frame_system::Config> ContractProvider for MockPool<T> {
+    fn create(_code: &Vec<u8>) -> Result<(), &'static str> {
+        Ok(())
+    }
+}
 
 // Configure a mock runtime to test the pallet.
 frame_support::construct_runtime!(
@@ -110,6 +119,7 @@ impl pallet_utxo::Config for Test {
     type Event = Event;
     type Call = Call;
     type WeightInfo = crate::weights::WeightInfo<Test>;
+    type ProgrammablePool = MockPool<Test>;
 
     fn authorities() -> Vec<H256> {
         Aura::authorities()

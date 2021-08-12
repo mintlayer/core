@@ -1,0 +1,18 @@
+[package]
+name = "contract-provider"
+version = "3.0.0"
+edition = "2018"
+authors = ['Mintlayer']
+description = "Contract provider trait filled by programmable pools"
+license = "MIT"
+
+[features]
+default = ['std']
+std = [
+    'frame-support/std',
+	'sp-std/std',
+]
+
+[dependencies]
+sp-std = { version = '3.0', default-features = false }
+frame-support = { default-features = false, version = '3.0.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}

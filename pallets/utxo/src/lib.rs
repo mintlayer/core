@@ -42,6 +42,7 @@ pub mod pallet {
 
     use crate::{validate_header, SignatureMethod, TXOutputHeader, TXOutputHeaderImpls, TokenType};
     use crate::ScriptPubKey;
+    use contract_provider::ContractProvider;
     use codec::{Decode, Encode};
     use frame_support::{
         dispatch::{DispatchResultWithPostInfo, Vec},
@@ -72,6 +73,8 @@ pub mod pallet {
         type Call: Dispatchable + From<Call<Self>> + IsSubType<Call<Self>> + Clone;
 
         type WeightInfo: WeightInfo;
+
+        type ProgrammablePool: ContractProvider;
 
         fn authorities() -> Vec<H256>;
     }
