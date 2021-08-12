@@ -69,6 +69,8 @@ pub fn development_config() -> Result<ChainSpec, String> {
 			vec![
 				authority_keys_from_seed("Alice"),
 				authority_keys_from_seed("Bob"),
+				authority_keys_from_seed("Charlie"),
+				authority_keys_from_seed("Dave")
 			],
 			// Sudo account
 			get_account_id_from_seed::<sr25519::Public>("Alice"),
@@ -76,12 +78,20 @@ pub fn development_config() -> Result<ChainSpec, String> {
 			vec![
 				get_account_id_from_seed::<sr25519::Public>("Alice"),
 				get_account_id_from_seed::<sr25519::Public>("Bob"),
+				get_account_id_from_seed::<sr25519::Public>("Charlie"),
+				get_account_id_from_seed::<sr25519::Public>("Dave"),
+				get_account_id_from_seed::<sr25519::Public>("Eve"),
 				get_account_id_from_seed::<sr25519::Public>("Alice//stash"),
 				get_account_id_from_seed::<sr25519::Public>("Bob//stash"),
+				get_account_id_from_seed::<sr25519::Public>("Charlie//stash"),
+				get_account_id_from_seed::<sr25519::Public>("Dave//stash"),
+				get_account_id_from_seed::<sr25519::Public>("Eve//stash"),
 			],
 			vec![
 				get_from_seed::<sr25519::Public>("Alice"),
-				get_from_seed::<sr25519::Public>("Bob")
+				get_from_seed::<sr25519::Public>("Bob"),
+				get_from_seed::<sr25519::Public>("Charlie"),
+				get_from_seed::<sr25519::Public>("Dave")
 			],
 			true,
 		),
@@ -113,6 +123,8 @@ pub fn local_testnet_config() -> Result<ChainSpec, String> {
 			vec![
 				authority_keys_from_seed("Alice"),
 				authority_keys_from_seed("Bob"),
+				authority_keys_from_seed("Charlie"),
+				authority_keys_from_seed("Dave")
 			],
 			// Sudo account
 			get_account_id_from_seed::<sr25519::Public>("Alice"),
@@ -133,7 +145,11 @@ pub fn local_testnet_config() -> Result<ChainSpec, String> {
 			],
 			vec![
 				get_from_seed::<sr25519::Public>("Alice"),
-				get_from_seed::<sr25519::Public>("Bob")
+				get_from_seed::<sr25519::Public>("Bob"),
+				get_from_seed::<sr25519::Public>("Charlie"),
+				get_from_seed::<sr25519::Public>("Dave"),
+				get_from_seed::<sr25519::Public>("Eve"),
+				get_from_seed::<sr25519::Public>("Ferie")
 			],
 			true,
 		),
@@ -186,7 +202,7 @@ fn testnet_genesis(
 		},
 		pallet_balances: BalancesConfig {
 			// Configure endowed accounts with initial balance of 1 << 60.
-			balances: endowed_accounts.iter().cloned().map(|k|(k, 1 << 60)).collect(),
+			balances: endowed_accounts.iter().cloned().map(|k|(k, ENDOWMENT)).collect(),
 		},
 		pallet_aura: Default::default(),
 		pallet_grandpa:Default::default(),
@@ -212,7 +228,7 @@ fn testnet_genesis(
 
 		pallet_staking: StakingConfig {
 			validator_count: initial_authorities.len() as u32,
-			minimum_validator_count: initial_authorities.len() as u32,
+			minimum_validator_count: (initial_authorities.len() - 1) as u32,
 			invulnerables: initial_authorities.iter().map(|x| {
 				x.account_id.clone()
 			}).collect(),
