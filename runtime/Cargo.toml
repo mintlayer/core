@@ -48,6 +48,7 @@ sp-version = {default-features = false, version = '3.0.0', git = 'https://github
 # local dependencies
 pallet-template = {default-features = false, version = '3.0.0', path = '../pallets/template'}
 pallet-utxo = {default-features = false, path = "../pallets/utxo" }
+pallet-pp = {default-features = false, path = "../pallets/pp" }
 
 [features]
 default = ['std']

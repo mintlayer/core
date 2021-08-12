@@ -2,7 +2,7 @@ use sp_core::{Pair, Public, sr25519};
 use node_template_runtime::{
 	AccountId, AuraConfig, BalancesConfig, GenesisConfig, GrandpaConfig,
 	SudoConfig, SystemConfig, WASM_BINARY, Signature,
-	pallet_utxo, UtxoConfig};
+	pallet_utxo, UtxoConfig, PpConfig};
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_finality_grandpa::AuthorityId as GrandpaId;
 use sp_runtime::traits::{Verify, IdentifyAccount};
@@ -174,9 +174,11 @@ fn testnet_genesis(
 			// Assign network admin rights.
 			key: root_key,
 		},
-
 		pallet_utxo: UtxoConfig {
 			genesis_utxos: vec![genesis],
+			_marker: Default::default()
+		},
+		pallet_pp: PpConfig {
 			_marker: Default::default()
 		}
 	}
