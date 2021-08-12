@@ -17,6 +17,7 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
+pub use script::*;
 pub use header::*;
 pub use pallet::*;
 
@@ -30,6 +31,7 @@ mod tests;
 mod benchmarking;
 
 mod header;
+mod script;
 pub mod weights;
 
 #[frame_support::pallet]
@@ -39,6 +41,7 @@ pub mod pallet {
     use serde::{Deserialize, Serialize};
 
     use crate::{validate_header, SignatureMethod, TXOutputHeader, TXOutputHeaderImpls, TokenType};
+    use crate::ScriptPubKey;
     use codec::{Decode, Encode};
     use frame_support::{
         dispatch::{DispatchResultWithPostInfo, Vec},
@@ -103,6 +106,7 @@ pub mod pallet {
         pub(crate) value: Value,
         pub(crate) pub_key: H256,
         pub(crate) header: TXOutputHeader,
+        pub(crate) script: ScriptPubKey,
     }
 
     impl TransactionOutput {
@@ -115,6 +119,7 @@ pub mod pallet {
                 value,
                 pub_key,
                 header: 0,
+                script: ScriptPubKey::new(),
             }
         }
     }
