@@ -1,14 +1,18 @@
-use sp_core::{Pair, Public, sr25519};
+use sp_core::{Pair, Public, sr25519, H256, H512};
 use node_template_runtime::{
-	AccountId, AuraConfig, BalancesConfig, GenesisConfig, GrandpaConfig,
-	SudoConfig, SystemConfig, WASM_BINARY, Signature,
-	pallet_utxo, UtxoConfig};
+	AccountId, AuraConfig, BalancesConfig, GenesisConfig, GrandpaConfig, SessionConfig,
+	StakingConfig, CouncilConfig,
+	SudoConfig, SystemConfig, WASM_BINARY, Signature, Balances,
+	pallet_utxo, UtxoConfig, StakerStatus,
+	constants::currency::DOLLARS
+};
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_finality_grandpa::AuthorityId as GrandpaId;
-use sp_runtime::traits::{Verify, IdentifyAccount};
+use sp_runtime::traits::{Verify, IdentifyAccount, BlakeTwo256, Hash};
 use sc_service::ChainType;
 
-use sp_core::H256;
+
+use sp_runtime::Perbill;
 
 // The URL for the telemetry server.
 // const STAGING_TELEMETRY_URL: &str = "wss://telemetry.polkadot.io/submit/";
@@ -32,12 +36,22 @@ pub fn get_account_id_from_seed<TPublic: Public>(seed: &str) -> AccountId where
 	AccountPublic::from(get_from_seed::<TPublic>(seed)).into_account()
 }
 
+
+struct AuthKeys {
+	account_id: AccountId,
+	stash_acount_id: AccountId,
+	aura_id: AuraId,
+	grandpa_id: GrandpaId
+}
+
 /// Generate an Aura authority key.
-pub fn authority_keys_from_seed(s: &str) -> (AuraId, GrandpaId) {
-	(
-		get_from_seed::<AuraId>(s),
-		get_from_seed::<GrandpaId>(s),
-	)
+fn authority_keys_from_seed(seed: &str) -> AuthKeys {
+	AuthKeys {
+		account_id: get_account_id_from_seed::<sr25519::Public>(seed),
+		stash_acount_id: get_account_id_from_seed::<sr25519::Public>(&format!("{}//stash",seed)),
+		aura_id: get_from_seed::<AuraId>(seed),
+		grandpa_id: get_from_seed::<GrandpaId>(seed)
+	}
 }
 
 pub fn development_config() -> Result<ChainSpec, String> {
@@ -54,6 +68,7 @@ pub fn development_config() -> Result<ChainSpec, String> {
 			// Initial PoA authorities
 			vec![
 				authority_keys_from_seed("Alice"),
+				authority_keys_from_seed("Bob"),
 			],
 			// Sudo account
 			get_account_id_from_seed::<sr25519::Public>("Alice"),
@@ -138,12 +153,16 @@ pub fn local_testnet_config() -> Result<ChainSpec, String> {
 /// Configure initial storage state for FRAME modules.
 fn testnet_genesis(
 	wasm_binary: &[u8],
-	initial_authorities: Vec<(AuraId, GrandpaId)>,
+	initial_authorities: Vec<AuthKeys>,
 	root_key: AccountId,
 	endowed_accounts: Vec<AccountId>,
 	endowed_utxos: Vec<sr25519::Public>,
 	_enable_println: bool,
 ) -> GenesisConfig {
+
+	const ENDOWMENT: u128 = 10_000_000 * DOLLARS;
+	const STASH: u128 = ENDOWMENT / 1000;
+
 
 	// only Alice contains 400 million coins.
 	let genesis= endowed_utxos.first().map(|x| {
@@ -153,6 +172,11 @@ fn testnet_genesis(
 			H256::from_slice(x.as_slice())
 		)
 	}).unwrap();
+
+	let stakers = initial_authorities.iter()
+		.map(|auth_keys|
+			(auth_keys.stash_acount_id.clone(), auth_keys.account_id.clone(),STASH, StakerStatus::Validator))
+		.collect::<Vec<_>>();
 
 	GenesisConfig {
 		frame_system: SystemConfig {
@@ -164,16 +188,41 @@ fn testnet_genesis(
 			// Configure endowed accounts with initial balance of 1 << 60.
 			balances: endowed_accounts.iter().cloned().map(|k|(k, 1 << 60)).collect(),
 		},
-		pallet_aura: AuraConfig {
-			authorities: initial_authorities.iter().map(|x| (x.0.clone())).collect(),
-		},
-		pallet_grandpa: GrandpaConfig {
-			authorities: initial_authorities.iter().map(|x| (x.1.clone(), 1)).collect(),
-		},
+		pallet_aura: Default::default(),
+		pallet_grandpa:Default::default(),
 		pallet_sudo: SudoConfig {
 			// Assign network admin rights.
 			key: root_key,
 		},
+
+		pallet_session: SessionConfig {
+			keys: initial_authorities.iter().map(|x|{
+				(
+					x.account_id.clone(),
+					x.account_id.clone(),
+					node_template_runtime::opaque::SessionKeys {
+						aura: x.aura_id.clone(),
+						grandpa: x.grandpa_id.clone()
+					}
+				)
+			})
+				.collect::<Vec<_>>()
+
+		},
+
+		pallet_staking: StakingConfig {
+			validator_count: initial_authorities.len() as u32,
+			minimum_validator_count: initial_authorities.len() as u32,
+			invulnerables: initial_authorities.iter().map(|x| {
+				x.account_id.clone()
+			}).collect(),
+			slash_reward_fraction: Perbill::from_percent(10),
+			stakers,
+			.. Default::default()
+
+		},
+
+		pallet_collective_Instance1: CouncilConfig::default(),
 
 		pallet_utxo: UtxoConfig {
 			genesis_utxos: vec![genesis],

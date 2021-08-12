@@ -6,19 +6,24 @@
 #[cfg(feature = "std")]
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
+use frame_system:: {
+	EnsureRoot, EnsureOneOf
+};
 use sp_std::prelude::*;
-use sp_core::{crypto::KeyTypeId, OpaqueMetadata, H256};
+use sp_core::{crypto::KeyTypeId, OpaqueMetadata, H256, u32_trait::{ _3, _4}};
 use sp_runtime::{
 	ApplyExtrinsicResult, generic, create_runtime_str, impl_opaque_keys, MultiSignature,
+	curve::PiecewiseLinear,
 	transaction_validity::{TransactionValidity, TransactionSource},
 };
 use sp_runtime::traits::{
-	BlakeTwo256, Block as BlockT, AccountIdLookup, Verify, IdentifyAccount, NumberFor,
+	BlakeTwo256, Block as BlockT, AccountIdLookup, Verify, IdentifyAccount, NumberFor, OpaqueKeys
 };
 use sp_api::impl_runtime_apis;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-use pallet_grandpa::{AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList};
-use pallet_grandpa::fg_primitives;
+use pallet_election_provider_multi_phase::FallbackStrategy;
+use pallet_grandpa::{AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList, fg_primitives};
+use pallet_session::historical as pallet_session_historical;
 use sp_version::RuntimeVersion;
 #[cfg(feature = "std")]
 use sp_version::NativeVersion;
@@ -28,22 +33,30 @@ use sp_version::NativeVersion;
 pub use sp_runtime::BuildStorage;
 pub use pallet_timestamp::Call as TimestampCall;
 pub use pallet_balances::Call as BalancesCall;
+pub use pallet_staking::StakerStatus;
+
 pub use sp_runtime::{Permill, Perbill};
 pub use frame_support::{
 	construct_runtime, parameter_types, StorageValue,
-	traits::{KeyOwnerProofSystem, Randomness, IsSubType},
+	traits::{KeyOwnerProofSystem, Randomness, IsSubType, U128CurrencyToVote},
 	weights::{
 		Weight, IdentityFee,
 		constants::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight, WEIGHT_PER_SECOND},
+		DispatchClass
 	},
 };
+
+/// Constant values used within the runtime.
+pub mod constants;
+use constants::{time::*, currency::*};
+
 use pallet_transaction_payment::CurrencyAdapter;
 
 /// Import the template pallet.
 pub use pallet_template;
 
 pub use pallet_utxo;
-use sp_runtime::transaction_validity::{TransactionValidityError, InvalidTransaction};
+use sp_runtime::transaction_validity::{TransactionValidityError, InvalidTransaction, TransactionPriority };
 
 /// An index to a block.
 pub type BlockNumber = u32;
@@ -108,23 +121,6 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	transaction_version: 1,
 };
 
-/// This determines the average expected block time that we are targeting.
-/// Blocks will be produced at a minimum duration defined by `SLOT_DURATION`.
-/// `SLOT_DURATION` is picked up by `pallet_timestamp` which is in turn picked
-/// up by `pallet_aura` to implement `fn slot_duration()`.
-///
-/// Change this to adjust the block time.
-pub const MILLISECS_PER_BLOCK: u64 = 60_000;//1 min
-
-
-// NOTE: Currently it is not possible to change the slot duration after the chain has started.
-//       Attempting to do so will brick block production.
-pub const SLOT_DURATION: u64 = MILLISECS_PER_BLOCK;
-
-// Time is measured by number of blocks.
-pub const MINUTES: BlockNumber = 60_000 / (MILLISECS_PER_BLOCK as BlockNumber);
-pub const HOURS: BlockNumber = MINUTES * 60;
-pub const DAYS: BlockNumber = HOURS * 24;
 
 /// The version information used to identify this runtime when compiled natively.
 #[cfg(feature = "std")]
@@ -212,7 +208,7 @@ impl pallet_grandpa::Config for Runtime {
 	type KeyOwnerProofSystem = ();
 
 	type KeyOwnerProof =
-		<Self::KeyOwnerProofSystem as KeyOwnerProofSystem<(KeyTypeId, GrandpaId)>>::Proof;
+	<Self::KeyOwnerProofSystem as KeyOwnerProofSystem<(KeyTypeId, GrandpaId)>>::Proof;
 
 	type KeyOwnerIdentification = <Self::KeyOwnerProofSystem as KeyOwnerProofSystem<(
 		KeyTypeId,
@@ -290,6 +286,173 @@ impl pallet_utxo::Config for Runtime {
 	}
 }
 
+parameter_types! {
+	pub const DisabledValidatorsThreshold: Perbill = Perbill::from_percent(17);
+	pub const Period: u32 = u32::MAX;
+	pub const Offset: u32 = u32::MAX;
+}
+
+impl pallet_session::Config for Runtime {
+	type Event = Event;
+	type ValidatorId = AccountId;
+	type ValidatorIdOf = pallet_staking::StashOf<Self>;
+	type ShouldEndSession = pallet_session::PeriodicSessions<Period, Offset>;
+	type NextSessionRotation = ();
+	type SessionManager = pallet_session_historical::NoteHistoricalRoot<Self, Staking>;
+	type SessionHandler = <opaque::SessionKeys as OpaqueKeys>::KeyTypeIdProviders;
+	type Keys = opaque::SessionKeys;
+	type DisabledValidatorsThreshold = DisabledValidatorsThreshold;
+	type WeightInfo = pallet_session::weights::SubstrateWeight<Runtime>;
+}
+
+impl pallet_session_historical::Config for Runtime {
+	type FullIdentification = pallet_staking::Exposure<AccountId, Balance>;
+	type FullIdentificationOf = pallet_staking::ExposureOf<Runtime>;
+}
+
+pallet_staking_reward_curve::build! {
+	const REWARD_CURVE: PiecewiseLinear<'static> = curve!(
+		min_inflation: 0_025_000,
+		max_inflation: 0_100_000,
+		ideal_stake: 0_500_000,
+		falloff: 0_050_000,
+		max_piece_count: 40,
+		test_precision: 0_005_000,
+	);
+}
+
+parameter_types! {
+	pub const SessionsPerEra: sp_staking::SessionIndex = 6;
+	pub const BondingDuration: pallet_staking::EraIndex = 24 * 28;
+	pub const SlashDeferDuration: pallet_staking::EraIndex = 24 * 7; // 1/4 the bonding duration.
+	pub const RewardCurve: &'static PiecewiseLinear<'static> = &REWARD_CURVE;
+	pub const MaxNominatorRewardedPerValidator: u32 = 256;
+	pub OffchainRepeat: BlockNumber = 5;
+}
+
+
+sp_npos_elections::generate_solution_type!(
+	#[compact]
+	pub struct NposCompactSolution16::<
+		VoterIndex = u32,
+		TargetIndex = u16,
+		Accuracy = sp_runtime::PerU16,
+	>(16)
+);
+
+
+pub const MAX_NOMINATIONS: u32 =
+	<NposCompactSolution16 as sp_npos_elections::CompactSolution>::LIMIT as u32;
+
+
+impl pallet_election_provider_multi_phase::Config for Runtime {
+	type Event = Event;
+	type Currency = Balances;
+	type SignedPhase = SignedPhase;
+	type UnsignedPhase = UnsignedPhase;
+	type SolutionImprovementThreshold = SolutionImprovementThreshold;
+	type MinerMaxIterations = MinerMaxIterations;
+	type MinerMaxWeight = MinerMaxWeight;
+	type MinerMaxLength = MinerMaxLength;
+	type MinerTxPriority = MultiPhaseUnsignedPriority;
+	type DataProvider = Staking;
+	type OnChainAccuracy = Perbill;
+	type CompactSolution = NposCompactSolution16;
+	type Fallback = Fallback;
+	type WeightInfo = pallet_election_provider_multi_phase::weights::SubstrateWeight<Runtime>;
+	type BenchmarkingConfig = ();
+}
+
+parameter_types! {
+	// phase durations. 1/4 of the last session for each.
+	pub const SignedPhase: u32 = EPOCH_DURATION_IN_BLOCKS / 4;
+	pub const UnsignedPhase: u32 = EPOCH_DURATION_IN_BLOCKS / 4;
+
+	// signed config
+	pub const SignedMaxSubmissions: u32 = 10;
+	pub const SignedRewardBase: Balance = 1 * DOLLARS;
+	pub const SignedDepositBase: Balance = 1 * DOLLARS;
+	pub const SignedDepositByte: Balance = 1 * CENTS;
+
+	// fallback: no on-chain fallback.
+	pub const Fallback: FallbackStrategy = FallbackStrategy::Nothing;
+
+	pub SolutionImprovementThreshold: Perbill = Perbill::from_rational(1u32, 10_000);
+
+	// miner configs
+	pub const StakingUnsignedPriority: TransactionPriority = TransactionPriority::max_value() / 2;
+	pub const MultiPhaseUnsignedPriority: TransactionPriority = StakingUnsignedPriority::get() - 1u64;
+	pub const MinerMaxIterations: u32 = 10;
+	pub MinerMaxWeight: Weight = BlockWeights::get()
+		.get(DispatchClass::Normal)
+		.max_extrinsic.expect("Normal extrinsics have a weight limit configured; qed")
+		.saturating_sub(BlockExecutionWeight::get());
+	// Solution can occupy 90% of normal block size
+	pub MinerMaxLength: u32 = Perbill::from_rational(9u32, 10) *
+		*BlockLength::get()
+		.max
+		.get(DispatchClass::Normal);
+}
+
+impl<C> frame_system::offchain::SendTransactionTypes<C> for Runtime where
+	Call: From<C>,
+{
+	type Extrinsic = UncheckedExtrinsic;
+	type OverarchingCall = Call;
+}
+
+impl pallet_staking::Config for Runtime {
+	const MAX_NOMINATIONS: u32 = MAX_NOMINATIONS;
+	type Currency = Balances;
+	type UnixTime = Timestamp;
+	type CurrencyToVote = U128CurrencyToVote;
+	type RewardRemainder = (); //Treasury
+	type Event = Event;
+	type Slash = (); // send the slashed funds to the treasury.
+	type Reward = (); // rewards are minted from the void
+	type SessionsPerEra = SessionsPerEra;
+	type BondingDuration = BondingDuration;
+	type SlashDeferDuration = SlashDeferDuration;
+	/// A super-majority of the council can cancel the slash.
+	type SlashCancelOrigin = EnsureOneOf<
+		AccountId,
+		EnsureRoot<AccountId>,
+		pallet_collective::EnsureProportionAtLeast<_3, _4, AccountId, CouncilCollective>
+	>;
+	type SessionInterface = Self;
+	type EraPayout = pallet_staking::ConvertCurve<RewardCurve>;
+	type NextNewSession = Session;
+	type MaxNominatorRewardedPerValidator = MaxNominatorRewardedPerValidator;
+	type ElectionProvider = ElectionProviderMultiPhase;
+	type WeightInfo = pallet_staking::weights::SubstrateWeight<Runtime>;
+}
+
+
+parameter_types! {
+	pub const CouncilMotionDuration: BlockNumber = 5 * DAYS;
+	pub const CouncilMaxProposals: u32 = 100;
+	pub const CouncilMaxMembers: u32 = 100;
+}
+
+
+type CouncilCollective = pallet_collective::Instance1;
+impl pallet_collective::Config<CouncilCollective> for Runtime {
+	type Origin = Origin;
+	type Proposal = Call;
+	type Event = Event;
+	type MotionDuration = CouncilMotionDuration;
+	type MaxProposals = CouncilMaxProposals;
+	type MaxMembers = CouncilMaxMembers;
+	type DefaultVote = pallet_collective::PrimeDefaultVote;
+	type WeightInfo = pallet_collective::weights::SubstrateWeight<Runtime>;
+}
+
+// type EnsureRootOrHalfCouncil = EnsureOneOf<
+// 	AccountId,
+// 	EnsureRoot<AccountId>,
+// 	pallet_collective::EnsureProportionMoreThan<_1, _2, AccountId, CouncilCollective>
+// >;
+
 // Create the runtime by composing the FRAME pallets that were previously configured.
 construct_runtime!(
 	pub enum Runtime where
@@ -308,6 +471,13 @@ construct_runtime!(
 		// Include the custom logic from the pallet-template in the runtime.
 		TemplateModule: pallet_template::{Pallet, Call, Storage, Event<T>},
 		Utxo: pallet_utxo::{Pallet, Call, Config<T>, Storage, Event<T>},
+
+		ElectionProviderMultiPhase: pallet_election_provider_multi_phase::{Pallet, Call, Storage, Event<T>, ValidateUnsigned},
+		Staking: pallet_staking::{Pallet, Call, Config<T>, Storage, Event<T>},
+		Session: pallet_session::{Pallet, Call, Storage, Event, Config<T>},
+		Council: pallet_collective::<Instance1>::{Pallet, Call, Storage, Origin<T>, Event<T>, Config<T>},
+		Historical: pallet_session_historical::{Pallet},
+
 	}
 );
 
