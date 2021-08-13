@@ -205,7 +205,7 @@ impl pallet_grandpa::Config for Runtime {
 	type Event = Event;
 	type Call = Call;
 
-	type KeyOwnerProofSystem = ();
+	type KeyOwnerProofSystem = Historical;
 
 	type KeyOwnerProof =
 	<Self::KeyOwnerProofSystem as KeyOwnerProofSystem<(KeyTypeId, GrandpaId)>>::Proof;
@@ -624,12 +624,14 @@ impl_runtime_apis! {
 
 		fn generate_key_ownership_proof(
 			_set_id: fg_primitives::SetId,
-			_authority_id: GrandpaId,
+			authority_id: GrandpaId,
 		) -> Option<fg_primitives::OpaqueKeyOwnershipProof> {
-			// NOTE: this is the only implementation possible since we've
-			// defined our key owner proof type as a bottom type (i.e. a type
-			// with no values).
-			None
+			use codec::Encode;
+
+			Historical::prove((fg_primitives::KEY_TYPE, authority_id))
+			.map(|p| p.encode())
+			.map(fg_primitives::OpaqueKeyOwnershipProof::new)
+
 		}
 	}
 

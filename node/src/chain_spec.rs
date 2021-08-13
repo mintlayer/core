@@ -214,7 +214,7 @@ fn testnet_genesis(
 		pallet_session: SessionConfig {
 			keys: initial_authorities.iter().map(|x|{
 				(
-					x.account_id.clone(),
+					x.stash_acount_id.clone(),
 					x.account_id.clone(),
 					node_template_runtime::opaque::SessionKeys {
 						aura: x.aura_id.clone(),
