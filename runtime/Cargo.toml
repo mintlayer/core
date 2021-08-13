@@ -17,6 +17,7 @@ substrate-wasm-builder={version = '4.0.0', git = 'https://github.com/paritytech/
 # external dependencies
 codec = {default-features = false, features = ['derive'], package = 'parity-scale-codec', version = '2.0.0'}
 hex-literal= {optional = true, version = '0.3.1'}
+static_assertions = "1.1.0"
 
 # Substrate dependencies
 frame-benchmarking = {default-features = false, optional = true, version = '3.1.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
@@ -29,6 +30,8 @@ frame-system-rpc-runtime-api = {default-features = false, version = '3.0.0', git
 pallet-aura = {default-features = false, version = '3.0.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
 pallet-balances = {default-features = false, version = '3.0.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
 pallet-collective = {default-features = false, version = '3.0.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
+
+pallet-elections-phragmen = {default-features = false, version = '4.0.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
 pallet-election-provider-multi-phase = { version = "3.0.0", default-features = false, git = "https://github.com/paritytech/substrate", tag = 'monthly-2021-05' }
 pallet-grandpa = {default-features = false, version = '3.0.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
 pallet-randomness-collective-flip = {default-features = false, version = '3.0.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
@@ -84,6 +87,7 @@ std = [
     'pallet-aura/std',
     'pallet-balances/std',
     'pallet-collective/std',
+    'pallet-elections-phragmen/std',
     'pallet-election-provider-multi-phase/std',
     'pallet-grandpa/std',
     'pallet-randomness-collective-flip/std',

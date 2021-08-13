@@ -1,14 +1,14 @@
-use sp_core::{Pair, Public, sr25519, H256, H512};
+use sp_core::{Pair, Public, sr25519, H256};
 use node_template_runtime::{
-	AccountId, AuraConfig, BalancesConfig, GenesisConfig, GrandpaConfig, SessionConfig,
-	StakingConfig, CouncilConfig,
-	SudoConfig, SystemConfig, WASM_BINARY, Signature, Balances,
+	AccountId, BalancesConfig, GenesisConfig, SessionConfig,
+	StakingConfig, CouncilConfig, ElectionsConfig,
+	SudoConfig, SystemConfig, WASM_BINARY, Signature,
 	pallet_utxo, UtxoConfig, StakerStatus,
 	constants::currency::DOLLARS
 };
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_finality_grandpa::AuthorityId as GrandpaId;
-use sp_runtime::traits::{Verify, IdentifyAccount, BlakeTwo256, Hash};
+use sp_runtime::traits::{Verify, IdentifyAccount};
 use sc_service::ChainType;
 
 
@@ -149,7 +149,7 @@ pub fn local_testnet_config() -> Result<ChainSpec, String> {
 				get_from_seed::<sr25519::Public>("Charlie"),
 				get_from_seed::<sr25519::Public>("Dave"),
 				get_from_seed::<sr25519::Public>("Eve"),
-				get_from_seed::<sr25519::Public>("Ferie")
+				get_from_seed::<sr25519::Public>("Ferdie")
 			],
 			true,
 		),
@@ -179,6 +179,7 @@ fn testnet_genesis(
 	const ENDOWMENT: u128 = 10_000_000 * DOLLARS;
 	const STASH: u128 = ENDOWMENT / 1000;
 
+	let num_endowed_accounts = endowed_accounts.len();
 
 	// only Alice contains 400 million coins.
 	let genesis= endowed_utxos.first().map(|x| {
@@ -228,14 +229,21 @@ fn testnet_genesis(
 
 		pallet_staking: StakingConfig {
 			validator_count: initial_authorities.len() as u32,
-			minimum_validator_count: (initial_authorities.len() - 1) as u32,
+			minimum_validator_count: initial_authorities.len() as u32,
 			invulnerables: initial_authorities.iter().map(|x| {
 				x.account_id.clone()
 			}).collect(),
 			slash_reward_fraction: Perbill::from_percent(10),
 			stakers,
 			.. Default::default()
+		},
 
+		pallet_elections_phragmen: ElectionsConfig {
+			members: endowed_accounts.iter()
+				.take( (num_endowed_accounts + 1) / 2)
+				.cloned()
+				.map(|member| (member, STASH))
+				.collect()
 		},
 
 		pallet_collective_Instance1: CouncilConfig::default(),
