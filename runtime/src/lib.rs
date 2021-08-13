@@ -491,6 +491,12 @@ impl_runtime_apis! {
 		}
 	}
 
+    impl pallet_utxo_rpc_runtime_api::UtxoApi<Block> for Runtime {
+        fn send() -> u32 {
+            Utxo::send()
+        }
+    }
+
 	#[cfg(feature = "runtime-benchmarks")]
 	impl frame_benchmarking::Benchmark<Block> for Runtime {
 		fn dispatch_benchmark(

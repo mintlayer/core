@@ -48,6 +48,7 @@ sp-version = {default-features = false, version = '3.0.0', git = 'https://github
 # local dependencies
 pallet-template = {default-features = false, version = '3.0.0', path = '../pallets/template'}
 pallet-utxo = {default-features = false, path = "../pallets/utxo" }
+pallet-utxo-rpc-runtime-api = {default-features = false, path = "../pallets/utxo/rpc/runtime-api" }
 pallet-pp = {default-features = false, path = "../pallets/pp" }
 
 [features]
@@ -79,6 +80,7 @@ std = [
     'pallet-timestamp/std',
     'pallet-transaction-payment-rpc-runtime-api/std',
     'pallet-transaction-payment/std',
+    'pallet-utxo-rpc-runtime-api/std',
     'pallet-utxo/std',
     'sp-api/std',
     'sp-block-builder/std',

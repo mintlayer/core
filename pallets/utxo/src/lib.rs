@@ -407,3 +407,9 @@ pub mod pallet {
         }
     }
 }
+
+impl<T: Config> Pallet<T> {
+    pub fn send() -> u32 {
+        1337
+    }
+}

@@ -53,6 +53,8 @@ substrate-frame-rpc-system = {version = '3.0.0', git = 'https://github.com/parit
 
 # local dependencies
 node-template-runtime = {version = '3.0.0', path = '../runtime'}
+pallet-utxo-rpc = { path = "../pallets/utxo/rpc" }
+pallet-utxo-rpc-runtime-api = { path = "../pallets/utxo/rpc/runtime-api" }
 #bls_sigs_ref = {version = '0.3.0', path = '../../BLS'}
 
 [features]
