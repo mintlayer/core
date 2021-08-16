@@ -6,16 +6,40 @@ edition = "2018"
 
 [dependencies]
 pallet-utxo-rpc-runtime-api = { path = "./runtime-api" }
-
-# General
-serde = { version = "1.0.104", features = ["derive"] }
 jsonrpc-core = "15.0.0"
 jsonrpc-core-client = "15.0.0"
 jsonrpc-derive = "15.0.0"
 
-sp-blockchain = { version = "3.0.0", default_features = false, git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
-codec = { package = "parity-scale-codec", version = "2.0.0", default-features = false, features = ["derive"] }
-sp-api = {default-features = false, version = '3.0.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
-sp-runtime = { version = "3.0.0", default_features = false, git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05' }
-frame-support = { default-features = false, version = '3.0.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
+[dependencies.serde]
+version = "1.0.104"
+features = ["derive"]
 
+[dependencies.sp-blockchain]
+default_features = false
+git = 'https://github.com/paritytech/substrate.git'
+tag = 'monthly-2021-08'
+version = '4.0.0-dev'
+
+[dependencies.codec]
+package = "parity-scale-codec"
+version = "2.0.0"
+default-features = false
+features = ["derive"]
+
+[dependencies.sp-api]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+tag = 'monthly-2021-08'
+version = '4.0.0-dev'
+
+[dependencies.sp-runtime]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+tag = 'monthly-2021-08'
+version = '4.0.0-dev'
+
+[dependencies.frame-support]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+tag = 'monthly-2021-08'
+version = '4.0.0-dev'

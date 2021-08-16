@@ -63,7 +63,7 @@ frame_support::construct_runtime!(
         System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
         Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent},
         Utxo: pallet_utxo::{Pallet, Call, Config<T>, Storage, Event<T>},
-        Aura: pallet_aura::{Pallet, Call, Config<T>, Storage},
+        Aura: pallet_aura::{Pallet, Config<T>, Storage},
     }
 );
 
@@ -78,7 +78,7 @@ parameter_types! {
 }
 
 impl frame_system::Config for Test {
-    type BaseCallFilter = ();
+    type BaseCallFilter = frame_support::traits::AllowAll;
     type BlockWeights = ();
     type BlockLength = ();
     type Origin = Origin;

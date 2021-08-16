@@ -4,12 +4,34 @@ version = "0.1.0"
 authors = ["Mintlayer"]
 edition = "2018"
 
-[dependencies]
-serde = { version = "1.0.104", optional = true, features = ["derive"] }
-codec = { package = "parity-scale-codec", version = "2.0.0", default-features = false, features = ["derive"] }
-sp-api = {default-features = false, version = '3.0.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
-sp-runtime = { version = "3.0.0", default_features = false, git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05' }
-frame-support = { default-features = false, version = '3.0.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
+[dependencies.serde]
+version = "1.0.104"
+optional = true
+features = ["derive"]
+
+[dependencies.codec]
+package = "parity-scale-codec"
+version = "2.0.0"
+default-features = false
+features = ["derive"]
+
+[dependencies.sp-api]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+tag = 'monthly-2021-08'
+version = '4.0.0-dev'
+
+[dependencies.sp-runtime]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+tag = 'monthly-2021-08'
+version = '4.0.0-dev'
+
+[dependencies.frame-support]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+tag = 'monthly-2021-08'
+version = '4.0.0-dev'
 
 [dev-dependencies]
 serde_json = "1.0.48"

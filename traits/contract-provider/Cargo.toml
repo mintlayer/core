@@ -6,13 +6,21 @@ authors = ['Mintlayer']
 description = "Contract provider trait filled by programmable pools"
 license = "MIT"
 
+[dependencies.frame-support]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+tag = 'monthly-2021-08'
+version = '4.0.0-dev'
+
+[dependencies.sp-std]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+tag = 'monthly-2021-08'
+version = '4.0.0-dev'
+
 [features]
 default = ['std']
 std = [
     'frame-support/std',
 	'sp-std/std',
 ]
-
-[dependencies]
-sp-std = { version = '3.0', default-features = false }
-frame-support = { default-features = false, version = '3.0.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}

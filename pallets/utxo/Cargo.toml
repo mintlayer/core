@@ -15,22 +15,65 @@ std = [
     'sp-core/std'
 ]
 
-
 [dependencies]
-codec = {default-features = false, features = ['derive'], package = 'parity-scale-codec', version = '2.0.0'}
 hex-literal = "0.2.1"
 log = "0.4.8"
 serde = '1.0.119'
 
-# Substrate dependencies
-frame-benchmarking = { default-features = false, version = '3.1.0', optional = true, git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
-frame-support = { default-features = false, version = '3.0.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
-frame-system = { default-features = false, version ='3.0.0' ,git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
-sp-core = { default-features = false, version = '3.0.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
-contract-provider = { default-features = false, path = "../../traits/contract-provider/" }
+[dependencies.codec]
+default-features = false
+features = ['derive']
+package = 'parity-scale-codec'
+version = '2.0.0'
 
-[dev-dependencies]
-sp-consensus-aura = { version = "0.9.0",  git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
-sp-keystore = { version = "0.9.0",  git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
-pallet-aura = { version = '3.0.0',  git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
-pallet-timestamp = { version = "3.0.0", git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
+[dependencies.contract-provider]
+default-features = false
+path = "../../traits/contract-provider/"
+
+[dependencies.frame-benchmarking]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+optional = true
+tag = 'monthly-2021-08'
+version = '4.0.0-dev'
+
+[dependencies.frame-support]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+tag = 'monthly-2021-08'
+version = '4.0.0-dev'
+
+[dependencies.frame-system]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+tag = 'monthly-2021-08'
+version = '4.0.0-dev'
+
+[dependencies.sp-core]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+tag = 'monthly-2021-08'
+version = '4.0.0-dev'
+
+[dev-dependencies.sp-keystore]
+version = "0.10.0-dev"
+git = 'https://github.com/paritytech/substrate.git'
+tag = 'monthly-2021-08'
+
+[dev-dependencies.pallet-aura]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+tag = 'monthly-2021-08'
+version = '4.0.0-dev'
+
+[dev-dependencies.sp-consensus-aura]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+tag = 'monthly-2021-08'
+version = '0.10.0-dev'
+
+[dev-dependencies.pallet-timestamp]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+tag = 'monthly-2021-08'
+version = '4.0.0-dev'
