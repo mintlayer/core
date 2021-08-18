@@ -31,13 +31,14 @@ pub use pallet_balances::Call as BalancesCall;
 pub use sp_runtime::{Permill, Perbill};
 pub use frame_support::{
 	construct_runtime, parameter_types, StorageValue,
-	traits::{KeyOwnerProofSystem, Randomness, IsSubType},
+	traits::{KeyOwnerProofSystem, Randomness, IsSubType, DenyAll},
 	weights::{
 		Weight, IdentityFee,
 		constants::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight, WEIGHT_PER_SECOND},
 	},
 };
 use pallet_transaction_payment::CurrencyAdapter;
+use pallet_contracts::weights::WeightInfo;
 
 /// Import the template pallet.
 pub use pallet_template;
@@ -126,6 +127,18 @@ pub const SLOT_DURATION: u64 = MILLISECS_PER_BLOCK;
 pub const MINUTES: BlockNumber = 60_000 / (MILLISECS_PER_BLOCK as BlockNumber);
 pub const HOURS: BlockNumber = MINUTES * 60;
 pub const DAYS: BlockNumber = HOURS * 24;
+
+pub const MILLICENTS: Balance = 1_000_000_000;
+pub const CENTS: Balance = 1_000 * MILLICENTS;
+pub const DOLLARS: Balance = 100 * CENTS;
+
+const fn deposit(items: u32, bytes: u32) -> Balance {
+   items as Balance * 15 * CENTS + (bytes as Balance) * 6 * CENTS
+}
+
+/// We assume that ~10% of the block weight is consumed by `on_initialize` handlers.
+/// This is used to limit the maximal weight of a single extrinsic.
+const AVERAGE_ON_INITIALIZE_RATIO: Perbill = Perbill::from_percent(10);
 
 /// The version information used to identify this runtime when compiled natively.
 #[cfg(feature = "std")]
@@ -300,6 +313,61 @@ impl pallet_pp::Config for Runtime {
 
 impl pallet_randomness_collective_flip::Config for Runtime {}
 
+parameter_types! {
+   pub TombstoneDeposit: Balance = deposit(
+      1,
+      <pallet_contracts::Pallet<Runtime>>::contract_info_size()
+   );
+   pub DepositPerContract: Balance = TombstoneDeposit::get();
+   pub const DepositPerStorageByte: Balance = deposit(0, 1);
+   pub const DepositPerStorageItem: Balance = deposit(1, 0);
+   pub RentFraction: Perbill = Perbill::from_rational(1u32, 30 * DAYS);
+   pub const SurchargeReward: Balance = 150 * MILLICENTS;
+   pub const SignedClaimHandicap: u32 = 2;
+   pub const MaxValueSize: u32 = 16 * 1024;
+   // The lazy deletion runs inside on_initialize.
+   pub DeletionWeightLimit: Weight = AVERAGE_ON_INITIALIZE_RATIO *
+      BlockWeights::get().max_block;
+   // The weight needed for decoding the queue should be less or equal than a fifth
+   // of the overall weight dedicated to the lazy deletion.
+   pub DeletionQueueDepth: u32 = ((DeletionWeightLimit::get() / (
+         <Runtime as pallet_contracts::Config>::WeightInfo::on_initialize_per_queue_item(1) -
+         <Runtime as pallet_contracts::Config>::WeightInfo::on_initialize_per_queue_item(0)
+      )) / 5) as u32;
+
+   pub Schedule: pallet_contracts::Schedule<Runtime> = Default::default();
+}
+
+impl pallet_contracts::Config for Runtime {
+   type Time = Timestamp;
+   type Randomness = RandomnessCollectiveFlip;
+   type Currency = Balances;
+   type Event = Event;
+   type RentPayment = ();
+   type SignedClaimHandicap = SignedClaimHandicap;
+   type TombstoneDeposit = TombstoneDeposit;
+   type DepositPerContract = DepositPerContract;
+   type DepositPerStorageByte = DepositPerStorageByte;
+   type DepositPerStorageItem = DepositPerStorageItem;
+   type RentFraction = RentFraction;
+   type SurchargeReward = SurchargeReward;
+   type WeightPrice = pallet_transaction_payment::Pallet<Self>;
+   type WeightInfo = pallet_contracts::weights::SubstrateWeight<Self>;
+   type ChainExtension = ();
+   type DeletionQueueDepth = DeletionQueueDepth;
+   type DeletionWeightLimit = DeletionWeightLimit;
+   type Call = Call;
+    /// The safest default is to allow no calls at all.
+    ///
+    /// Runtimes should whitelist dispatchables that are allowed to be called from contracts
+    /// and make sure they are stable. Dispatchables exposed to contracts are not allowed to
+    /// change because that would break already deployed contracts. The `Call` structure itself
+    /// is not allowed to change the indices of existing pallets, too.
+    type CallFilter = DenyAll;
+    type Schedule = Schedule;
+    type CallStack = [pallet_contracts::Frame<Self>; 31];
+}
+
 // Create the runtime by composing the FRAME pallets that were previously configured.
 construct_runtime!(
 	pub enum Runtime where
@@ -319,6 +387,7 @@ construct_runtime!(
 		TemplateModule: pallet_template::{Pallet, Call, Storage, Event<T>},
 		Utxo: pallet_utxo::{Pallet, Call, Config<T>, Storage, Event<T>},
 		Pp: pallet_pp::{Pallet, Call, Config<T>, Storage, Event<T>},
+		Contracts: pallet_contracts::{Pallet, Call, Storage, Event<T>},
 	}
 );
 
@@ -495,6 +564,48 @@ impl_runtime_apis! {
     impl pallet_utxo_rpc_runtime_api::UtxoApi<Block> for Runtime {
         fn send() -> u32 {
             Utxo::send()
+        }
+    }
+
+    impl pallet_contracts_rpc_runtime_api::ContractsApi<
+        Block, AccountId, Balance, BlockNumber, Hash
+    > for Runtime
+    {
+        fn call(
+            origin: AccountId,
+            dest: AccountId,
+            value: Balance,
+            gas_limit: u64,
+            input_data: Vec<u8>,
+        ) -> pallet_contracts_primitives::ContractExecResult {
+            let debug = true;
+            Contracts::bare_call(origin, dest, value, gas_limit, input_data, debug)
+        }
+
+        fn instantiate(
+            origin: AccountId,
+            endowment: Balance,
+            gas_limit: u64,
+            code: pallet_contracts_primitives::Code<Hash>,
+            data: Vec<u8>,
+            salt: Vec<u8>,
+        ) -> pallet_contracts_primitives::ContractInstantiateResult<AccountId, BlockNumber> {
+            let compute_rent_projection = true;
+            let debug = true;
+            Contracts::bare_instantiate(origin, endowment, gas_limit, code, data, salt, compute_rent_projection, debug)
+        }
+
+        fn get_storage(
+            address: AccountId,
+            key: [u8; 32],
+        ) -> pallet_contracts_primitives::GetStorageResult {
+            Contracts::get_storage(address, key)
+        }
+
+        fn rent_projection(
+            address: AccountId,
+        ) -> pallet_contracts_primitives::RentProjectionResult<BlockNumber> {
+            Contracts::rent_projection(address)
         }
     }
 

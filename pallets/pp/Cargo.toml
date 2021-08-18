@@ -39,6 +39,24 @@ git = 'https://github.com/paritytech/substrate.git'
 tag = 'monthly-2021-08'
 version = '4.0.0-dev'
 
+[dependencies.pallet-contracts]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+tag = 'monthly-2021-08'
+version = '4.0.0-dev'
+
+[dependencies.pallet-contracts-primitives]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+tag = 'monthly-2021-08'
+version = '4.0.0-dev'
+
+[dependencies.sp-core]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+tag = 'monthly-2021-08'
+version = '4.0.0-dev'
+
 [dev-dependencies.serde]
 version = '1.0.126'
 
@@ -68,5 +86,7 @@ std = [
 	'frame-support/std',
 	'frame-system/std',
 	'frame-benchmarking/std',
+	'pallet-contracts/std',
+	'pallet-contracts-primitives/std',
 ]
 try-runtime = ['frame-support/try-runtime']
