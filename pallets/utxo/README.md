@@ -5,6 +5,98 @@ This is only the pallet; no _node_ and _runtime_ implementation.
 
 To run the test cases, just run command `cargo test`.
 
+
+### How to test in polkadot.js.org app
+1. After running the core, declare the custom datatypes. GO to **Settings** > **Developer** tab and paste in the ff. JSON and then save:
+```json
+{
+  "Address": "MultiAddress",
+  "LookupSource": "MultiAddress",
+  "Value": "u128",
+  "TXOutputHeader": "u16",
+  "TransactionInput": {
+    "outpoint": "H256",
+    "sig_script": "H512"
+  },
+  "TransactionOutput": {
+    "value": "Value",
+    "pub_key": "H256",
+    "header": "TXOutputHeader"
+  },
+  "Transaction": {
+    "inputs": "Vec<TransactionInput>",
+    "outputs": "Vec<TransactionOutput>"
+  },
+  "Difficulty": "U256",
+  "DifficultyAndTimestamp": {
+    "difficulty": "Difficulty",
+    "timestamp": "Moment"
+  },
+  "Public": "H256"
+}
+```
+2. To confirm that Alice already has UTXO at genesis, go to **Developer** > **Chain state** > **Storage**.  
+For _selected state query_, choose `utxo`, and `utxoStore(H256): Option<TransactionOutput>` beside it.  
+The _Option<H256>_ input box should be empty by disabling the **include option**.
+Click the **+** button on the right. It should show:
+```json
+{
+  value: 40,000,000,000,000,000,000,
+  pub_key: 0xd43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d,
+  header: 0
+}
+```
+3. Let's spend 50 of Alice's utxo to Bob. Go to **Developer** > **Extrinsics**.  
+Choose `utxo` for _submit the following extrinsic_ dropdown. Input the ff. parameters (and then submit transaction):  
+    * outpoint: `0xa74e4bcf318ae52c20d8776298e3c6ab6907bcabda7a669213d33e5076178bce`  
+    * sigscript: `0xe07952db7bf4da97aed2098304c729b8f6b1d7a39abd3c1162d18ea8ee3f772ee3d7b64c7fdf0ec7cf4cacedcf9387ad2a2b03ea98f1e432fa3d35f9d9d9ed8a`  
+    * value: `50`  
+    * pubkey: `0x8eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a48`
+4. Wait for the upper right corner to change from 
+```
+utxo.spend
+ready
+```
+into
+```
+utxo.spend
+inblock
+```
+```
+system.ExtrinsicSuccess
+utxo.TransactionSuccess
+extrinsic event
+```
+
+4. To verify, go back to **Developer** > **Chain state** > **Storage**, `utxo` and `utxoStore(H256): Option<TransactionOutput>`.  
+Make sure the _Option<H256>_ input box is still empty, then click the **+** button. It should now show:
+```json
+[
+  [
+    [
+      0x2699481f13b275dcc4e384fb513ba5472bd94d5ef288ffa5eaac9b95508d836d
+    ],
+    {
+      value: 3,106,511,852,580,896,718,
+      pub_key: 0xd43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d,
+      header: 0
+    }
+  ],
+  [
+    [
+      0xdd22d722dade7f07b0becd3585cac0cdd17c62959229dc8d83d64b05633a60bc
+    ],
+    {
+      value: 50,
+      pub_key: 0x8eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a48,
+      header: 0
+    }
+  ]
+]
+```
+
+
+
 ### How to run the benchmark in [mintlayer-node](https://github.com/mintlayer/mintlayer-node):
 1. Insert this pallet-utxo crate in [pallets directory](https://github.com/mintlayer/mintlayer-node/tree/master/pallets).  
 
