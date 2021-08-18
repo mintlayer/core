@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use sc_client_api::{ExecutorProvider, RemoteBackend};
 use node_template_runtime::{self, opaque::Block, RuntimeApi};
-use sc_service::{error::Error as ServiceError, Configuration, TaskManager};
+use sc_service::{error::Error as ServiceError, Configuration, TaskManager, RpcHandlers};
 use sp_inherents::InherentDataProviders;
 use sc_executor::native_executor_instance;
 pub use sc_executor::NativeExecutor;
@@ -14,6 +14,7 @@ use sc_finality_grandpa::SharedVoterState;
 use sc_keystore::LocalKeystore;
 use sc_telemetry::{Telemetry, TelemetryWorker};
 
+
 // Our native executor instance.
 native_executor_instance!(
 	pub Executor,
@@ -22,9 +23,9 @@ native_executor_instance!(
 	frame_benchmarking::benchmarking::HostFunctions,
 );
 
-type FullClient = sc_service::TFullClient<Block, RuntimeApi, Executor>;
-type FullBackend = sc_service::TFullBackend<Block>;
-type FullSelectChain = sc_consensus::LongestChain<FullBackend, Block>;
+pub type FullClient = sc_service::TFullClient<Block, RuntimeApi, Executor>;
+pub type FullBackend = sc_service::TFullBackend<Block>;
+pub type FullSelectChain = sc_consensus::LongestChain<FullBackend, Block>;
 
 pub fn new_partial(config: &Configuration) -> Result<sc_service::PartialComponents<
 	FullClient, FullBackend, FullSelectChain,
@@ -125,8 +126,15 @@ fn remote_keystore(_url: &String) -> Result<Arc<LocalKeystore>, &'static str> {
 	Err("Remote Keystore not supported.")
 }
 
-/// Builds a new service for a full client.
-pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> {
+
+pub struct NewFull<C> {
+	pub task_manager: TaskManager,
+	pub client: C,
+	pub network: Arc<sc_network::NetworkService<Block,<Block as sp_api::BlockT>::Hash>>,
+	pub rpc_handlers:RpcHandlers,
+}
+
+pub fn build_full(mut config: Configuration)  -> Result<NewFull<Arc<FullClient>>, ServiceError> {
 	let sc_service::PartialComponents {
 		client,
 		backend,
@@ -190,7 +198,7 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 		})
 	};
 
-	let _rpc_handlers = sc_service::spawn_tasks(
+	let rpc_handlers = sc_service::spawn_tasks(
 		sc_service::SpawnTasksParams {
 			network: network.clone(),
 			client: client.clone(),
@@ -272,7 +280,7 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 		let grandpa_config = sc_finality_grandpa::GrandpaParams {
 			config: grandpa_config,
 			link: grandpa_link,
-			network,
+			network: network.clone(),
 			voting_rule: sc_finality_grandpa::VotingRulesBuilder::default().build(),
 			prometheus_registry,
 			shared_voter_state: SharedVoterState::empty(),
@@ -288,8 +296,27 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 	}
 
 	network_starter.start_network();
-	Ok(task_manager)
+
+
+	let new_full = NewFull {
+		task_manager,
+		client,
+		network,
+		rpc_handlers
+	};
+
+
+	Ok(new_full)
 }
+
+
+
+/// Builds a new service for a full client.
+pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> {
+	build_full(config).map(|x| x.task_manager)
+}
+
+
 
 /// Builds a new service for a light client.
 pub fn new_light(mut config: Configuration) -> Result<TaskManager, ServiceError> {

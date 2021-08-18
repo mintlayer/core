@@ -52,10 +52,34 @@ sp-runtime = {version = '3.0.0', git = 'https://github.com/paritytech/substrate.
 sp-transaction-pool = {version = '3.0.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
 substrate-frame-rpc-system = {version = '3.0.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
 
+sc-network = {version = '0.9.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
+
+
 # local dependencies
 node-template-runtime = {version = '3.0.0', path = '../runtime'}
 #bls_sigs_ref = {version = '0.3.0', path = '../../BLS'}
 
+
+[dev-dependencies]
+pallet-transaction-payment = {default-features = false, version = '3.0.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
+frame-system = {version = '3.0.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05', default-features = false }
+sp-keyring = {version = '3.0.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05', default-features = false }
+sp-state-machine = {version = '0.9.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05', default-features = false }
+pallet-balances = { version = '3.0.0', git = "https://github.com/paritytech/substrate.git",  tag = 'monthly-2021-05', default-features = false }
+
+substrate-test-utils = {version = '3.0.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
+substrate-test-client = {version = '2.0.1', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
+
+serde_json = "1.0.61"
+tokio = { version = "0.2", features = ["macros"] }
+futures = "0.3.15"
+futures01 = { package = "futures", version = "0.1.29" }
+hex = "0.4.2"
+tracing = "0.1.26"
+rand = "0.8.3"
+tempfile = "3.2.0"
+
 [features]
 default = []
 runtime-benchmarks = ['node-template-runtime/runtime-benchmarks']
+
