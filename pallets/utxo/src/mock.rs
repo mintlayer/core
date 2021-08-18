@@ -30,6 +30,7 @@ use frame_support::{
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{sp_std::{vec, marker::PhantomData}, sr25519::Public, testing::SR25519, H256};
 use sp_keystore::{testing::KeyStore, KeystoreExt, SyncCryptoStore};
+use frame_support::{dispatch::Vec, weights::Weight};
 
 // need to manually import this crate since its no include by default
 use hex_literal::hex;
@@ -48,7 +49,22 @@ pub const GENESIS_UTXO: [u8; 32] =
 pub struct MockPool<T>(PhantomData<T>);
 
 impl<T: frame_system::Config> ContractProvider for MockPool<T> {
-    fn create(_code: &Vec<u8>) -> Result<(), &'static str> {
+    type AccountId = u64;
+
+    fn create(
+        _origin: &Self::AccountId,
+        _weight: Weight,
+        _code: &Vec<u8>
+    ) -> Result<(), &'static str> {
+        Ok(())
+    }
+
+    fn call(
+        _caller: &Self::AccountId,
+        _dest: &Self::AccountId,
+		_gas_limit: Weight,
+		_input_data: &Vec<u8>,
+    ) -> Result<(), &'static str> {
         Ok(())
     }
 }

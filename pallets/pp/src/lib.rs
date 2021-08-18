@@ -31,8 +31,12 @@ mod tests;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 
-use frame_support::dispatch::Vec;
+use frame_support::{
+    dispatch::Vec,
+    weights::Weight,
+};
 use contract_provider::ContractProvider;
+use sp_core::{crypto::UncheckedFrom, Bytes};
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -41,7 +45,7 @@ pub mod pallet {
 
 	/// Configure the pallet by specifying the parameters and types on which it depends.
 	#[pallet::config]
-	pub trait Config: frame_system::Config {
+	pub trait Config: frame_system::Config + pallet_contracts::Config {
 		/// Because this pallet emits events, it depends on the runtime's definition of an event.
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 	}
@@ -142,8 +146,51 @@ pub mod pallet {
     }
 }
 
-impl<T: Config> ContractProvider for Pallet<T> {
-    fn create(_code: &Vec<u8>) -> Result<(), &'static str> {
+impl<T: Config> ContractProvider for Pallet<T>
+where
+	T::AccountId: UncheckedFrom<T::Hash> + AsRef<[u8]>,
+{
+    type AccountId = T::AccountId;
+
+    fn create(
+        caller: &T::AccountId,
+        gas_limit: Weight,
+        code: &Vec<u8>
+    ) -> Result<(), &'static str> {
+		let code = pallet_contracts_primitives::Code::Upload(Bytes(code.to_vec()));
+        let endowment = pallet_contracts::Pallet::<T>::subsistence_threshold();
+
+        let _ = pallet_contracts::Pallet::<T>::bare_instantiate(
+            caller.clone(),
+            endowment * 100_u32.into(), // TODO
+            gas_limit,
+            code,
+            Vec::new(),
+            Vec::new(),
+            false,
+            true,
+        );
+
+        Ok(())
+    }
+
+    fn call(
+        caller: &T::AccountId,
+        dest: &T::AccountId,
+		gas_limit: Weight,
+		input_data: &Vec<u8>,
+    ) -> Result<(), &'static str> {
+        let value = pallet_contracts::Pallet::<T>::subsistence_threshold();
+
+        let _ = pallet_contracts::Pallet::<T>::bare_call(
+            caller.clone(),
+            dest.clone(),
+            value, // TODO
+            gas_limit,
+            input_data.to_vec(),
+            true,
+        );
+
         Ok(())
     }
 }

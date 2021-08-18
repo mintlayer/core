@@ -24,8 +24,11 @@ const SCRIPT_MAX_SIZE: u16 = 10_000;
 
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 #[derive(Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, Hash, Debug)]
+#[repr(u8)]
 pub enum ScriptType {
-    P2pkh = 0,
+    P2pkh = 1,
+    OpCreate = 2,
+    OpCall = 3,
 }
 
 impl Default for ScriptType {

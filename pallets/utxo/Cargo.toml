@@ -55,6 +55,12 @@ git = 'https://github.com/paritytech/substrate.git'
 tag = 'monthly-2021-08'
 version = '4.0.0-dev'
 
+[dependencies.sp-runtime]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+tag = 'monthly-2021-08'
+version = '4.0.0-dev'
+
 [dev-dependencies.sp-keystore]
 version = "0.10.0-dev"
 git = 'https://github.com/paritytech/substrate.git'
