@@ -288,8 +288,8 @@ impl pallet_utxo::Config for Runtime {
 
 parameter_types! {
 	pub const DisabledValidatorsThreshold: Perbill = Perbill::from_percent(17);
-	pub const Period: u32 = u32::MAX;
-	pub const Offset: u32 = u32::MAX;
+	pub const Period: u32 = 5;
+	pub const Offset: u32 = 0;
 }
 
 impl pallet_session::Config for Runtime {
@@ -322,11 +322,11 @@ pallet_staking_reward_curve::build! {
 }
 
 parameter_types! {
-	pub const SessionsPerEra: sp_staking::SessionIndex = 6;
-	pub const BondingDuration: pallet_staking::EraIndex = 24 * 28;
+	pub const SessionsPerEra: sp_staking::SessionIndex = 3;
+	pub const BondingDuration: pallet_staking::EraIndex = 24;
 	pub const SlashDeferDuration: pallet_staking::EraIndex = 24 * 7; // 1/4 the bonding duration.
 	pub const RewardCurve: &'static PiecewiseLinear<'static> = &REWARD_CURVE;
-	pub const MaxNominatorRewardedPerValidator: u32 = 256;
+	pub const MaxNominatorRewardedPerValidator: u32 = 64;
 	pub OffchainRepeat: BlockNumber = 5;
 }
 
@@ -402,7 +402,7 @@ impl<C> frame_system::offchain::SendTransactionTypes<C> for Runtime where
 }
 
 impl pallet_staking::Config for Runtime {
-	const MAX_NOMINATIONS: u32 = MAX_NOMINATIONS;
+	const MAX_NOMINATIONS: u32 = 16;
 	type Currency = Balances;
 	type UnixTime = Timestamp;
 	type CurrencyToVote = U128CurrencyToVote;

@@ -68,9 +68,7 @@ pub fn development_config() -> Result<ChainSpec, String> {
 			// Initial PoA authorities
 			vec![
 				authority_keys_from_seed("Alice"),
-				authority_keys_from_seed("Bob"),
-				authority_keys_from_seed("Charlie"),
-				authority_keys_from_seed("Dave")
+				authority_keys_from_seed("Bob")
 			],
 			// Sudo account
 			get_account_id_from_seed::<sr25519::Public>("Alice"),
@@ -122,9 +120,7 @@ pub fn local_testnet_config() -> Result<ChainSpec, String> {
 			// Initial PoA authorities
 			vec![
 				authority_keys_from_seed("Alice"),
-				authority_keys_from_seed("Bob"),
-				authority_keys_from_seed("Charlie"),
-				authority_keys_from_seed("Dave")
+				authority_keys_from_seed("Bob")
 			],
 			// Sudo account
 			get_account_id_from_seed::<sr25519::Public>("Alice"),
@@ -216,7 +212,7 @@ fn testnet_genesis(
 			keys: initial_authorities.iter().map(|x|{
 				(
 					x.stash_acount_id.clone(),
-					x.account_id.clone(),
+					x.stash_acount_id.clone(),
 					node_template_runtime::opaque::SessionKeys {
 						aura: x.aura_id.clone(),
 						grandpa: x.grandpa_id.clone()
