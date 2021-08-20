@@ -1,7 +1,7 @@
 [package]
 name = "pallet-utxo-rpc"
 version = "0.1.0"
-authors = ["Mintlayer"]
+authors = ["RBB Lab"]
 edition = "2018"
 
 [dependencies]

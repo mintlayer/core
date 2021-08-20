@@ -1,5 +1,5 @@
 [package]
-authors = ['Mintlayer']
+authors = ["RBB Lab"]
 description = 'Programmable pools pallet'
 edition = '2018'
 license = 'MIT'

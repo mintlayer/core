@@ -5,7 +5,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-// 	http://spdx.org/licenses/MIT
+//  http://spdx.org/licenses/MIT
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,23 +18,19 @@
 
 use super::*;
 
-use frame_system::RawOrigin;
-use frame_benchmarking::{benchmarks, whitelisted_caller, impl_benchmark_test_suite};
 #[allow(unused)]
 use crate::Pallet as PP;
+use frame_benchmarking::{benchmarks, impl_benchmark_test_suite, whitelisted_caller};
+use frame_system::RawOrigin;
 
 benchmarks! {
-	do_something {
-		let s in 0 .. 100;
-		let caller: T::AccountId = whitelisted_caller();
-	}: _(RawOrigin::Signed(caller), s)
-	verify {
-		assert_eq!(Something::<T>::get(), Some(s));
-	}
+    do_something {
+        let s in 0 .. 100;
+        let caller: T::AccountId = whitelisted_caller();
+    }: _(RawOrigin::Signed(caller), s)
+    verify {
+        assert_eq!(Something::<T>::get(), Some(s));
+    }
 }
 
-impl_benchmark_test_suite!(
-	PP,
-	crate::mock::new_test_ext(),
-	crate::mock::Test,
-);
+impl_benchmark_test_suite!(PP, crate::mock::new_test_ext(), crate::mock::Test,);

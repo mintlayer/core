@@ -16,7 +16,7 @@
 // Author(s): A. Altonen
 use jsonrpc_core::{Error as RpcError, ErrorCode, Result};
 use jsonrpc_derive::rpc;
-pub use pallet_utxo_rpc_runtime_api::{UtxoApi as UtxoRuntimeApi};
+pub use pallet_utxo_rpc_runtime_api::UtxoApi as UtxoRuntimeApi;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::HeaderBackend;
 use sp_runtime::{generic::BlockId, traits::Block as BlockT};
@@ -60,10 +60,7 @@ where
     C: HeaderBackend<Block>,
     C::Api: UtxoRuntimeApi<Block>,
 {
-    fn send(
-        &self,
-        at: Option<<Block as BlockT>::Hash>,
-    ) -> Result<u32> {
+    fn send(&self, at: Option<<Block as BlockT>::Hash>) -> Result<u32> {
         let api = self.client.runtime_api();
         let at = BlockId::hash(at.unwrap_or_else(||
             // If the block hash is not supplied assume the best block.

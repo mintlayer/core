@@ -2,7 +2,7 @@
 name = "contract-provider"
 version = "3.0.0"
 edition = "2018"
-authors = ['Mintlayer']
+authors = ["RBB Lab"]
 description = "Contract provider trait filled by programmable pools"
 license = "MIT"
 
