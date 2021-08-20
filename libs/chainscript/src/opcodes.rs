@@ -714,7 +714,10 @@ impl All {
 			Class::PushBytes(self.code as u32)
 		// 60 opcodes
 		} else {
-			Class::Ordinary(Ordinary::try_from_all(self).unwrap())
+			Ordinary::try_from_all(self)
+				.map(Class::Ordinary)
+				.or_else(|| ControlFlow::try_from_all(self).map(Class::ControlFlow))
+				.expect("opcode categories not covered")
 		}
 	}
 
@@ -766,6 +769,8 @@ pub enum Class {
 	IllegalOp,
 	/// Does nothing
 	NoOp,
+	/// Control flow opcodes
+	ControlFlow(ControlFlow),
 	/// Any opcode not covered above
 	Ordinary(Ordinary),
 }
@@ -782,20 +787,20 @@ impl serde::Serialize for Class {
 	}
 }
 
-macro_rules! ordinary_opcode {
-    ($($op:ident),*) => (
+macro_rules! opcode_category {
+    ($Category:ident -> $($op:ident),*) => (
         #[repr(u8)]
         #[doc(hidden)]
         #[derive(Copy, Clone, PartialEq, Eq, Debug)]
-        pub enum Ordinary {
+        pub enum $Category {
             $( $op = all::$op.code ),*
         }
 
-        impl Ordinary {
+        impl $Category {
             /// Try to create from an All
             pub fn try_from_all(b: All) -> Option<Self> {
                 match b {
-                    $( all::$op => { Some(Ordinary::$op) } ),*
+                    $( all::$op => { Some($Category::$op) } ),*
                     _ => None,
                 }
             }
@@ -803,29 +808,34 @@ macro_rules! ordinary_opcode {
     );
 }
 
+opcode_category! {
+	ControlFlow -> OP_IF, OP_NOTIF, OP_ELSE, OP_ENDIF
+}
+
 // "Ordinary" opcodes -- should be 60 of these
-ordinary_opcode! {
-	// pushdata
-	OP_PUSHDATA1, OP_PUSHDATA2, OP_PUSHDATA4,
-	// control flow
-	OP_IF, OP_NOTIF, OP_ELSE, OP_ENDIF, OP_VERIFY,
-	// stack
-	OP_TOALTSTACK, OP_FROMALTSTACK,
-	OP_2DROP, OP_2DUP, OP_3DUP, OP_2OVER, OP_2ROT, OP_2SWAP,
-	OP_DROP, OP_DUP, OP_NIP, OP_OVER, OP_PICK, OP_ROLL, OP_ROT, OP_SWAP, OP_TUCK,
-	OP_IFDUP, OP_DEPTH, OP_SIZE,
-	// equality
-	OP_EQUAL, OP_EQUALVERIFY,
-	// arithmetic
-	OP_1ADD, OP_1SUB, OP_NEGATE, OP_ABS, OP_NOT, OP_0NOTEQUAL,
-	OP_ADD, OP_SUB, OP_BOOLAND, OP_BOOLOR,
-	OP_NUMEQUAL, OP_NUMEQUALVERIFY, OP_NUMNOTEQUAL, OP_LESSTHAN,
-	OP_GREATERTHAN, OP_LESSTHANOREQUAL, OP_GREATERTHANOREQUAL,
-	OP_MIN, OP_MAX, OP_WITHIN,
-	// crypto
-	OP_RIPEMD160, OP_SHA1, OP_SHA256, OP_HASH160, OP_HASH256,
-	OP_CODESEPARATOR, OP_CHECKSIG, OP_CHECKSIGVERIFY,
-	OP_CHECKMULTISIG, OP_CHECKMULTISIGVERIFY
+opcode_category! {
+	Ordinary ->
+		// pushdata
+		OP_PUSHDATA1, OP_PUSHDATA2, OP_PUSHDATA4,
+		// verify
+		OP_VERIFY,
+		// stack
+		OP_TOALTSTACK, OP_FROMALTSTACK,
+		OP_2DROP, OP_2DUP, OP_3DUP, OP_2OVER, OP_2ROT, OP_2SWAP,
+		OP_DROP, OP_DUP, OP_NIP, OP_OVER, OP_PICK, OP_ROLL, OP_ROT, OP_SWAP, OP_TUCK,
+		OP_IFDUP, OP_DEPTH, OP_SIZE,
+		// equality
+		OP_EQUAL, OP_EQUALVERIFY,
+		// arithmetic
+		OP_1ADD, OP_1SUB, OP_NEGATE, OP_ABS, OP_NOT, OP_0NOTEQUAL,
+		OP_ADD, OP_SUB, OP_BOOLAND, OP_BOOLOR,
+		OP_NUMEQUAL, OP_NUMEQUALVERIFY, OP_NUMNOTEQUAL, OP_LESSTHAN,
+		OP_GREATERTHAN, OP_LESSTHANOREQUAL, OP_GREATERTHANOREQUAL,
+		OP_MIN, OP_MAX, OP_WITHIN,
+		// crypto
+		OP_RIPEMD160, OP_SHA1, OP_SHA256, OP_HASH160, OP_HASH256,
+		OP_CODESEPARATOR, OP_CHECKSIG, OP_CHECKSIGVERIFY,
+		OP_CHECKMULTISIG, OP_CHECKMULTISIGVERIFY
 }
 
 impl Ordinary {
