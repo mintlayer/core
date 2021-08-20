@@ -1,0 +1,36 @@
+[package]
+authors = ['Lukas Kuklinek <lukas.kuklinek@mintlayer.com>']
+description = 'An interpreter for bitcoin script and its dialects'
+edition = '2018'
+name = 'chainscript'
+readme = 'README.md'
+version = '0.1.0'
+
+[package.metadata.docs.rs]
+targets = ['x86_64-unknown-linux-gnu']
+
+[dependencies]
+# external dependencies
+sha-1 = { default-features = false, version = "0.9.7" }
+ripemd160 = { default-features = false, version = "0.9.1" }
+
+# Substrate dependencies
+sp-core = { default-features = false, version = '3.0.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
+sp-io = {default-features = false, version = '3.0.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
+sp-std = { default-features = false, version = '3.0.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
+libsecp256k1 = { version = "0.3.4", optional = true }
+
+[dev-dependencies]
+# serde = '1.0.119'
+sp-runtime = {default-features = false, version = '3.0.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
+hex-literal = "0.3.1"
+
+[features]
+default = ['std', 'testcontext']
+testcontext = [ "libsecp256k1" ]
+std = [
+        "sp-io/std",
+        "sp-core/std",
+        "sp-std/std",
+        "sp-runtime/std",
+]
