@@ -12,6 +12,14 @@ pub enum Error {
 	EarlyEndOfScript,
 	/// Tried to read an array off the stack as a number when it was more than 4 bytes
 	NumericOverflow,
+	/// Illegal instruction executed
+	IllegalOp,
+	/// Syntactically inforrect OP_(NOT)IF/OP_ELSE/OP_ENDIF
+	UnbalancedIfElse,
+	/// Stack has insufficient number of elements in it
+	NotEnoughElementsOnStack,
+	/// Invalid operand to a script operation.
+	InvalidOperand,
 	#[cfg(feature = "bitcoinconsensus")]
 	/// Error validating the script with bitcoinconsensus library
 	BitcoinConsensus(bitcoinconsensus::Error),
@@ -29,6 +37,10 @@ impl fmt::Display for Error {
 			Error::NonMinimalPush => "non-minimal datapush",
 			Error::EarlyEndOfScript => "unexpected end of script",
 			Error::NumericOverflow => "numeric overflow (number on stack larger than 4 bytes)",
+			Error::IllegalOp => "illegal script operation executed",
+			Error::UnbalancedIfElse => "OP_IF/OP_NOTIF/OP_ELSE/OP_ENDIF not syntactically correct",
+			Error::NotEnoughElementsOnStack => "stack does not have enough elements",
+			Error::InvalidOperand => "invalid operand to a script operation",
 			#[cfg(feature = "bitcoinconsensus")]
 			Error::BitcoinConsensus(ref _n) => "bitcoinconsensus verification failed",
 			#[cfg(feature = "bitcoinconsensus")]

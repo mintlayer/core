@@ -66,3 +66,46 @@ macro_rules! hex_script {
 		Script::from(Vec::from(hex!($s)))
 	};
 }
+
+/// Check given condition and return an error if not satisfied.
+///
+/// This is useful for exiting a function if given boolean condition is not met. See the example
+/// below.
+///
+/// ```
+/// use chainscript::util::check;
+///
+/// fn div2(x: i32) -> Result<i32, &'static str> {
+///     check(x >= 0, "number has to be positive")?;
+///     check((x & 1) == 0, "number has to be even")?;
+///     Ok(x / 2)
+/// }
+///
+/// assert!(div2(3).is_err());
+/// assert!(div2(-5).is_err());
+/// assert_eq!(div2(8), Ok(4));
+/// ```
+pub fn check<E>(c: bool, e: E) -> Result<(), E> {
+	c.then(|| ()).ok_or(e)
+}
+
+// Export some hash functions.
+pub use sp_io::hashing::sha2_256 as sha256;
+
+pub fn sha1(data: &[u8]) -> [u8; 20] {
+	use sha1::{Digest, Sha1};
+	Sha1::digest(data).into()
+}
+
+pub fn ripemd160(data: &[u8]) -> [u8; 20] {
+	use ripemd160::{Digest, Ripemd160};
+	Ripemd160::digest(data).into()
+}
+
+pub fn hash256(data: &[u8]) -> [u8; 32] {
+	sha256(&sha256(data))
+}
+
+pub fn hash160(data: &[u8]) -> [u8; 20] {
+	ripemd160(&sha256(data))
+}

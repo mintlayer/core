@@ -25,6 +25,7 @@ libsecp256k1 = { version = "0.3.4", optional = true }
 # serde = '1.0.119'
 sp-runtime = {default-features = false, version = '3.0.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
 hex-literal = "0.3.1"
+proptest = "1.0.0"
 
 [features]
 default = ['std', 'testcontext']

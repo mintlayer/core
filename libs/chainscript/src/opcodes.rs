@@ -717,6 +717,8 @@ impl All {
 			Ordinary::try_from_all(self)
 				.map(Class::Ordinary)
 				.or_else(|| ControlFlow::try_from_all(self).map(Class::ControlFlow))
+				.or_else(|| Signature::try_from_all(self).map(Class::Signature))
+				.or_else(|| AltStack::try_from_all(self).map(Class::AltStack))
 				.expect("opcode categories not covered")
 		}
 	}
@@ -771,6 +773,10 @@ pub enum Class {
 	NoOp,
 	/// Control flow opcodes
 	ControlFlow(ControlFlow),
+	/// Opcodes manipulating alt stack
+	AltStack(AltStack),
+	/// Opcodes to do with verifying signatures
+	Signature(Signature),
 	/// Any opcode not covered above
 	Ordinary(Ordinary),
 }
@@ -808,11 +814,24 @@ macro_rules! opcode_category {
     );
 }
 
+// Control flow opcodes
 opcode_category! {
 	ControlFlow -> OP_IF, OP_NOTIF, OP_ELSE, OP_ENDIF
 }
 
-// "Ordinary" opcodes -- should be 60 of these
+// Alt stack manipulation opcodes
+opcode_category! {
+	AltStack -> OP_TOALTSTACK, OP_FROMALTSTACK
+}
+
+// Signature verification opcodes
+opcode_category! {
+	Signature ->
+		OP_CHECKSIG, OP_CHECKSIGVERIFY, OP_CHECKMULTISIG, OP_CHECKMULTISIGVERIFY,
+		OP_CODESEPARATOR
+}
+
+// "Ordinary" opcodes
 opcode_category! {
 	Ordinary ->
 		// pushdata
@@ -820,7 +839,6 @@ opcode_category! {
 		// verify
 		OP_VERIFY,
 		// stack
-		OP_TOALTSTACK, OP_FROMALTSTACK,
 		OP_2DROP, OP_2DUP, OP_3DUP, OP_2OVER, OP_2ROT, OP_2SWAP,
 		OP_DROP, OP_DUP, OP_NIP, OP_OVER, OP_PICK, OP_ROLL, OP_ROT, OP_SWAP, OP_TUCK,
 		OP_IFDUP, OP_DEPTH, OP_SIZE,
@@ -832,10 +850,8 @@ opcode_category! {
 		OP_NUMEQUAL, OP_NUMEQUALVERIFY, OP_NUMNOTEQUAL, OP_LESSTHAN,
 		OP_GREATERTHAN, OP_LESSTHANOREQUAL, OP_GREATERTHANOREQUAL,
 		OP_MIN, OP_MAX, OP_WITHIN,
-		// crypto
-		OP_RIPEMD160, OP_SHA1, OP_SHA256, OP_HASH160, OP_HASH256,
-		OP_CODESEPARATOR, OP_CHECKSIG, OP_CHECKSIGVERIFY,
-		OP_CHECKMULTISIG, OP_CHECKMULTISIGVERIFY
+		// hashes
+		OP_RIPEMD160, OP_SHA1, OP_SHA256, OP_HASH160, OP_HASH256
 }
 
 impl Ordinary {
@@ -843,6 +859,24 @@ impl Ordinary {
 	#[inline]
 	pub fn into_u8(self) -> u8 {
 		self as u8
+	}
+
+	/// Is this OP_*VERIFY?
+	pub fn is_verify(self) -> bool {
+		match self {
+			Self::OP_VERIFY | Self::OP_EQUALVERIFY | Self::OP_NUMEQUALVERIFY => true,
+			_ => false,
+		}
+	}
+}
+
+impl Signature {
+	/// Is this OP_*VERIFY?
+	pub fn is_verify(self) -> bool {
+		match self {
+			Self::OP_CHECKSIGVERIFY | Self::OP_CHECKMULTISIGVERIFY => true,
+			_ => false,
+		}
 	}
 }
 
@@ -856,9 +890,9 @@ mod tests {
 		($unique:expr, $op:ident) => {
 			assert_eq!(all::$op, All::from(all::$op.into_u8()));
 
-			//let s1 = format!("{}", all::$op);
+			let s1 = format!("{}", all::$op);
 			let s2 = format!("{:?}", all::$op);
-			//assert_eq!(s1, s2);
+			assert_eq!(s1, s2);
 			assert_eq!(s2, stringify!($op));
 			assert!($unique.insert(s2));
 		};

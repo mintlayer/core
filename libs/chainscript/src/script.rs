@@ -101,7 +101,7 @@ impl ::sp_std::str::FromStr for Script {
 pub struct Builder(Vec<u8>, Option<opcodes::All>);
 display_from_debug!(Builder);
 /// Helper to encode an integer in script format
-fn build_scriptint(n: i64) -> Vec<u8> {
+pub fn build_scriptint(n: i64) -> Vec<u8> {
 	if n == 0 {
 		return vec![]
 	}
@@ -1341,5 +1341,15 @@ mod test {
 		// Deserialize
 		assert_eq!(script, ::serde_json::from_str(&json).unwrap());
 		assert_eq!(script, ::bincode::deserialize(&bincode).unwrap());
+	}
+
+	use proptest::prelude::*;
+
+	proptest! {
+		#[test]
+		fn prop_scriptint_roundtrip(x: i32) {
+			let y = read_scriptint(&build_scriptint(x as i64));
+			prop_assert_eq!(Ok(x as i64), y);
+		}
 	}
 }
