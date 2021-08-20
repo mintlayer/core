@@ -67,19 +67,16 @@ git = 'https://github.com/paritytech/substrate.git'
 tag = 'monthly-2021-08'
 
 [dev-dependencies.pallet-aura]
-default-features = false
 git = 'https://github.com/paritytech/substrate.git'
 tag = 'monthly-2021-08'
 version = '4.0.0-dev'
 
 [dev-dependencies.sp-consensus-aura]
-default-features = false
 git = 'https://github.com/paritytech/substrate.git'
 tag = 'monthly-2021-08'
 version = '0.10.0-dev'
 
 [dev-dependencies.pallet-timestamp]
-default-features = false
 git = 'https://github.com/paritytech/substrate.git'
 tag = 'monthly-2021-08'
 version = '4.0.0-dev'

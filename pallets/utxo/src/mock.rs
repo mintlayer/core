@@ -43,7 +43,7 @@ pub const ALICE_PHRASE: &str =
 
 // BlakeHash of TransactionOutput::new(100, H256::from(alice_pub_key)) in fn new_test_ext()
 pub const GENESIS_UTXO: [u8; 32] =
-    hex!("01a9fbfde6f0584e88dcff57b5cf4fc9d538bca4e91b1945437b325af7860b3a");
+    hex!("538563107b8a5079a84a8177d298725886e6e4d45a4eaef370849c532a4545c5");
 
 // Dummy programmable pool for testing
 pub struct MockPool<T>(PhantomData<T>);
