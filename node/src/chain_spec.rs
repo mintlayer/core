@@ -68,7 +68,9 @@ pub fn development_config() -> Result<ChainSpec, String> {
 			// Initial PoA authorities
 			vec![
 				authority_keys_from_seed("Alice"),
-				authority_keys_from_seed("Bob")
+				authority_keys_from_seed("Bob"),
+				authority_keys_from_seed("Charlie"),
+				authority_keys_from_seed("Dave"),
 			],
 			// Sudo account
 			get_account_id_from_seed::<sr25519::Public>("Alice"),
@@ -120,7 +122,9 @@ pub fn local_testnet_config() -> Result<ChainSpec, String> {
 			// Initial PoA authorities
 			vec![
 				authority_keys_from_seed("Alice"),
-				authority_keys_from_seed("Bob")
+				authority_keys_from_seed("Bob"),
+				authority_keys_from_seed("Charlie"),
+				authority_keys_from_seed("Dave"),
 			],
 			// Sudo account
 			get_account_id_from_seed::<sr25519::Public>("Alice"),
@@ -172,7 +176,7 @@ fn testnet_genesis(
 	_enable_println: bool,
 ) -> GenesisConfig {
 
-	const ENDOWMENT: u128 = 10_000_000 * DOLLARS;
+	const ENDOWMENT: u128 = 1000 * DOLLARS;
 	const STASH: u128 = ENDOWMENT / 1000;
 
 	let num_endowed_accounts = endowed_accounts.len();
@@ -186,10 +190,22 @@ fn testnet_genesis(
 		)
 	}).unwrap();
 
-	let stakers = initial_authorities.iter()
+	let mut stakers = initial_authorities.iter()
 		.map(|auth_keys|
 			(auth_keys.stash_acount_id.clone(), auth_keys.account_id.clone(),STASH, StakerStatus::Validator))
 		.collect::<Vec<_>>();
+
+	// have ferdie nominate eve and bob
+	let eve:AuthKeys = authority_keys_from_seed("Eve");
+	let ferdie:AuthKeys = authority_keys_from_seed("Ferdie");
+	let alice = authority_keys_from_seed("Alice");
+	let bob = authority_keys_from_seed("Bob");
+	stakers.push((
+		eve.stash_acount_id, // stash
+		ferdie.account_id,  // controller
+		STASH - 500 ,  // amount stashed
+		StakerStatus::Nominator(vec![alice.stash_acount_id, bob.stash_acount_id]) // role
+	));
 
 	GenesisConfig {
 		frame_system: SystemConfig {
@@ -225,7 +241,7 @@ fn testnet_genesis(
 
 		pallet_staking: StakingConfig {
 			validator_count: initial_authorities.len() as u32,
-			minimum_validator_count: initial_authorities.len() as u32,
+			minimum_validator_count: (initial_authorities.len() as u32) - 2u32,
 			invulnerables: initial_authorities.iter().map(|x| {
 				x.account_id.clone()
 			}).collect(),

@@ -57,6 +57,8 @@ pub use pallet_template;
 
 pub use pallet_utxo;
 use sp_runtime::transaction_validity::{TransactionValidityError, InvalidTransaction, TransactionPriority };
+use pallet_staking::Pallet;
+
 
 /// An index to a block.
 pub type BlockNumber = u32;
@@ -288,7 +290,7 @@ impl pallet_utxo::Config for Runtime {
 
 parameter_types! {
 	pub const DisabledValidatorsThreshold: Perbill = Perbill::from_percent(17);
-	pub const Period: u32 = 5;
+	pub const Period: u32 = 2;
 	pub const Offset: u32 = 0;
 }
 
@@ -323,8 +325,8 @@ pallet_staking_reward_curve::build! {
 
 parameter_types! {
 	pub const SessionsPerEra: sp_staking::SessionIndex = 3;
-	pub const BondingDuration: pallet_staking::EraIndex = 24;
-	pub const SlashDeferDuration: pallet_staking::EraIndex = 24 * 7; // 1/4 the bonding duration.
+	pub const BondingDuration: pallet_staking::EraIndex = 3;
+	pub const SlashDeferDuration: pallet_staking::EraIndex = 6; // 1/4 the bonding duration.
 	pub const RewardCurve: &'static PiecewiseLinear<'static> = &REWARD_CURVE;
 	pub const MaxNominatorRewardedPerValidator: u32 = 64;
 	pub OffchainRepeat: BlockNumber = 5;
@@ -429,7 +431,7 @@ impl pallet_staking::Config for Runtime {
 
 
 parameter_types! {
-	pub const CouncilMotionDuration: BlockNumber = 5 * DAYS;
+	pub const CouncilMotionDuration: BlockNumber = 10 * MINUTES;
 	pub const CouncilMaxProposals: u32 = 100;
 	pub const CouncilMaxMembers: u32 = 100;
 }
@@ -453,7 +455,7 @@ parameter_types! {
 	pub const VotingBondBase: u128 = deposit(1, 64);
 	// additional data per vote is 32 bytes (account id).
 	pub const VotingBondFactor: u128 = deposit(0, 32);
-	pub const TermDuration: BlockNumber = 7 * DAYS;
+	pub const TermDuration: BlockNumber = 1 * HOURS;
 	pub const DesiredMembers: u32 = 13;
 	pub const DesiredRunnersUp: u32 = 7;
 	pub const ElectionsPhragmenPalletId: LockIdentifier = *b"phrelect";
@@ -482,6 +484,17 @@ impl pallet_elections_phragmen::Config for Runtime {
 	type WeightInfo = pallet_elections_phragmen::weights::SubstrateWeight<Runtime>;
 }
 
+parameter_types! {
+	pub const UncleGenerations: BlockNumber = 4;
+}
+
+ impl pallet_authorship::Config for Runtime {
+	 type FindAuthor = pallet_session::FindAccountFromAuthorIndex<Self,Aura>;
+	 type UncleGenerations = UncleGenerations;
+	 type FilterUncle = ();
+	 type EventHandler = Pallet<Runtime>;
+ }
+
 // type EnsureRootOrHalfCouncil = EnsureOneOf<
 // 	AccountId,
 // 	EnsureRoot<AccountId>,
@@ -499,6 +512,7 @@ construct_runtime!(
 		RandomnessCollectiveFlip: pallet_randomness_collective_flip::{Pallet, Call, Storage},
 		Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent},
 		Aura: pallet_aura::{Pallet, Config<T>},
+		Authorship: pallet_authorship::{Pallet, Call, Storage, Inherent},
 		Grandpa: pallet_grandpa::{Pallet, Call, Storage, Config, Event},
 		Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
 		TransactionPayment: pallet_transaction_payment::{Pallet, Storage},
