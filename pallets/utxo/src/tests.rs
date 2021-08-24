@@ -52,7 +52,7 @@ fn test_simple_tx() {
 
         let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx.encode()).unwrap();
         tx.inputs[0].sig_script = H512::from(alice_sig);
-        let new_utxo_hash = BlakeTwo256::hash_of(&(&tx.encode(), 0 as u64));
+        let new_utxo_hash = BlakeTwo256::hash_of(&(&tx, 0 as u64));
 
         assert_ok!(Utxo::spend(Origin::signed(0), tx));
         assert!(!UtxoStore::<Test>::contains_key(H256::from(GENESIS_UTXO)));
@@ -224,7 +224,7 @@ fn tx_from_alice_to_karl() {
         tx.inputs[0].sig_script = H512::from(alice_sig);
 
         assert_ok!(Utxo::spend(Origin::signed(0), tx.clone()));
-        let new_utxo_hash = BlakeTwo256::hash_of(&(&tx.encode(), 1 as u64));
+        let new_utxo_hash = BlakeTwo256::hash_of(&(&tx, 1 as u64));
 
         // then send rest of the tokens to karl (proving that the first tx was successful)
         let mut tx = Transaction {

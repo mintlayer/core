@@ -291,7 +291,7 @@ pub mod pallet {
         // Check that outputs are valid
         for output in tx.outputs.iter() {
             ensure!(output.value > 0, "output value must be nonzero");
-            let hash = BlakeTwo256::hash_of(&(&tx.encode(), output_index));
+            let hash = BlakeTwo256::hash_of(&(&tx, output_index));
             output_index = output_index.checked_add(1).ok_or("output index overflow")?;
             ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
 
@@ -351,7 +351,7 @@ pub mod pallet {
 
         let mut index: u64 = 0;
         for output in &tx.outputs {
-            let hash = BlakeTwo256::hash_of(&(&tx.encode(), index));
+            let hash = BlakeTwo256::hash_of(&(&tx, index));
             index = index.checked_add(1).ok_or("output index overflow")?;
             log::debug!("inserting to UtxoStore {:?} as key {:?}", output, hash);
             <UtxoStore<T>>::insert(hash, Some(output));
