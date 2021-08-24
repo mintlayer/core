@@ -57,7 +57,7 @@ pub use pallet_template;
 
 pub use pallet_utxo;
 use sp_runtime::transaction_validity::{TransactionValidityError, InvalidTransaction, TransactionPriority };
-use pallet_staking::Pallet;
+use pallet_staking_test::Pallet;
 
 
 /// An index to a block.
@@ -377,7 +377,7 @@ parameter_types! {
 	pub const SignedDepositByte: Balance = 1 * CENTS;
 
 	// fallback: no on-chain fallback.
-	pub const Fallback: FallbackStrategy = FallbackStrategy::Nothing;
+	pub const Fallback: FallbackStrategy = FallbackStrategy::OnChain;
 
 	pub SolutionImprovementThreshold: Perbill = Perbill::from_rational(1u32, 10_000);
 
@@ -403,7 +403,7 @@ impl<C> frame_system::offchain::SendTransactionTypes<C> for Runtime where
 	type OverarchingCall = Call;
 }
 
-impl pallet_staking::Config for Runtime {
+impl pallet_staking_test::Config for Runtime {
 	const MAX_NOMINATIONS: u32 = 16;
 	type Currency = Balances;
 	type UnixTime = Timestamp;
@@ -523,7 +523,7 @@ construct_runtime!(
 
 		Elections: pallet_elections_phragmen::{Pallet, Call, Storage, Event<T>, Config<T>},
 		ElectionProviderMultiPhase: pallet_election_provider_multi_phase::{Pallet, Call, Storage, Event<T>, ValidateUnsigned},
-		Staking: pallet_staking::{Pallet, Call, Config<T>, Storage, Event<T>},
+		Staking: pallet_staking_test::{Pallet, Call, Config<T>, Storage, Event<T>},
 		Session: pallet_session::{Pallet, Call, Storage, Event, Config<T>},
 		Council: pallet_collective::<Instance1>::{Pallet, Call, Storage, Origin<T>, Event<T>, Config<T>},
 		Historical: pallet_session_historical::{Pallet},

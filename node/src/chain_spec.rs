@@ -195,17 +195,6 @@ fn testnet_genesis(
 			(auth_keys.stash_acount_id.clone(), auth_keys.account_id.clone(),STASH, StakerStatus::Validator))
 		.collect::<Vec<_>>();
 
-	// have ferdie nominate eve and bob
-	let eve:AuthKeys = authority_keys_from_seed("Eve");
-	let ferdie:AuthKeys = authority_keys_from_seed("Ferdie");
-	let alice = authority_keys_from_seed("Alice");
-	let bob = authority_keys_from_seed("Bob");
-	stakers.push((
-		eve.stash_acount_id, // stash
-		ferdie.account_id,  // controller
-		STASH - 500 ,  // amount stashed
-		StakerStatus::Nominator(vec![alice.stash_acount_id, bob.stash_acount_id]) // role
-	));
 
 	GenesisConfig {
 		frame_system: SystemConfig {
