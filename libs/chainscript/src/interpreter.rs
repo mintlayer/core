@@ -4,7 +4,7 @@ use crate::{
 	script::{self, Instruction, Script},
 	util::{self, check},
 };
-use sp_std::{borrow::Cow, cmp, ops, ops::Range};
+use sp_std::{borrow::Cow, cmp, ops, ops::Range, prelude::*};
 
 /// Item on the data stack.
 ///
@@ -131,7 +131,10 @@ impl ExecStack {
 	}
 }
 
-pub fn run_interpreter<'a>(script: &'a Script, stack: &mut Stack<'a>) -> crate::Result<bool> {
+/// Run given script with given initial stack.
+///
+/// Consumes the stack. Returns either an error or the final stack.
+pub fn run_interpreter<'a>(script: &'a Script, mut stack: Stack<'a>) -> crate::Result<Stack<'a>> {
 	let mut exec_stack = ExecStack::default();
 	let mut alt_stack = Stack::<'a>::default();
 
@@ -145,9 +148,11 @@ pub fn run_interpreter<'a>(script: &'a Script, stack: &mut Stack<'a>) -> crate::
 			Instruction::Op(opcode) => match opcode.classify() {
 				opcodes::Class::NoOp => (),
 				opcodes::Class::IllegalOp => return Err(Error::IllegalOp),
-				opcodes::Class::ReturnOp if executing => return Ok(false),
+				opcodes::Class::ReturnOp if executing => return Err(Error::VerifyFail),
 				opcodes::Class::PushNum(x) if executing => stack.push_int(x as i64),
 				opcodes::Class::PushBytes(_) =>
+					unreachable!("Already handled using Instruction::PushBytes"),
+				opcodes::Class::PushData(_) =>
 					unreachable!("Already handled using Instruction::PushBytes"),
 				opcodes::Class::AltStack(opc) => match opc {
 					opcodes::AltStack::OP_TOALTSTACK => alt_stack.push(stack.pop()?),
@@ -157,13 +162,13 @@ pub fn run_interpreter<'a>(script: &'a Script, stack: &mut Stack<'a>) -> crate::
 				opcodes::Class::ControlFlow(cf) => match cf {
 					opcodes::ControlFlow::OP_IF | opcodes::ControlFlow::OP_NOTIF => {
 						let cond = executing && {
-                            let enforce_minimal_if = true;
+							let enforce_minimal_if = true;
 							let cond = match stack.pop()?.as_ref() {
-                                c if !enforce_minimal_if => script::read_scriptbool(c),
-                                &[] => false,
-                                &[1u8] => true,
-                                _ => return Err(Error::InvalidOperand),
-                            };
+								c if !enforce_minimal_if => script::read_scriptbool(c),
+								&[] => false,
+								&[1u8] => true,
+								_ => return Err(Error::InvalidOperand),
+							};
 							cond ^ (cf == opcodes::ControlFlow::OP_NOTIF)
 						};
 						exec_stack.push(cond);
@@ -177,9 +182,7 @@ pub fn run_interpreter<'a>(script: &'a Script, stack: &mut Stack<'a>) -> crate::
 					},
 				},
 				opcodes::Class::Ordinary(opcode) if executing => {
-					if let Some(result) = execute_opcode(opcode, stack)? {
-						return Ok(result)
-					}
+					execute_opcode(opcode, &mut stack)?;
 				},
 				_ => (),
 			},
@@ -191,26 +194,14 @@ pub fn run_interpreter<'a>(script: &'a Script, stack: &mut Stack<'a>) -> crate::
 		return Err(Error::UnbalancedIfElse)
 	}
 
-	// TODO inspect stack to determine the result.
-	let success = true;
-	Ok(success)
+	Ok(stack)
 }
 
-/// Control flow result of executing an opcode.
-///
-/// * `Ok(None)`: Opcode has executed and the script execution should continue.
-/// * `Ok(Some(e))`: The script should terminate with given validation outcome.
-/// * `Err(e)`: Script execution should terminate with given error.
-type OpcodeResult = Result<Option<bool>, crate::error::Error>;
-
 /// Execute an ["ordinay"](opcode::Ordinary) opcode.
-fn execute_opcode<'a>(opcode: opcodes::Ordinary, stack: &mut Stack<'a>) -> OpcodeResult {
+fn execute_opcode<'a>(opcode: opcodes::Ordinary, stack: &mut Stack<'a>) -> crate::Result<()> {
 	use opcodes::Ordinary as Opc;
 
 	match opcode {
-		Opc::OP_PUSHDATA1 | Opc::OP_PUSHDATA2 | Opc::OP_PUSHDATA4 =>
-			unreachable!("OP_PUSHDATA[124] already handled by Instruction::PushBytes"),
-
 		// Verify. Do nothing now, the actual verification is handled below this match statement.
 		Opc::OP_VERIFY => (),
 
@@ -313,9 +304,9 @@ fn execute_opcode<'a>(opcode: opcodes::Ordinary, stack: &mut Stack<'a>) -> Opcod
 	}
 
 	if opcode.is_verify() && !stack.pop_bool()? {
-		Ok(Some(false))
+		Err(Error::VerifyFail)
 	} else {
-		Ok(None)
+		Ok(())
 	}
 }
 
@@ -373,8 +364,8 @@ mod test {
 	#[test]
 	fn unit_if_then_else_syntax() {
 		let should_fail = |script: Script| {
-			let mut stack = Stack(vec![vec![].into(), vec![].into()]);
-			let result = run_interpreter(&script, &mut stack);
+			let stack = Stack(vec![vec![].into(), vec![].into()]);
+			let result = run_interpreter(&script, stack);
 			assert_eq!(result, Err(Error::UnbalancedIfElse));
 		};
 		use opcodes::all::*;
@@ -454,8 +445,8 @@ mod test {
 		#[test]
 		fn prop_swap_swap(orig_stack in gen_stack(gen_item_bytes(0..40), 2..5)) {
 			let mut stack = orig_stack.clone();
-			let _ = execute_opcode(opcodes::Ordinary::OP_SWAP, &mut stack);
-			let _ = execute_opcode(opcodes::Ordinary::OP_SWAP, &mut stack);
+			execute_opcode(opcodes::Ordinary::OP_SWAP, &mut stack).unwrap();
+			execute_opcode(opcodes::Ordinary::OP_SWAP, &mut stack).unwrap();
 			prop_assert_eq!(orig_stack.0, stack.0);
 		}
 
@@ -470,13 +461,13 @@ mod test {
 				.push_opcode(opcodes::all::OP_ENDIF)
 				.into_script();
 
-			let mut stack = Stack::default();
-			let result = run_interpreter(&script, &mut stack);
+			let stack = Stack::default();
+			let result = run_interpreter(&script, stack);
 			prop_assert!(result.is_ok());
 
 			let expected = cond.then(|| then_val).unwrap_or(else_val) as i64;
 			let expected_stack = Stack(vec![script::build_scriptint(expected).into()]);
-			prop_assert_eq!(stack, expected_stack);
+			prop_assert_eq!(result.unwrap(), expected_stack);
 		}
 	}
 }

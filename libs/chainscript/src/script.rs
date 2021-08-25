@@ -430,47 +430,15 @@ impl Script {
 			let data_len = if let opcodes::Class::PushBytes(n) = opcode.classify() {
 				n as usize
 			} else {
-				match opcode {
-					opcodes::all::OP_PUSHDATA1 => {
-						if script.len() < index + 1 {
+				match opcode.classify() {
+					opcodes::Class::PushData(push_opc) => {
+						if script.len() < index + push_opc.data_size_bytes() {
 							f.write_str("<unexpected end>")?;
 							break
 						}
 						match read_uint(&script[index..], 1) {
 							Ok(n) => {
-								index += 1;
-								n as usize
-							},
-							Err(_) => {
-								f.write_str("<bad length>")?;
-								break
-							},
-						}
-					},
-					opcodes::all::OP_PUSHDATA2 => {
-						if script.len() < index + 2 {
-							f.write_str("<unexpected end>")?;
-							break
-						}
-						match read_uint(&script[index..], 2) {
-							Ok(n) => {
-								index += 2;
-								n as usize
-							},
-							Err(_) => {
-								f.write_str("<bad length>")?;
-								break
-							},
-						}
-					},
-					opcodes::all::OP_PUSHDATA4 => {
-						if script.len() < index + 4 {
-							f.write_str("<unexpected end>")?;
-							break
-						}
-						match read_uint(&script[index..], 4) {
-							Ok(n) => {
-								index += 4;
+								index += push_opc.data_size_bytes();
 								n as usize
 							},
 							Err(_) => {
@@ -553,6 +521,15 @@ pub struct Instructions<'a> {
 	enforce_minimal: bool,
 }
 
+impl<'a> Instructions<'a> {
+	// Kill iterator so that it does not return an infinite stream of errors
+	// and return an error.
+	fn kill(&mut self, e: Error) -> Option<<Self as Iterator>::Item> {
+		self.data = &[];
+		Some(Err(e))
+	}
+}
+
 impl<'a> Iterator for Instructions<'a> {
 	type Item = Result<Instruction<'a>, Error>;
 
@@ -565,91 +542,37 @@ impl<'a> Iterator for Instructions<'a> {
 			opcodes::Class::PushBytes(n) => {
 				let n = n as usize;
 				if self.data.len() < n + 1 {
-					self.data = &[]; // Kill iterator so that it does not return an infinite stream of errors
-					return Some(Err(Error::EarlyEndOfScript))
+					return self.kill(Error::EarlyEndOfScript)
 				}
-				if self.enforce_minimal {
-					if n == 1 && (self.data[1] == 0x81 || (self.data[1] > 0 && self.data[1] <= 16))
-					{
-						self.data = &[];
-						return Some(Err(Error::NonMinimalPush))
-					}
+				if self.enforce_minimal &&
+					n == 1 && (self.data[1] == 0x81 || (self.data[1] > 0 && self.data[1] <= 16))
+				{
+					return self.kill(Error::NonMinimalPush)
 				}
 				let ret = Some(Ok(Instruction::PushBytes(&self.data[1..n + 1])));
 				self.data = &self.data[n + 1..];
 				ret
 			},
-			opcodes::Class::Ordinary(opcodes::Ordinary::OP_PUSHDATA1) => {
-				if self.data.len() < 2 {
-					self.data = &[];
-					return Some(Err(Error::EarlyEndOfScript))
+			opcodes::Class::PushData(push_op) => {
+				let size_bytes = push_op.data_size_bytes();
+				let data = self.data;
+				if data.len() < size_bytes + 1 {
+					return self.kill(Error::EarlyEndOfScript)
 				}
-				let n = match read_uint(&self.data[1..], 1) {
+				let n = match read_uint(&data[1..], size_bytes) {
 					Ok(n) => n,
-					Err(e) => {
-						self.data = &[];
-						return Some(Err(e))
-					},
+					Err(e) => return self.kill(e),
 				};
-				if self.data.len() < n + 2 {
-					self.data = &[];
-					return Some(Err(Error::EarlyEndOfScript))
+				let data = &data[(size_bytes + 1)..];
+				if data.len() < n {
+					return self.kill(Error::EarlyEndOfScript)
 				}
-				if self.enforce_minimal && n < 76 {
-					self.data = &[];
-					return Some(Err(Error::NonMinimalPush))
+				if self.enforce_minimal && n < push_op.data_size_min() {
+					return self.kill(Error::NonMinimalPush)
 				}
-				let ret = Some(Ok(Instruction::PushBytes(&self.data[2..n + 2])));
-				self.data = &self.data[n + 2..];
-				ret
-			},
-			opcodes::Class::Ordinary(opcodes::Ordinary::OP_PUSHDATA2) => {
-				if self.data.len() < 3 {
-					self.data = &[];
-					return Some(Err(Error::EarlyEndOfScript))
-				}
-				let n = match read_uint(&self.data[1..], 2) {
-					Ok(n) => n,
-					Err(e) => {
-						self.data = &[];
-						return Some(Err(e))
-					},
-				};
-				if self.enforce_minimal && n < 0x100 {
-					self.data = &[];
-					return Some(Err(Error::NonMinimalPush))
-				}
-				if self.data.len() < n + 3 {
-					self.data = &[];
-					return Some(Err(Error::EarlyEndOfScript))
-				}
-				let ret = Some(Ok(Instruction::PushBytes(&self.data[3..n + 3])));
-				self.data = &self.data[n + 3..];
-				ret
-			},
-			opcodes::Class::Ordinary(opcodes::Ordinary::OP_PUSHDATA4) => {
-				if self.data.len() < 5 {
-					self.data = &[];
-					return Some(Err(Error::EarlyEndOfScript))
-				}
-				let n = match read_uint(&self.data[1..], 4) {
-					Ok(n) => n,
-					Err(e) => {
-						self.data = &[];
-						return Some(Err(e))
-					},
-				};
-				if self.enforce_minimal && n < 0x10000 {
-					self.data = &[];
-					return Some(Err(Error::NonMinimalPush))
-				}
-				if self.data.len() < n + 5 {
-					self.data = &[];
-					return Some(Err(Error::EarlyEndOfScript))
-				}
-				let ret = Some(Ok(Instruction::PushBytes(&self.data[5..n + 5])));
-				self.data = &self.data[n + 5..];
-				ret
+				let (push, rest) = data.split_at(n);
+				self.data = rest;
+				Some(Ok(Instruction::PushBytes(push)))
 			},
 			// Everything else we can push right through
 			_ => {
@@ -706,20 +629,20 @@ impl Builder {
 	pub fn push_slice(mut self, data: &[u8]) -> Builder {
 		// Start with a PUSH opcode
 		match data.len() as u64 {
-			n if n < opcodes::Ordinary::OP_PUSHDATA1 as u64 => {
+			n if n < opcodes::PushData::OP_PUSHDATA1 as u64 => {
 				self.0.push(n as u8);
 			},
 			n if n < 0x100 => {
-				self.0.push(opcodes::Ordinary::OP_PUSHDATA1.into_u8());
+				self.0.push(opcodes::PushData::OP_PUSHDATA1 as u8);
 				self.0.push(n as u8);
 			},
 			n if n < 0x10000 => {
-				self.0.push(opcodes::Ordinary::OP_PUSHDATA2.into_u8());
+				self.0.push(opcodes::PushData::OP_PUSHDATA2 as u8);
 				self.0.push((n % 0x100) as u8);
 				self.0.push((n / 0x100) as u8);
 			},
 			n if n < 0x100000000 => {
-				self.0.push(opcodes::Ordinary::OP_PUSHDATA4.into_u8());
+				self.0.push(opcodes::PushData::OP_PUSHDATA4 as u8);
 				self.0.push((n % 0x100) as u8);
 				self.0.push(((n / 0x100) % 0x100) as u8);
 				self.0.push(((n / 0x10000) % 0x100) as u8);

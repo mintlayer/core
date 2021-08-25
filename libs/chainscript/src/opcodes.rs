@@ -717,6 +717,7 @@ impl All {
 			Ordinary::try_from_all(self)
 				.map(Class::Ordinary)
 				.or_else(|| ControlFlow::try_from_all(self).map(Class::ControlFlow))
+				.or_else(|| PushData::try_from_all(self).map(Class::PushData))
 				.or_else(|| Signature::try_from_all(self).map(Class::Signature))
 				.or_else(|| AltStack::try_from_all(self).map(Class::AltStack))
 				.expect("opcode categories not covered")
@@ -765,6 +766,8 @@ pub enum Class {
 	PushNum(i32),
 	/// Pushes the given number of bytes onto the stack
 	PushBytes(u32),
+	/// Pushes the number of bytes determined by size following the opcode.
+	PushData(PushData),
 	/// Fails the script if executed
 	ReturnOp,
 	/// Fails the script even if not executed
@@ -831,11 +834,14 @@ opcode_category! {
 		OP_CODESEPARATOR
 }
 
+// Pushdata opcodes
+opcode_category! {
+	PushData -> OP_PUSHDATA1, OP_PUSHDATA2, OP_PUSHDATA4
+}
+
 // "Ordinary" opcodes
 opcode_category! {
 	Ordinary ->
-		// pushdata
-		OP_PUSHDATA1, OP_PUSHDATA2, OP_PUSHDATA4,
 		// verify
 		OP_VERIFY,
 		// stack
@@ -854,13 +860,27 @@ opcode_category! {
 		OP_RIPEMD160, OP_SHA1, OP_SHA256, OP_HASH160, OP_HASH256
 }
 
-impl Ordinary {
-	/// Encode as a byte
-	#[inline]
-	pub fn into_u8(self) -> u8 {
-		self as u8
+impl PushData {
+	/// Get number of bytes reserved to specify push length.
+	pub fn data_size_bytes(self) -> usize {
+		match self {
+			Self::OP_PUSHDATA1 => 1,
+			Self::OP_PUSHDATA2 => 2,
+			Self::OP_PUSHDATA4 => 4,
+		}
 	}
 
+	/// Minimum value to be pushed by this for it to be a minimal push.
+	pub fn data_size_min(self) -> usize {
+		match self {
+			Self::OP_PUSHDATA1 => 76,
+			Self::OP_PUSHDATA2 => 0x100,
+			Self::OP_PUSHDATA4 => 0x10000,
+		}
+	}
+}
+
+impl Ordinary {
 	/// Is this OP_*VERIFY?
 	pub fn is_verify(self) -> bool {
 		match self {
