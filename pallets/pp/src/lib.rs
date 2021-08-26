@@ -115,7 +115,7 @@ where
         let _ = pallet_contracts::Pallet::<T>::bare_call(
             caller.clone(),
             dest.clone(),
-            value, // TODO
+            value * 0u32.into(),
             gas_limit,
             input_data.to_vec(),
             true, // enable debugging
