@@ -71,6 +71,8 @@ pub fn development_config() -> Result<ChainSpec, String> {
 				authority_keys_from_seed("Bob"),
 				authority_keys_from_seed("Charlie"),
 				authority_keys_from_seed("Dave"),
+				authority_keys_from_seed("Eve"),
+				authority_keys_from_seed("Ferdie"),
 			],
 			// Sudo account
 			get_account_id_from_seed::<sr25519::Public>("Alice"),
@@ -125,6 +127,8 @@ pub fn local_testnet_config() -> Result<ChainSpec, String> {
 				authority_keys_from_seed("Bob"),
 				authority_keys_from_seed("Charlie"),
 				authority_keys_from_seed("Dave"),
+				authority_keys_from_seed("Eve"),
+				authority_keys_from_seed("Ferdie"),
 			],
 			// Sudo account
 			get_account_id_from_seed::<sr25519::Public>("Alice"),
@@ -230,7 +234,7 @@ fn testnet_genesis(
 
 		pallet_staking: StakingConfig {
 			validator_count: initial_authorities.len() as u32,
-			minimum_validator_count: (initial_authorities.len() as u32) - 2u32,
+			minimum_validator_count: initial_authorities.len() as u32,
 			invulnerables: initial_authorities.iter().map(|x| {
 				x.account_id.clone()
 			}).collect(),
