@@ -25,6 +25,16 @@ pub enum Error {
 	SignatureFormat,
 	/// Pubkey is not in correct format.
 	PubkeyFormat,
+	/// Push data too large.
+	PushSize,
+	/// Maximum script size exceeded.
+	ScriptSize,
+	/// Incorrect number of public keys for multisig
+	PubkeyCount,
+	/// Incorrect number of signatures for multisig
+	SigCount,
+	/// Multisig lacks extra 0 dummy.
+	NullDummy,
 	#[cfg(feature = "bitcoinconsensus")]
 	/// Error validating the script with bitcoinconsensus library
 	BitcoinConsensus(bitcoinconsensus::Error),

@@ -1,4 +1,5 @@
 use crate::{
+	context::Context,
 	error::Error,
 	opcodes,
 	script::{self, Instruction, Script},
@@ -68,6 +69,11 @@ impl<'a> Stack<'a> {
 		self.at_least(r.start).map(|len| (len - r.start)..(len - r.end))
 	}
 
+	/// Take a slice of the top of the stack.
+	fn top_slice(&self, r: Range<usize>) -> crate::Result<&[Item<'a>]> {
+		Ok(&self.0[self.top_range(r)?])
+	}
+
 	/// Take a mutable slice of the top of the stack.
 	fn top_slice_mut(&mut self, r: Range<usize>) -> crate::Result<&mut [Item<'a>]> {
 		let i = self.top_range(r)?;
@@ -134,17 +140,31 @@ impl ExecStack {
 /// Run given script with given initial stack.
 ///
 /// Consumes the stack. Returns either an error or the final stack.
-pub fn run_interpreter<'a>(script: &'a Script, mut stack: Stack<'a>) -> crate::Result<Stack<'a>> {
+pub fn run_interpreter<'a, Ctx: Context>(
+	ctx: &Ctx,
+	script: &'a Script,
+	mut stack: Stack<'a>,
+) -> crate::Result<Stack<'a>> {
+	if script.len() > Ctx::MAX_SCRIPT_SIZE {
+		return Err(Error::ScriptSize)
+	}
+
+	let mut instr_iter = script.instructions_iter(ctx.enforce_minimal_push());
+	let mut subscript: &[u8] = instr_iter.subscript();
 	let mut exec_stack = ExecStack::default();
 	let mut alt_stack = Stack::<'a>::default();
 
-	for instr in script.instructions_minimal() {
+	while let Some(instr) = instr_iter.next() {
 		let instr = instr?;
 
 		let executing = exec_stack.executing();
 		match instr {
-			Instruction::PushBytes(data) if executing => stack.push(data.into()),
-			Instruction::PushBytes(_) => (),
+			Instruction::PushBytes(data) => {
+				check(data.len() <= Ctx::MAX_SCRIPT_ELEMENT_SIZE, Error::PushSize)?;
+				if executing {
+					stack.push(data.into());
+				}
+			},
 			Instruction::Op(opcode) => match opcode.classify() {
 				opcodes::Class::NoOp => (),
 				opcodes::Class::IllegalOp => return Err(Error::IllegalOp),
@@ -158,13 +178,58 @@ pub fn run_interpreter<'a>(script: &'a Script, mut stack: Stack<'a>) -> crate::R
 					opcodes::AltStack::OP_TOALTSTACK => alt_stack.push(stack.pop()?),
 					opcodes::AltStack::OP_FROMALTSTACK => stack.push(alt_stack.pop()?),
 				},
-				opcodes::Class::Signature(_sigop) => todo!("handle signatures"),
+				opcodes::Class::Signature(sig_opcode) => {
+					match sig_opcode {
+						opcodes::Signature::OP_CODESEPARATOR => subscript = instr_iter.subscript(),
+						opcodes::Signature::OP_CHECKSIG | opcodes::Signature::OP_CHECKSIGVERIFY => {
+							let pubkey = stack.pop()?;
+							let sig = stack.pop()?;
+							// Treat plain CHECKSIG as 1-of-1 MULTISIG
+							let result = check_multisig(
+								ctx,
+								core::iter::once(sig.as_ref()),
+								core::iter::once(pubkey.as_ref()),
+								subscript,
+							)?;
+							stack.push_bool(result);
+						},
+						opcodes::Signature::OP_CHECKMULTISIG |
+						opcodes::Signature::OP_CHECKMULTISIGVERIFY => {
+							// Extract keys
+							let nkey = stack.pop_int()?;
+							check(nkey >= 0, Error::PubkeyCount)?;
+							let nkey = nkey as usize;
+							check(nkey <= Ctx::MAX_PUBKEYS_PER_MULTISIG, Error::PubkeyCount)?;
+							let keys = stack.top_slice(nkey..0)?.iter().map(AsRef::as_ref);
+
+							// Extract signatures
+							let nsig = script::read_scriptint(stack.top(nkey)?)?;
+							check(nsig >= 0, Error::SigCount)?;
+							let nsig = nsig as usize;
+							check(nsig <= nkey, Error::SigCount)?;
+							let sig_range = (nsig + nkey + 1)..(nkey + 1);
+							let sigs = stack.top_slice(sig_range)?.iter().map(AsRef::as_ref);
+
+							// Verify
+							let result = check_multisig(ctx, sigs, keys, subscript)?;
+
+							// Clean up stack, check dummy 0.
+							stack.drop(nsig + nkey + 1)?;
+							if !stack.pop()?.is_empty() {
+								return Err(Error::NullDummy)
+							}
+							stack.push_bool(result);
+						},
+					}
+					if sig_opcode.is_verify() && !stack.pop_bool()? {
+						return Err(Error::VerifyFail)
+					}
+				},
 				opcodes::Class::ControlFlow(cf) => match cf {
 					opcodes::ControlFlow::OP_IF | opcodes::ControlFlow::OP_NOTIF => {
 						let cond = executing && {
-							let enforce_minimal_if = true;
 							let cond = match stack.pop()?.as_ref() {
-								c if !enforce_minimal_if => script::read_scriptbool(c),
+								c if !ctx.enforce_minimal_if() => script::read_scriptbool(c),
 								&[] => false,
 								&[1u8] => true,
 								_ => return Err(Error::InvalidOperand),
@@ -195,6 +260,35 @@ pub fn run_interpreter<'a>(script: &'a Script, mut stack: Stack<'a>) -> crate::R
 	}
 
 	Ok(stack)
+}
+
+/// Check whether given signatures are valid for given pubkeys.
+/// Some pubkeys may not have signatures to go with them.
+fn check_multisig<'a, Ctx: Context>(
+	ctx: &Ctx,
+	mut sigs: impl Iterator<Item = &'a [u8]> + ExactSizeIterator,
+	mut pubkeys: impl Iterator<Item = &'a [u8]> + ExactSizeIterator,
+	subscript: &[u8],
+) -> crate::Result<bool> {
+	// Check each signature has its corresponding pubkey.
+	while let Some(sig) = sigs.next() {
+		let sig = ctx.parse_signature(sig).ok_or(Error::SignatureFormat)?;
+		let txhash = ctx.hash_transaction(&sig, subscript);
+		// Find pubkey matching this signature.
+		loop {
+			if pubkeys.len() < sigs.len() + 1 {
+				// Not enough pubkeys to cover all the remaining signatures.
+				// We add 1 to the number of signatures left in the condition to account for the
+				// signature being processed that has just been taken out of the iterator.
+				return Ok(false)
+			}
+			let pubkey = ctx.parse_pubkey(pubkeys.next().unwrap()).ok_or(Error::PubkeyFormat)?;
+			if ctx.verify_signature(&sig, &pubkey, &txhash) {
+				break
+			}
+		}
+	}
+	Ok(true)
 }
 
 /// Execute an ["ordinay"](opcode::Ordinary) opcode.
@@ -332,7 +426,8 @@ fn op_hash<T: AsRef<[u8]>>(stack: &mut Stack, f: impl FnOnce(&[u8]) -> T) -> cra
 #[cfg(test)]
 mod test {
 	use super::*;
-	use crate::script::Builder;
+	use crate::{context::testcontext::TestContext, script::Builder};
+	use hex_literal::hex;
 	use proptest::{collection::SizeRange, prelude::*};
 
 	#[test]
@@ -365,7 +460,8 @@ mod test {
 	fn unit_if_then_else_syntax() {
 		let should_fail = |script: Script| {
 			let stack = Stack(vec![vec![].into(), vec![].into()]);
-			let result = run_interpreter(&script, stack);
+			let ctx = TestContext::default();
+			let result = run_interpreter(&ctx, &script, stack);
 			assert_eq!(result, Err(Error::UnbalancedIfElse));
 		};
 		use opcodes::all::*;
@@ -390,6 +486,45 @@ mod test {
 				.push_opcode(OP_ENDIF)
 				.into_script(),
 		);
+	}
+
+	#[test]
+	fn unit_multisig() {
+		let ctx = TestContext::default();
+		let txhash = ctx.hash_transaction(&[0u8; 4], &[]);
+		let sign_by = |pk: [u8; 4]| -> [u8; 4] { [0, 1, 2, 3].map(|i| pk[i] ^ txhash[i]) };
+
+		let keys = [hex!("01010101"), hex!("02020202"), hex!("03030303"), hex!("04040404")];
+		let sig0 = sign_by(hex!("00000000"));
+		let sig1 = sign_by(hex!("01010101"));
+		let sig2 = sign_by(hex!("02020202"));
+		let sig3 = sign_by(hex!("03030303"));
+		let sig4 = sign_by(hex!("04040404"));
+
+		let test_case = |sigs: &[[u8; 4]], expected: crate::Result<bool>| {
+			let result = check_multisig(
+				&ctx,
+				sigs.iter().map(AsRef::as_ref),
+				keys.iter().map(AsRef::as_ref),
+				&[],
+			);
+			assert_eq!(result, expected);
+		};
+
+		// sig0 is not in the set of public keys, this should fail
+		test_case(&[sig1, sig0][..], Ok(false));
+		// This should be fine, sig1 and sig2 in the correct order
+		test_case(&[sig1, sig2][..], Ok(true));
+		// Try first and last
+		test_case(&[sig1, sig4][..], Ok(true));
+		// And last two
+		test_case(&[sig3, sig4][..], Ok(true));
+		// This should fail due to incorrect signature order
+		test_case(&[sig2, sig1][..], Ok(false));
+		// Now with all the signatures.
+		test_case(&[sig1, sig2, sig3, sig4][..], Ok(true));
+		// Duplicate signature should not count as two sigs.
+		test_case(&[sig1, sig1][..], Ok(false));
 	}
 
 	// Generate stack item as an array of bytes
@@ -462,7 +597,8 @@ mod test {
 				.into_script();
 
 			let stack = Stack::default();
-			let result = run_interpreter(&script, stack);
+			let ctx = TestContext::default();
+			let result = run_interpreter(&ctx, &script, stack);
 			prop_assert!(result.is_ok());
 
 			let expected = cond.then(|| then_val).unwrap_or(else_val) as i64;

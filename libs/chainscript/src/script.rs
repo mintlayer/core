@@ -382,13 +382,18 @@ impl Script {
 	///
 	/// To force minimal pushes, use [Self::instructions_minimal].
 	pub fn instructions(&self) -> Instructions {
-		Instructions { data: &self.0[..], enforce_minimal: false }
+		self.instructions_iter(false)
 	}
 
 	/// Iterate over the script in the form of `Instruction`s while enforcing
 	/// minimal pushes.
 	pub fn instructions_minimal(&self) -> Instructions {
-		Instructions { data: &self.0[..], enforce_minimal: true }
+		self.instructions_iter(true)
+	}
+
+	/// See [Script::instructions] and [Script::instructions_minimal].
+	pub fn instructions_iter(&self, enforce_minimal: bool) -> Instructions {
+		Instructions::new(&self.0[..], enforce_minimal)
 	}
 
 	#[cfg(feature = "bitcoinconsensus")]
@@ -518,15 +523,25 @@ pub enum Instruction<'a> {
 /// Iterator over a script returning parsed opcodes
 pub struct Instructions<'a> {
 	data: &'a [u8],
+	cur_subscript: &'a [u8],
 	enforce_minimal: bool,
 }
 
 impl<'a> Instructions<'a> {
+	fn new(data: &'a [u8], enforce_minimal: bool) -> Self {
+		Instructions { data, cur_subscript: data, enforce_minimal }
+	}
+
 	// Kill iterator so that it does not return an infinite stream of errors
 	// and return an error.
 	fn kill(&mut self, e: Error) -> Option<<Self as Iterator>::Item> {
 		self.data = &[];
 		Some(Err(e))
+	}
+
+	// Extract the script remainder
+	pub fn subscript(&self) -> &'a [u8] {
+		self.cur_subscript
 	}
 }
 
@@ -534,6 +549,7 @@ impl<'a> Iterator for Instructions<'a> {
 	type Item = Result<Instruction<'a>, Error>;
 
 	fn next(&mut self) -> Option<Result<Instruction<'a>, Error>> {
+		self.cur_subscript = self.data;
 		if self.data.is_empty() {
 			return None
 		}

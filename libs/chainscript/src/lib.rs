@@ -4,6 +4,7 @@
 pub mod util;
 
 // TODO: hide implementation of most items exported here
+pub mod context;
 pub mod error;
 pub mod interpreter;
 pub mod opcodes;

@@ -20,7 +20,6 @@ displaydoc = { default-features = false, version = "0.2" }
 sp-core = { default-features = false, version = '3.0.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
 sp-io = {default-features = false, version = '3.0.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
 sp-std = { default-features = false, version = '3.0.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
-libsecp256k1 = { version = "0.3.4", optional = true }
 
 [dev-dependencies]
 # serde = '1.0.119'
@@ -30,7 +29,7 @@ proptest = "1.0.0"
 
 [features]
 default = ['std', 'testcontext']
-testcontext = [ "libsecp256k1" ]
+testcontext = []
 std = [
         "sp-io/std",
         "sp-core/std",
