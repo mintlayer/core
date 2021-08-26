@@ -213,6 +213,85 @@ by appending your own. A few useful ones are as follow.
 ./scripts/docker_run.sh cargo check
 ```
 
+
+### pallet-staking testing in polkadot UI
+#### Notes to remember:  
+- This is still using substrate's/polkadot's Nominated Proof-of-Stake (NPoS). It means a node can only perform as a _validator_ when:  
+    - the node has the highest number of nominations;   
+    - the maximum number of validator positions can still accommodate another node  
+- Rewards/Payouts will reflect after a new era:
+  - Currently the setup is **2** block numbers should pass before a session ends.   
+  It is defined in the `ShouldEndSession` of `pallet_session::Config` setup in `runtime/src/lib.rs`
+  - Currently the setup is **3** sessions should pass before a new era starts.  
+  It is defined in the `SessionsPerEra` of `pallet_staking::Config` setup in `runtime/src/lib.rs`
+- At genesis, 6 accounts are bonded and are already acting as validators: Alice, Bob, Charlie, Dave, Eve, and Ferdie.  
+This means we don't need to click **Validate** button to let the node act as validator.
+    
+    
+1. Run Alice: 
+```
+ ./target/release/node-template --base-path /tmp/alice --chain local --alice --port 30333 --ws-port 9945 --rpc-port 9933 --node-key 0000000000000000000000000000000000000000000000000000000000000001 --validator
+ ```
+2. Run Bob:
+```
+./target/release/node-template --base-path /tmp/bob --chain local --bob --port 30334 --ws-port 9946 --rpc-port 9934 --validator --bootnodes /ip4/127.0.0.1/tcp/30333/p2p/12D3KooWEyoppNCUx8Yx66oV9fJnriXwCcXwDDUA2kj6vnc6iDEp
+```
+3. Repeat the same command in step 2 (four times), replacing _Bob_ and ports with the following names:  
+  -- **Charlie** with  `--port 30335 --ws-port 9947 --rpc-port 9935`  
+  -- **Dave**    with `--port 30336 --ws-port 9948 --rpc-port 9936`   
+  -- **Eve**     with `--port 30337 --ws-port 9949 --rpc-port 9937`   
+  -- **Ferdie**  with `--port 30338 --ws-port 9950 --rpc-port 9938`
+4. Go to **polkadot.js.org/apps**; click that circular icon on the left side; go to **DEVELOPMENT** > **Local Node**  
+and replace port in the **custom endpoint** input box with any of the ports from `9945` to `9950`. Then click **Switch**
+5. Now go to **Network** > **Staking**. You should see **_6/6_** on the **validators** count.
+You should also see a table with the following details (in no particular order):  
+   | validators | other stake | own stake | commission | points | last # |   
+   | --------------- | --------------- | --------------- | --------------- | --------------- | --------------- | 
+   | 5CRmqm…R9vmWk |  | 100.0000 UNIT |  0.00% |
+   | 5Ck5SL…VzEAPT |  | 100.0000 UNIT |  0.00% |
+   | 5FCfAo…bLFE7n |  | 100.0000 UNIT |  0.00% |
+   | 5HKPmK…qu4ns8 |  | 100.0000 UNIT |  0.00% |
+   | ALICE_STASH |  | 100.0000 UNIT |  0.00% |
+   | BOB_STASH |  | 100.0000 UNIT |  0.00% |  
+6. Wait for a block to be created. You can observe this at **Network** > **Explorer**. 
+7. Check which stash created a recent block. Go back to **Network** > **Staking**. 
+Check that the stash has the **points** and **last #** columns filled out.   
+e.g. **_BOB_STASH_** has **points** of _20_ and **last #** of _1_.
+8. Wait for the **era** number to increment. 
+Once it does, go to the **Payouts** and click `Own stashes`. You should see a table that looks like this:
+    | payout/validator | eras | own | remaining |  |  |   
+   | --------------- | --------------- | --------------- | --------------- | --------------- | --------------- | 
+   | 5CRmqm…R9vmWk | 0 | 0.0457 UNIT |  | 1 own stashes | Payout |
+   | 5Ck5SL…VzEAPT | 0 | 0.0457 UNIT |  | 1 own stashes | Payout |
+   | 5FCfAo…bLFE7n | 0 | 0.0457 UNIT |  | 1 own stashes | Payout |
+   | 5HKPmK…qu4ns8 | 0 | 0.0457 UNIT |  | 1 own stashes | Payout |
+   | ALICE_STASH | 0 | 0.0457 UNIT |  | 1 own stashes | Payout |
+   | BOB_STASH | 0 | 0.0457 UNIT |   | 1 own stashes | Payout | 
+9. Click the **Payout** button on **_ALICE_STASH_**. Set **request payout from** to **_FERDIE_**. Click **Payout** then **Sign And Submit**.  
+Wait for the transaction to succeed. It should change the notification at the upper right corner from:
+```
+staking.payoutStakers
+broadcast
+```
+to 
+```
+staking.payoutStakers
+inblock
+
+system.ExtrinsicSuccess
+staking.Reward
+extrinsic event
+```
+10. After a successful transaction, go to **Account actions** and observe the **_ALICE_STASH_** row, column **bonded**: _100.0457_.
+  
+#### how to stop validating
+1. Go to **Developer** > **Extrinsics**
+2. Set **submit the following extrinsic** to **_staking_** and choose **_chill()_**. Click **Submit Transaction**.
+
+#### how to start validating
+1. Go to **Network** > **Staking** > **Account actions**
+2. Click **_Validate_** button. 
+
 ### pallet-utxo
 found at branch `pallet-utxo`:
 ```bash
