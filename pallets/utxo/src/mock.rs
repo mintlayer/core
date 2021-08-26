@@ -43,7 +43,7 @@ pub const ALICE_PHRASE: &str =
 
 // BlakeHash of TransactionOutput::new(100, H256::from(alice_pub_key)) in fn new_test_ext()
 pub const GENESIS_UTXO: [u8; 32] =
-    hex!("538563107b8a5079a84a8177d298725886e6e4d45a4eaef370849c532a4545c5");
+    hex!("0a08a0ef477ab5416c15bda44ff1938279e1677569b0cccaf73f0d30f4e935cb");
 
 // Dummy programmable pool for testing
 pub struct MockPool<T>(PhantomData<T>);
@@ -54,7 +54,8 @@ impl<T: frame_system::Config> ContractProvider for MockPool<T> {
     fn create(
         _origin: &Self::AccountId,
         _weight: Weight,
-        _code: &Vec<u8>
+        _code: &Vec<u8>,
+        _data: &Vec<u8>,
     ) -> Result<(), &'static str> {
         Ok(())
     }

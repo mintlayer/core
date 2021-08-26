@@ -85,6 +85,7 @@ where
         caller: &T::AccountId,
         gas_limit: Weight,
         code: &Vec<u8>,
+        data: &Vec<u8>,
     ) -> Result<(), &'static str> {
         let code = pallet_contracts_primitives::Code::Upload(Bytes(code.to_vec()));
         let endowment = pallet_contracts::Pallet::<T>::subsistence_threshold();
@@ -94,7 +95,7 @@ where
             endowment * 100_u32.into(), // TODO
             gas_limit,
             code,
-            Vec::new(),
+            data.to_vec(),
             Vec::new(),
             false, // calculate rent projection
             true,  // enable debugging

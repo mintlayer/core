@@ -41,8 +41,8 @@ impl Default for ScriptType {
 #[derive(Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, Debug, Hash, Default)]
 pub struct ScriptPubKey {
     pub(crate) stype: ScriptType,
-    pub(crate) size: u16,
     pub(crate) script: Vec<u8>,
+    pub(crate) data: Vec<u8>,
 }
 
 impl ScriptPubKey {
@@ -50,8 +50,8 @@ impl ScriptPubKey {
     pub fn new() -> Self {
         Self {
             stype: ScriptType::default(),
-            size: 0,
             script: Vec::new(),
+            data: Vec::new(),
         }
     }
 
@@ -63,8 +63,11 @@ impl ScriptPubKey {
 
         self.stype = stype;
         self.script = script.clone();
-        self.size = self.script.len() as u16;
         Ok(())
+    }
+
+    pub fn set_data(&mut self, data: &Vec<u8>) {
+        self.data = data.clone()
     }
 }
 
@@ -77,8 +80,8 @@ mod tests {
     fn new_script() {
         let script = ScriptPubKey::new();
         assert_eq!(script.stype, ScriptType::P2pkh);
-        assert_eq!(script.size, 0);
         assert_eq!(script.script.len(), 0);
+        assert_eq!(script.data.len(), 0);
     }
 
     #[test]

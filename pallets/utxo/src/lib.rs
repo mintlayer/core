@@ -224,19 +224,19 @@ fn disperse_reward<T: Config>(auths: &[H256], block_number: T::BlockNumber) {
     }
 }
 
-pub fn create<T: Config>(caller: &T::AccountId, code: &Vec<u8>) {
+pub fn create<T: Config>(caller: &T::AccountId, code: &Vec<u8>, data: &Vec<u8>) {
     let weight: Weight = 6000000000;
 
-    match T::ProgrammablePool::create(caller, weight, code) {
+    match T::ProgrammablePool::create(caller, weight, code, data) {
         Ok(_) => log::info!("success!"),
         Err(e) => log::error!("failure: {:#?}", e),
     }
 }
 
-pub fn call<T: Config>(caller: &T::AccountId, dest: &T::AccountId, code: &Vec<u8>) {
+pub fn call<T: Config>(caller: &T::AccountId, dest: &T::AccountId, data: &Vec<u8>) {
     let weight: Weight = 6000000000;
 
-    match T::ProgrammablePool::call(caller, dest, weight, code) {
+    match T::ProgrammablePool::call(caller, dest, weight, data) {
         Ok(_) => log::info!("success!"),
         Err(e) => log::error!("failure: {:#?}", e),
     }
@@ -396,13 +396,13 @@ pub fn validate_transaction<T: Config>(
                     <UtxoStore<T>>::insert(hash, Some(output));
                 },
                 ScriptType::OpCreate => {
-                    create::<T>(caller, &output.script.script);
+                    create::<T>(caller, &output.script.script, &output.script.data);
                 },
                 ScriptType::OpCall => {
                     // TODO convert pubkey of tx to the destination (contract transaction), fix this
                     let mut tmp = output.pub_key.as_bytes().clone();
                     let id = T::AccountId::decode(&mut tmp).unwrap();
-                    call::<T>(caller, &id, &output.script.script);
+                    call::<T>(caller, &id, &output.script.data);
                 },
             }
         }
