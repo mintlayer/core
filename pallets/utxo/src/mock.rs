@@ -95,7 +95,7 @@ parameter_types! {
 }
 
 impl frame_system::Config for Test {
-    type BaseCallFilter = frame_support::traits::AllowAll;
+    type BaseCallFilter = frame_support::traits::Everything;
     type BlockWeights = ();
     type BlockLength = ();
     type Origin = Origin;
@@ -130,6 +130,7 @@ impl pallet_timestamp::Config for Test {
 
 impl pallet_aura::Config for Test {
     type AuthorityId = AuraId;
+    type DisabledValidators = ();
 }
 
 impl pallet_utxo::Config for Test {

@@ -27,38 +27,38 @@ path = "../../traits/contract-provider/"
 default-features = false
 git = 'https://github.com/paritytech/substrate.git'
 optional = true
-tag = 'monthly-2021-08'
 version = '4.0.0-dev'
+branch = "master"
 
 [dependencies.frame-support]
 default-features = false
 git = 'https://github.com/paritytech/substrate.git'
-tag = 'monthly-2021-08'
 version = '4.0.0-dev'
+branch = "master"
 
 [dependencies.frame-system]
 default-features = false
 git = 'https://github.com/paritytech/substrate.git'
-tag = 'monthly-2021-08'
 version = '4.0.0-dev'
+branch = "master"
 
 [dependencies.pallet-contracts]
 default-features = false
 git = 'https://github.com/paritytech/substrate.git'
-tag = 'monthly-2021-08'
 version = '4.0.0-dev'
+branch = "master"
 
 [dependencies.pallet-contracts-primitives]
 default-features = false
 git = 'https://github.com/paritytech/substrate.git'
-tag = 'monthly-2021-08'
 version = '4.0.0-dev'
+branch = "master"
 
 [dependencies.sp-core]
 default-features = false
 git = 'https://github.com/paritytech/substrate.git'
-tag = 'monthly-2021-08'
 version = '4.0.0-dev'
+branch = "master"
 
 [dev-dependencies.serde]
 version = '1.0.126'
@@ -66,20 +66,20 @@ version = '1.0.126'
 [dev-dependencies.sp-io]
 default-features = false
 git = 'https://github.com/paritytech/substrate.git'
-tag = 'monthly-2021-08'
 version = '4.0.0-dev'
+branch = "master"
 
 [dev-dependencies.sp-runtime]
 default-features = false
 git = 'https://github.com/paritytech/substrate.git'
-tag = 'monthly-2021-08'
 version = '4.0.0-dev'
+branch = "master"
 
 [dev-dependencies.sp-core]
 default-features = false
 git = 'https://github.com/paritytech/substrate.git'
-tag = 'monthly-2021-08'
 version = '4.0.0-dev'
+branch = "master"
 
 [features]
 default = ['std']
