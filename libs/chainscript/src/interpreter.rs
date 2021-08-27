@@ -1,3 +1,22 @@
+// Copyright (c) 2021 RBB S.r.l
+// opensource@mintlayer.org
+// SPDX-License-Identifier: MIT
+// Licensed under the MIT License;
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// 	http://spdx.org/licenses/MIT
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// Author(s): L. Kuklinek
+
+//! Chain script interpreter
+
 use crate::{
 	context::Context,
 	error::Error,
@@ -25,7 +44,7 @@ impl<'a> Stack<'a> {
 
 	/// Check the stack has at least given number of elements and return the length.
 	fn at_least(&self, num: usize) -> crate::Result<usize> {
-		(self.len() >= num).then(|| self.len()).ok_or(Error::NotEnoughElementsOnStack)
+		Some(self.len()).filter(|&l| l >= num).ok_or(Error::NotEnoughElementsOnStack)
 	}
 
 	/// Pop an item off of the stack.
@@ -35,7 +54,7 @@ impl<'a> Stack<'a> {
 
 	/// Pop an item of the top of the stack and convert it to bool.
 	fn pop_bool(&mut self) -> crate::Result<bool> {
-		self.pop().map(|x| script::read_scriptbool(&x))
+		Ok(script::read_scriptbool(&self.pop()?))
 	}
 
 	/// Pop an item off the stack and convert it to int.
@@ -66,7 +85,7 @@ impl<'a> Stack<'a> {
 
 	/// Map range counting from the top of the stack to the internal vector indexing.
 	fn top_range(&self, r: Range<usize>) -> crate::Result<Range<usize>> {
-		self.at_least(r.start).map(|len| (len - r.start)..(len - r.end))
+		self.at_least(r.end).map(|len| (len - r.end)..(len - r.start))
 	}
 
 	/// Take a slice of the top of the stack.
@@ -83,7 +102,8 @@ impl<'a> Stack<'a> {
 	/// Drop given number of elements
 	fn drop(&mut self, num_drop: usize) -> crate::Result<()> {
 		let len = self.at_least(num_drop)?;
-		Ok(self.0.truncate(len - num_drop))
+		self.0.truncate(len - num_drop);
+		Ok(())
 	}
 
 	/// Duplicate slice indexed from the top of the stack. The new items are added to the top of
@@ -94,13 +114,14 @@ impl<'a> Stack<'a> {
 
 	/// Swap the top `n` elements with the next `n` elements on the stack.
 	fn swap(&mut self, n: usize) -> crate::Result<()> {
-		let (top, next) = self.top_slice_mut((2 * n)..0)?.split_at_mut(n);
-		Ok(top.swap_with_slice(next))
+		let (top, next) = self.top_slice_mut(0..(2 * n))?.split_at_mut(n);
+		top.swap_with_slice(next);
+		Ok(())
 	}
 
 	/// Remove `n`-th element, counting from the top of the stack.
 	fn remove(&mut self, n: usize) -> crate::Result<Item<'a>> {
-		let len = self.at_least(n)?;
+		let len = self.at_least(n + 1)?;
 		Ok(self.0.remove(len - n - 1))
 	}
 }
@@ -137,10 +158,16 @@ impl ExecStack {
 	}
 }
 
+impl<'a> From<Vec<Item<'a>>> for Stack<'a> {
+	fn from(items: Vec<Item<'a>>) -> Self {
+		Self(items)
+	}
+}
+
 /// Run given script with given initial stack.
 ///
 /// Consumes the stack. Returns either an error or the final stack.
-pub fn run_interpreter<'a, Ctx: Context>(
+pub fn run_script<'a, Ctx: Context>(
 	ctx: &Ctx,
 	script: &'a Script,
 	mut stack: Stack<'a>,
@@ -200,14 +227,14 @@ pub fn run_interpreter<'a, Ctx: Context>(
 							check(nkey >= 0, Error::PubkeyCount)?;
 							let nkey = nkey as usize;
 							check(nkey <= Ctx::MAX_PUBKEYS_PER_MULTISIG, Error::PubkeyCount)?;
-							let keys = stack.top_slice(nkey..0)?.iter().map(AsRef::as_ref);
+							let keys = stack.top_slice(0..nkey)?.iter().map(AsRef::as_ref);
 
 							// Extract signatures
 							let nsig = script::read_scriptint(stack.top(nkey)?)?;
 							check(nsig >= 0, Error::SigCount)?;
 							let nsig = nsig as usize;
 							check(nsig <= nkey, Error::SigCount)?;
-							let sig_range = (nsig + nkey + 1)..(nkey + 1);
+							let sig_range = (nkey + 1)..(nsig + nkey + 1);
 							let sigs = stack.top_slice(sig_range)?.iter().map(AsRef::as_ref);
 
 							// Verify
@@ -221,9 +248,7 @@ pub fn run_interpreter<'a, Ctx: Context>(
 							stack.push_bool(result);
 						},
 					}
-					if sig_opcode.is_verify() && !stack.pop_bool()? {
-						return Err(Error::VerifyFail)
-					}
+					check(!sig_opcode.is_verify() || stack.pop_bool()?, Error::VerifyFail)?;
 				},
 				opcodes::Class::ControlFlow(cf) => match cf {
 					opcodes::ControlFlow::OP_IF | opcodes::ControlFlow::OP_NOTIF => {
@@ -291,8 +316,8 @@ fn check_multisig<'a, Ctx: Context>(
 	Ok(true)
 }
 
-/// Execute an ["ordinay"](opcode::Ordinary) opcode.
-fn execute_opcode<'a>(opcode: opcodes::Ordinary, stack: &mut Stack<'a>) -> crate::Result<()> {
+/// Execute an ["ordinay"](opcodes::Ordinary) opcode.
+fn execute_opcode(opcode: opcodes::Ordinary, stack: &mut Stack<'_>) -> crate::Result<()> {
 	use opcodes::Ordinary as Opc;
 
 	match opcode {
@@ -302,11 +327,11 @@ fn execute_opcode<'a>(opcode: opcodes::Ordinary, stack: &mut Stack<'a>) -> crate
 		// Main stack manipulation
 		Opc::OP_DROP => stack.drop(1)?,
 		Opc::OP_2DROP => stack.drop(2)?,
-		Opc::OP_DUP => stack.dup(1..0)?,
-		Opc::OP_2DUP => stack.dup(2..0)?,
-		Opc::OP_3DUP => stack.dup(3..0)?,
-		Opc::OP_OVER => stack.dup(2..1)?,
-		Opc::OP_2OVER => stack.dup(4..2)?,
+		Opc::OP_DUP => stack.dup(0..1)?,
+		Opc::OP_2DUP => stack.dup(0..2)?,
+		Opc::OP_3DUP => stack.dup(0..3)?,
+		Opc::OP_OVER => stack.dup(1..2)?,
+		Opc::OP_2OVER => stack.dup(2..4)?,
 		Opc::OP_SWAP => stack.swap(1)?,
 		Opc::OP_2SWAP => stack.swap(2)?,
 		Opc::OP_2ROT => {
@@ -386,7 +411,7 @@ fn execute_opcode<'a>(opcode: opcodes::Ordinary, stack: &mut Stack<'a>) -> crate
 			let hi = stack.pop_int()?;
 			let lo = stack.pop_int()?;
 			let x = stack.pop_int()?;
-			stack.push_int((lo <= x && x < hi) as i64);
+			stack.push_int((lo..hi).contains(&x) as i64);
 		},
 
 		// Hashes
@@ -397,30 +422,29 @@ fn execute_opcode<'a>(opcode: opcodes::Ordinary, stack: &mut Stack<'a>) -> crate
 		Opc::OP_HASH256 => op_hash(stack, util::hash256)?,
 	}
 
-	if opcode.is_verify() && !stack.pop_bool()? {
-		Err(Error::VerifyFail)
-	} else {
-		Ok(())
-	}
+	check(!opcode.is_verify() || stack.pop_bool()?, Error::VerifyFail)
 }
 
 /// Perform an unary arithmetic operation on the top of the stack.
 fn op_num1(stack: &mut Stack, f: impl FnOnce(i64) -> i64) -> crate::Result<()> {
 	let x = stack.pop_int()?;
-	Ok(stack.push_int(f(x)))
+	stack.push_int(f(x));
+	Ok(())
 }
 
 /// Perform a binary arithmetic operation on the top of the stack.
 fn op_num2(stack: &mut Stack, f: impl FnOnce(i64, i64) -> i64) -> crate::Result<()> {
 	let y = stack.pop_int()?;
 	let x = stack.pop_int()?;
-	Ok(stack.push_int(f(x, y)))
+	stack.push_int(f(x, y));
+	Ok(())
 }
 
 /// Perform a byte-array based function on the top stack item. Useful for hashes.
 fn op_hash<T: AsRef<[u8]>>(stack: &mut Stack, f: impl FnOnce(&[u8]) -> T) -> crate::Result<()> {
 	let result = f(&stack.pop()?);
-	Ok(stack.push(Cow::Owned(result.as_ref().to_vec())))
+	stack.push(Cow::Owned(result.as_ref().to_vec()));
+	Ok(())
 }
 
 #[cfg(test)]
@@ -456,15 +480,37 @@ mod test {
 		assert!(exec_stack.stack.is_empty());
 	}
 
+	fn testcase_op_verify(update_stack: impl FnOnce(&mut Stack), expected: crate::Result<Stack>) {
+		let script = Builder::new().push_opcode(opcodes::all::OP_VERIFY).into_script();
+		let mut stack = Stack::default();
+		update_stack(&mut stack);
+		let result = run_script(&TestContext::default(), &script, stack);
+		assert_eq!(result, expected);
+	}
+
+	#[test]
+	fn unit_op_verify_true() {
+		testcase_op_verify(|s| s.push_bool(true), Ok(Stack::default()));
+	}
+
+	#[test]
+	fn unit_op_verify_false() {
+		testcase_op_verify(|s| s.push_bool(false), Err(Error::VerifyFail));
+	}
+
+	#[test]
+	fn unit_op_verify_empty() {
+		testcase_op_verify(|_| (), Err(Error::NotEnoughElementsOnStack));
+	}
+
 	#[test]
 	fn unit_if_then_else_syntax() {
+		use opcodes::all::{OP_ELSE, OP_ENDIF, OP_IF, OP_NOTIF};
 		let should_fail = |script: Script| {
 			let stack = Stack(vec![vec![].into(), vec![].into()]);
-			let ctx = TestContext::default();
-			let result = run_interpreter(&ctx, &script, stack);
+			let result = run_script(&TestContext::default(), &script, stack);
 			assert_eq!(result, Err(Error::UnbalancedIfElse));
 		};
-		use opcodes::all::*;
 		should_fail(Builder::new().push_opcode(OP_IF).into_script());
 		should_fail(Builder::new().push_opcode(OP_IF).push_opcode(OP_ELSE).into_script());
 		should_fail(Builder::new().push_opcode(OP_IF).push_opcode(OP_NOTIF).into_script());
@@ -525,6 +571,8 @@ mod test {
 		test_case(&[sig1, sig2, sig3, sig4][..], Ok(true));
 		// Duplicate signature should not count as two sigs.
 		test_case(&[sig1, sig1][..], Ok(false));
+		// Last one should fail.
+		test_case(&[sig1, sig2, sig3, sig0][..], Ok(false));
 	}
 
 	// Generate stack item as an array of bytes
@@ -541,6 +589,14 @@ mod test {
 	}
 
 	proptest! {
+		// Interpreter should not panic regardless of its inputs, even garbage.
+		#[test]
+		fn prop_dont_panic(stack in gen_stack(gen_item_bytes(0..40), 0..40),
+						   script: Vec<u8>) {
+			let script: Script = script.into();
+			let _ = run_script(&TestContext::default(), &script, stack);
+		}
+
 		#[test]
 		fn prop_exec_stack_push(items in prop::collection::vec(prop::bool::ANY, 0..9)) {
 			let mut exec_stack = ExecStack::default();
@@ -598,12 +654,73 @@ mod test {
 
 			let stack = Stack::default();
 			let ctx = TestContext::default();
-			let result = run_interpreter(&ctx, &script, stack);
+			let result = run_script(&ctx, &script, stack);
 			prop_assert!(result.is_ok());
 
 			let expected = cond.then(|| then_val).unwrap_or(else_val) as i64;
 			let expected_stack = Stack(vec![script::build_scriptint(expected).into()]);
 			prop_assert_eq!(result.unwrap(), expected_stack);
+		}
+
+		#[test]
+		fn prop_2rot(orig_stack in gen_stack(gen_item_bytes(0..40), 6..10)) {
+			let mut stack = orig_stack.clone();
+			execute_opcode(opcodes::Ordinary::OP_2ROT, &mut stack).unwrap();
+			prop_assert_eq!(stack.len(), orig_stack.len());
+			prop_assert_eq!(stack.top(0), orig_stack.top(4));
+			prop_assert_eq!(stack.top(1), orig_stack.top(5));
+			prop_assert_eq!(stack.top(2), orig_stack.top(0));
+			prop_assert_eq!(stack.top(3), orig_stack.top(1));
+			prop_assert_eq!(stack.top(4), orig_stack.top(2));
+			prop_assert_eq!(stack.top(5), orig_stack.top(3));
+			prop_assert_eq!(stack.top_slice(6..stack.len()), orig_stack.top_slice(6..stack.len()));
+		}
+
+		#[test]
+		fn prop_shuffle(
+			mut orig_stack in gen_stack(gen_item_bytes(0..40), 6..10),
+			opcode in prop::sample::select(&[
+				opcodes::Ordinary::OP_ROT,
+				opcodes::Ordinary::OP_SWAP,
+				opcodes::Ordinary::OP_2ROT,
+				opcodes::Ordinary::OP_2SWAP,
+			][..]),
+		) {
+			let mut stack = orig_stack.clone();
+			execute_opcode(opcode, &mut stack).unwrap();
+
+			// These opcodes only rearrange items on the stack, they should not duplicate, drop or
+			// create new items. I.e. the before and after stack should be identical after putting
+			// each in the canonical order.
+			stack.0.sort();
+			orig_stack.0.sort();
+			prop_assert_eq!(stack, orig_stack);
+		}
+
+		#[test]
+		fn prop_stack_manipulation(
+			orig_stack in gen_stack(gen_item_bytes(0..40), 6..10),
+			opcode in prop::sample::select(&[
+				opcodes::Ordinary::OP_DROP,
+				opcodes::Ordinary::OP_2DROP,
+				opcodes::Ordinary::OP_DUP,
+				opcodes::Ordinary::OP_2DUP,
+				opcodes::Ordinary::OP_3DUP,
+				opcodes::Ordinary::OP_OVER,
+				opcodes::Ordinary::OP_2OVER,
+				opcodes::Ordinary::OP_SWAP,
+				opcodes::Ordinary::OP_2SWAP,
+				opcodes::Ordinary::OP_2ROT,
+				opcodes::Ordinary::OP_NIP,
+				opcodes::Ordinary::OP_ROT,
+				opcodes::Ordinary::OP_TUCK,
+				opcodes::Ordinary::OP_IFDUP,
+			][..]),
+		) {
+			let mut stack = orig_stack.clone();
+			execute_opcode(opcode, &mut stack).unwrap();
+			// These opcodes should not fabricate elements out of thin air.
+			prop_assert!(stack.0.iter().all(|item| orig_stack.0.iter().any(|i| i == item)));
 		}
 	}
 }

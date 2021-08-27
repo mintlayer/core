@@ -15,7 +15,7 @@
 // If not, see <http://creativecommons.org/publicdomain/zero/1.0/>.
 //
 
-//! Script
+//! Script-related types and functions
 //!
 //! Scripts define Bitcoin's digital signature scheme: a signature is formed
 //! from a script (the second half of which is defined by a coin to be spent,
@@ -200,7 +200,7 @@ impl Script {
 		Builder::new()
 			.push_opcode(opcodes::all::OP_DUP)
 			.push_opcode(opcodes::all::OP_HASH160)
-			.push_slice(&pubkey_hash[..])
+			.push_slice(pubkey_hash)
 			.push_opcode(opcodes::all::OP_EQUALVERIFY)
 			.push_opcode(opcodes::all::OP_CHECKSIG)
 			.into_script()
@@ -210,7 +210,7 @@ impl Script {
 	pub fn new_p2sh(script_hash: &ScriptHash) -> Script {
 		Builder::new()
 			.push_opcode(opcodes::all::OP_HASH160)
-			.push_slice(&script_hash[..])
+			.push_slice(script_hash)
 			.push_opcode(opcodes::all::OP_EQUAL)
 			.into_script()
 	}
@@ -621,7 +621,7 @@ impl Builder {
 	/// dedicated opcodes to push some small integers.
 	pub fn push_int(self, data: i64) -> Builder {
 		// We can special-case -1, 1-16
-		if data == -1 || (data >= 1 && data <= 16) {
+		if data == -1 || (1..=16).contains(&data) {
 			let opcode = opcodes::All::from((data - 1 + opcodes::OP_TRUE.into_u8() as i64) as u8);
 			self.push_opcode(opcode)
 		}

@@ -15,10 +15,10 @@
 // If not, see <http://creativecommons.org/publicdomain/zero/1.0/>.
 //
 
-//! Opcodes
+//! Opcode definitions and methods
 //!
 //! Bitcoin's script uses a stack-based assembly language. This module defines
-//! all of the opcodes
+//! all of the opcodes and categorizes them according to semantics.
 
 #![allow(non_camel_case_types)]
 
@@ -883,20 +883,14 @@ impl PushData {
 impl Ordinary {
 	/// Is this OP_*VERIFY?
 	pub fn is_verify(self) -> bool {
-		match self {
-			Self::OP_VERIFY | Self::OP_EQUALVERIFY | Self::OP_NUMEQUALVERIFY => true,
-			_ => false,
-		}
+		matches!(self, Self::OP_VERIFY | Self::OP_EQUALVERIFY | Self::OP_NUMEQUALVERIFY)
 	}
 }
 
 impl Signature {
 	/// Is this OP_*VERIFY?
 	pub fn is_verify(self) -> bool {
-		match self {
-			Self::OP_CHECKSIGVERIFY | Self::OP_CHECKMULTISIGVERIFY => true,
-			_ => false,
-		}
+		matches!(self, Self::OP_CHECKSIGVERIFY | Self::OP_CHECKMULTISIGVERIFY)
 	}
 }
 
