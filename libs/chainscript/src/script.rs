@@ -78,24 +78,6 @@ impl fmt::UpperHex for Script {
 	}
 }
 
-#[cfg(any())]
-impl hex::FromHex for Script {
-	fn from_byte_iter<I>(iter: I) -> Result<Self, hex::Error>
-	where
-		I: Iterator<Item = Result<u8, hex::Error>> + ExactSizeIterator + DoubleEndedIterator,
-	{
-		Vec::from_byte_iter(iter).map(|v| Script(Box::<[u8]>::from(v)))
-	}
-}
-
-#[cfg(any())]
-impl ::sp_std::str::FromStr for Script {
-	type Err = hex::Error;
-	fn from_str(s: &str) -> Result<Self, hex::Error> {
-		hex::FromHex::from_hex(s)
-	}
-}
-
 #[derive(PartialEq, Eq, Debug, Clone)]
 /// An object which can be used to construct a script piece by piece
 pub struct Builder(Vec<u8>, Option<opcodes::All>);
@@ -215,47 +197,12 @@ impl Script {
 			.into_script()
 	}
 
-	/// Generates P2WPKH-type of scriptPubkey
-	#[cfg(any())]
-	pub fn new_v0_wpkh(pubkey_hash: &WPubkeyHash) -> Script {
-		Script::new_witness_program(::bech32::u5::try_from_u8(0).unwrap(), &pubkey_hash.to_vec())
-	}
-
-	/// Generates P2WSH-type of scriptPubkey with a given hash of the redeem script
-	#[cfg(any())]
-	pub fn new_v0_wsh(script_hash: &WScriptHash) -> Script {
-		Script::new_witness_program(::bech32::u5::try_from_u8(0).unwrap(), &script_hash.to_vec())
-	}
-
-	/// Generates P2WSH-type of scriptPubkey with a given hash of the redeem script
-	#[cfg(any())]
-	pub fn new_witness_program(ver: ::bech32::u5, program: &[u8]) -> Script {
-		let mut verop = ver.to_u8();
-		assert!(verop <= 16, "incorrect witness version provided: {}", verop);
-		if verop > 0 {
-			verop = 0x50 + verop;
-		}
-		Builder::new().push_opcode(verop.into()).push_slice(&program).into_script()
-	}
-
 	/// Generates OP_RETURN-type of scriptPubkey for a given data
 	pub fn new_op_return(data: &[u8]) -> Script {
 		Builder::new()
 			.push_opcode(opcodes::all::OP_RETURN)
 			.push_slice(data)
 			.into_script()
-	}
-
-	/// Returns 160-bit hash of the script
-	#[cfg(any())]
-	pub fn script_hash(&self) -> ScriptHash {
-		ScriptHash::hash(&self.as_bytes())
-	}
-
-	/// Returns 256-bit hash of the script for P2WSH outputs
-	#[cfg(any())]
-	pub fn wscript_hash(&self) -> WScriptHash {
-		WScriptHash::hash(&self.as_bytes())
 	}
 
 	/// The length in bytes of the script
@@ -281,19 +228,6 @@ impl Script {
 	/// Convert the script into a byte vector
 	pub fn into_bytes(self) -> Vec<u8> {
 		self.0.into_vec()
-	}
-
-	/// Compute the P2SH output corresponding to this redeem script
-	#[cfg(any())]
-	pub fn to_p2sh(&self) -> Script {
-		Script::new_p2sh(&self.script_hash())
-	}
-
-	/// Compute the P2WSH output corresponding to this witnessScript (aka the "witness redeem
-	/// script")
-	#[cfg(any())]
-	pub fn to_v0_p2wsh(&self) -> Script {
-		Script::new_v0_wsh(&self.wscript_hash())
 	}
 
 	/// Checks whether a script pubkey is a p2sh output
@@ -394,35 +328,6 @@ impl Script {
 	/// See [Script::instructions] and [Script::instructions_minimal].
 	pub fn instructions_iter(&self, enforce_minimal: bool) -> Instructions {
 		Instructions::new(&self.0[..], enforce_minimal)
-	}
-
-	#[cfg(feature = "bitcoinconsensus")]
-	/// Shorthand for [Self::verify_with_flags] with flag [bitcoinconsensus::VERIFY_ALL]
-	pub fn verify(&self, index: usize, amount: ::Amount, spending: &[u8]) -> Result<(), Error> {
-		self.verify_with_flags(index, amount, spending, ::bitcoinconsensus::VERIFY_ALL)
-	}
-
-	#[cfg(feature = "bitcoinconsensus")]
-	/// Verify spend of an input script
-	/// # Parameters
-	///  * `index` - the input index in spending which is spending this transaction
-	///  * `amount` - the amount this script guards
-	///  * `spending` - the transaction that attempts to spend the output holding this script
-	///  * `flags` - verification flags, see [bitcoinconsensus::VERIFY_ALL] and similar
-	pub fn verify_with_flags<F: Into<u32>>(
-		&self,
-		index: usize,
-		amount: ::Amount,
-		spending: &[u8],
-		flags: F,
-	) -> Result<(), Error> {
-		Ok(bitcoinconsensus::verify_with_flags(
-			&self.0[..],
-			amount.as_sat(),
-			spending,
-			index,
-			flags.into(),
-		)?)
 	}
 
 	/// Write the assembly decoding of the script bytes to the formatter.
@@ -672,16 +577,6 @@ impl Builder {
 		self
 	}
 
-	/// Pushes a public key
-	#[cfg(any())]
-	pub fn push_key(self, key: &PublicKey) -> Builder {
-		if key.compressed {
-			self.push_slice(&key.key.serialize()[..])
-		} else {
-			self.push_slice(&key.key.serialize_uncompressed()[..])
-		}
-	}
-
 	/// Adds a single opcode to the script
 	pub fn push_opcode(mut self, data: opcodes::All) -> Builder {
 		self.0.push(data.into_u8());
@@ -819,23 +714,6 @@ impl serde::Serialize for Script {
 	}
 }
 
-// Network serialization
-#[cfg(any())]
-impl Encodable for Script {
-	#[inline]
-	fn consensus_encode<S: io::Write>(&self, s: S) -> Result<usize, io::Error> {
-		self.0.consensus_encode(s)
-	}
-}
-
-#[cfg(any())]
-impl Decodable for Script {
-	#[inline]
-	fn consensus_decode<D: io::Read>(d: D) -> Result<Self, encode::Error> {
-		Ok(Script(Decodable::consensus_decode(d)?))
-	}
-}
-
 #[cfg(test)]
 mod test {
 	use super::{build_scriptint, *};
@@ -920,49 +798,6 @@ mod test {
 		assert_eq!(&format!("{:x}", script), "76a91416e1ae70ff0fa102905d4af297f6912bda6cce1988ac");
 	}
 
-	#[cfg(any())]
-	#[test]
-	fn script_generators() {
-		let pubkey = PublicKey::from_str(
-			"0234e6a79c5359c613762d537e0e19d86c77c1666d8c9ab050f23acd198e97f93e",
-		)
-		.unwrap();
-		assert!(Script::new_p2pk(&pubkey).is_p2pk());
-
-		let pubkey_hash = PubkeyHash::hash(&pubkey.serialize());
-		assert!(Script::new_p2pkh(&pubkey_hash).is_p2pkh());
-
-		let wpubkey_hash = WPubkeyHash::hash(&pubkey.serialize());
-		assert!(Script::new_v0_wpkh(&wpubkey_hash).is_v0_p2wpkh());
-
-		let script = Builder::new()
-			.push_opcode(opcodes::all::OP_NUMEQUAL)
-			.push_verify()
-			.into_script();
-		let script_hash = ScriptHash::hash(&script.serialize());
-		let p2sh = Script::new_p2sh(&script_hash);
-		assert!(p2sh.is_p2sh());
-		assert_eq!(script.to_p2sh(), p2sh);
-
-		let wscript_hash = WScriptHash::hash(&script.serialize());
-		let p2wsh = Script::new_v0_wsh(&wscript_hash);
-		assert!(p2wsh.is_v0_p2wsh());
-		assert_eq!(script.to_v0_p2wsh(), p2wsh);
-
-		// Test data are taken from the second output of
-		// 2ccb3a1f745eb4eefcf29391460250adda5fab78aaddb902d25d3cd97d9d8e61 transaction
-		let data = Vec::<u8>::from_hex(
-			"aa21a9ed20280f53f2d21663cac89e6bd2ad19edbabb048cda08e73ed19e9268d0afea2a",
-		)
-		.unwrap();
-		let op_return = Script::new_op_return(&data);
-		assert!(op_return.is_op_return());
-		assert_eq!(
-			op_return.to_hex(),
-			"6a24aa21a9ed20280f53f2d21663cac89e6bd2ad19edbabb048cda08e73ed19e9268d0afea2a"
-		);
-	}
-
 	#[test]
 	fn script_builder_verify() {
 		let simple = Builder::new().push_verify().into_script();
@@ -1013,15 +848,6 @@ mod test {
 		assert_eq!(format!("{:x}", trick_slice2), "01ae69");
 	}
 
-	#[cfg(any())]
-	#[test]
-	fn script_serialize() {
-		let hex_script = Vec::from_hex("6c493046022100f93bb0e7d8db7bd46e40132d1f8242026e045f03a0efe71bbb8e3f475e970d790221009337cd7f1f929f00cc6ff01f03729b069a7c21b59b1736ddfee5db5946c5da8c0121033b9b137ee87d5a812d6f506efdd37f0affa7ffc310711c06c7f3e097c9447c52").unwrap();
-		let script: Result<Script, _> = deserialize(&hex_script);
-		assert!(script.is_ok());
-		assert_eq!(serialize(&script.unwrap()), hex_script);
-	}
-
 	#[test]
 	fn scriptint_round_trip() {
 		assert_eq!(build_scriptint(-1), vec![0x81]);
@@ -1050,17 +876,6 @@ mod test {
 		}
 		assert!(read_scriptint(&build_scriptint(1 << 31)).is_err());
 		assert!(read_scriptint(&build_scriptint(-(1 << 31))).is_err());
-	}
-
-	#[cfg(any())]
-	#[test]
-	fn script_hashes() {
-		let script = hex_script!("410446ef0102d1ec5240f0d061a4246c1bdef63fc3dbab7733052fbbf0ecd8f41fc26bf049ebb4f9527f374280259e7cfa99c48b0e3f39c51347a19a5819651503a5ac");
-		assert_eq!(script.script_hash().to_hex(), "8292bcfbef1884f73c813dfe9c82fd7e814291ea");
-		assert_eq!(
-			script.wscript_hash().to_hex(),
-			"3e1525eb183ad4f9b3c5fa3175bdca2a52e947b135bbb90383bf9f6408e2c324"
-		);
 	}
 
 	#[test]
@@ -1145,34 +960,6 @@ mod test {
 		assert!(hex_script!("410496b538e853519c726a2c91e61ec11600ae1390813a627c66fb8be7947be63c52da7589379515d4e0a604f8141781e62294721166bf621e73a82cbf2342c858eeac").is_p2pk());
 	}
 
-	#[cfg(any())]
-	#[test]
-	fn p2sh_p2wsh_conversion() {
-		// Test vectors taken from Core tests/data/script_tests.json
-		// bare p2wsh
-		let redeem_script = hex_script!("410479be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8ac");
-		let expected_witout =
-			hex_script!("0020b95237b48faaa69eb078e1170be3b5cbb3fddf16d0a991e14ad274f7b33a4f64");
-		assert!(redeem_script.to_v0_p2wsh().is_v0_p2wsh());
-		assert_eq!(redeem_script.to_v0_p2wsh(), expected_witout);
-
-		// p2sh
-		let redeem_script = hex_script!("0479be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8");
-		let expected_p2shout = hex_script!("a91491b24bf9f5288532960ac687abb035127b1d28a587");
-		assert!(redeem_script.to_p2sh().is_p2sh());
-		assert_eq!(redeem_script.to_p2sh(), expected_p2shout);
-
-		// p2sh-p2wsh
-		let redeem_script = hex_script!("410479be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8ac");
-		let expected_witout =
-			hex_script!("0020b95237b48faaa69eb078e1170be3b5cbb3fddf16d0a991e14ad274f7b33a4f64");
-		let expected_out = hex_script!("a914f386c2ba255cc56d20cfa6ea8b062f8b5994551887");
-		assert!(redeem_script.to_p2sh().is_p2sh());
-		assert!(redeem_script.to_p2sh().to_v0_p2wsh().is_v0_p2wsh());
-		assert_eq!(redeem_script.to_v0_p2wsh(), expected_witout);
-		assert_eq!(redeem_script.to_v0_p2wsh().to_p2sh(), expected_out);
-	}
-
 	#[test]
 	fn test_iterator() {
 		let zero = hex_script!("00");
@@ -1231,55 +1018,6 @@ mod test {
 		assert!(script_4 > script_3);
 		assert!(script_3 > script_2);
 		assert!(script_2 > script_1);
-	}
-
-	#[test]
-	#[cfg(feature = "bitcoinconsensus")]
-	fn test_bitcoinconsensus() {
-		// a random segwit transaction from the blockchain using native segwit
-		let spent = Builder::from(
-			Vec::from_hex("0020701a8d401c84fb13e6baf169d59684e17abd9fa216c8cc5b9fc63d622ff8c58d")
-				.unwrap(),
-		)
-		.into_script();
-		let spending = Vec::from_hex("010000000001011f97548fbbe7a0db7588a66e18d803d0089315aa7d4cc28360b6ec50ef36718a0100000000ffffffff02df1776000000000017a9146c002a686959067f4866b8fb493ad7970290ab728757d29f0000000000220020701a8d401c84fb13e6baf169d59684e17abd9fa216c8cc5b9fc63d622ff8c58d04004730440220565d170eed95ff95027a69b313758450ba84a01224e1f7f130dda46e94d13f8602207bdd20e307f062594022f12ed5017bbf4a055a06aea91c10110a0e3bb23117fc014730440220647d2dc5b15f60bc37dc42618a370b2a1490293f9e5c8464f53ec4fe1dfe067302203598773895b4b16d37485cbe21b337f4e4b650739880098c592553add7dd4355016952210375e00eb72e29da82b89367947f29ef34afb75e8654f6ea368e0acdfd92976b7c2103a1b26313f430c4b15bb1fdce663207659d8cac749a0e53d70eff01874496feff2103c96d495bfdd5ba4145e3e046fee45e84a8a48ad05bd8dbb395c011a32cf9f88053ae00000000").unwrap();
-		spent.verify(0, ::Amount::from_sat(18393430), spending.as_slice()).unwrap();
-	}
-
-	#[cfg(any())]
-	#[test]
-	fn defult_dust_value_tests() {
-		// Check that our dust_value() calculator correctly calculates the dust limit on common
-		// well-known scriptPubKey types.
-		let script_p2wpkh = Builder::new().push_int(0).push_slice(&[42; 20]).into_script();
-		assert!(script_p2wpkh.is_v0_p2wpkh());
-		assert_eq!(script_p2wpkh.dust_value(), ::Amount::from_sat(294));
-
-		let script_p2pkh = Builder::new()
-			.push_opcode(opcodes::all::OP_DUP)
-			.push_opcode(opcodes::all::OP_HASH160)
-			.push_slice(&[42; 20])
-			.push_opcode(opcodes::all::OP_EQUALVERIFY)
-			.push_opcode(opcodes::all::OP_CHECKSIG)
-			.into_script();
-		assert!(script_p2pkh.is_p2pkh());
-		assert_eq!(script_p2pkh.dust_value(), ::Amount::from_sat(546));
-	}
-
-	#[test]
-	#[cfg(feature = "serde")]
-	fn test_script_serde_human_and_not() {
-		let script = Script::from(vec![0u8, 1u8, 2u8]);
-
-		// Serialize
-		let json = ::serde_json::to_string(&script).unwrap();
-		assert_eq!(json, "\"000102\"");
-		let bincode = ::bincode::serialize(&script).unwrap();
-		assert_eq!(bincode, [3, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2]); // bincode adds u64 for length, serde_cbor use varint
-
-		// Deserialize
-		assert_eq!(script, ::serde_json::from_str(&json).unwrap());
-		assert_eq!(script, ::bincode::deserialize(&bincode).unwrap());
 	}
 
 	use proptest::prelude::*;

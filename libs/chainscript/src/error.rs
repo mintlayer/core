@@ -54,28 +54,9 @@ pub enum Error {
 	SigCount,
 	/// Multisig lacks extra 0 dummy.
 	NullDummy,
-	#[cfg(feature = "bitcoinconsensus")]
-	/// Error validating the script with bitcoinconsensus library
-	BitcoinConsensus(bitcoinconsensus::Error),
-	#[cfg(feature = "bitcoinconsensus")]
-	/// Can not find the spent output
-	UnknownSpentOutput(OutPoint),
-	#[cfg(feature = "bitcoinconsensus")]
-	/// Can not serialize the spending transaction
-	SerializationError,
 }
 
 #[cfg(feature = "std")]
 impl ::std::error::Error for Error {}
-
-#[cfg(feature = "bitcoinconsensus")]
-#[doc(hidden)]
-impl From<bitcoinconsensus::Error> for Error {
-	fn from(err: bitcoinconsensus::Error) -> Error {
-		match err {
-			_ => Error::BitcoinConsensus(err),
-		}
-	}
-}
 
 pub type Result<T> = core::result::Result<T, Error>;
