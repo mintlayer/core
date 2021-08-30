@@ -49,7 +49,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 #[macro_use]
-pub mod util;
+mod util;
 
 mod context;
 mod error;

@@ -22,8 +22,9 @@ use crate::{
 	error::Error,
 	opcodes,
 	script::{self, Instruction, Script},
-	util::{self, check},
+	util,
 };
+use frame_support::ensure;
 use sp_std::{borrow::Cow, cmp, ops, ops::Range, prelude::*};
 
 /// Item on the data stack.
@@ -74,7 +75,6 @@ impl<'a> Stack<'a> {
 
 	/// Push an integer item onto the stack.
 	fn push_int(&mut self, x: i64) {
-		//todo!("Check int in the correct range");
 		self.push(script::build_scriptint(x).into());
 	}
 
@@ -187,7 +187,7 @@ pub fn run_script<'a, Ctx: Context>(
 		let executing = exec_stack.executing();
 		match instr {
 			Instruction::PushBytes(data) => {
-				check(data.len() <= Ctx::MAX_SCRIPT_ELEMENT_SIZE, Error::PushSize)?;
+				ensure!(data.len() <= Ctx::MAX_SCRIPT_ELEMENT_SIZE, Error::PushSize);
 				if executing {
 					stack.push(data.into());
 				}
@@ -197,10 +197,12 @@ pub fn run_script<'a, Ctx: Context>(
 				opcodes::Class::IllegalOp => return Err(Error::IllegalOp),
 				opcodes::Class::ReturnOp if executing => return Err(Error::VerifyFail),
 				opcodes::Class::PushNum(x) if executing => stack.push_int(x as i64),
-				opcodes::Class::PushBytes(_) =>
-					unreachable!("Already handled using Instruction::PushBytes"),
-				opcodes::Class::PushData(_) =>
-					unreachable!("Already handled using Instruction::PushBytes"),
+				opcodes::Class::PushBytes(_) => {
+					unreachable!("Already handled using Instruction::PushBytes")
+				},
+				opcodes::Class::PushData(_) => {
+					unreachable!("Already handled using Instruction::PushBytes")
+				},
 				opcodes::Class::AltStack(opc) => match opc {
 					opcodes::AltStack::OP_TOALTSTACK => alt_stack.push(stack.pop()?),
 					opcodes::AltStack::OP_FROMALTSTACK => stack.push(alt_stack.pop()?),
@@ -224,23 +226,23 @@ pub fn run_script<'a, Ctx: Context>(
 						opcodes::Signature::OP_CHECKMULTISIGVERIFY => {
 							// Extract keys
 							let nkey = stack.pop_int()?;
-							check(nkey >= 0, Error::PubkeyCount)?;
+							ensure!(nkey >= 0, Error::PubkeyCount);
 							let nkey = nkey as usize;
-							check(nkey <= Ctx::MAX_PUBKEYS_PER_MULTISIG, Error::PubkeyCount)?;
+							ensure!(nkey <= Ctx::MAX_PUBKEYS_PER_MULTISIG, Error::PubkeyCount);
 							let keys = stack.top_slice(0..nkey)?.iter().map(AsRef::as_ref);
 
 							// Extract signatures
 							let nsig = script::read_scriptint(stack.top(nkey)?)?;
-							check(nsig >= 0, Error::SigCount)?;
+							ensure!(nsig >= 0, Error::SigCount);
 							let nsig = nsig as usize;
-							check(nsig <= nkey, Error::SigCount)?;
+							ensure!(nsig <= nkey, Error::SigCount);
 							let sig_range = (nkey + 1)..(nsig + nkey + 1);
 							let sigs = stack.top_slice(sig_range)?.iter().map(AsRef::as_ref);
 
 							// Verify
 							let result = check_multisig(ctx, sigs, keys, subscript)?;
 
-							// Clean up stack, check dummy 0.
+							// Clean up stack, ensure! dummy 0.
 							stack.drop(nsig + nkey + 1)?;
 							if !stack.pop()?.is_empty() {
 								return Err(Error::NullDummy)
@@ -248,7 +250,7 @@ pub fn run_script<'a, Ctx: Context>(
 							stack.push_bool(result);
 						},
 					}
-					check(!sig_opcode.is_verify() || stack.pop_bool()?, Error::VerifyFail)?;
+					ensure!(!sig_opcode.is_verify() || stack.pop_bool()?, Error::VerifyFail);
 				},
 				opcodes::Class::ControlFlow(cf) => match cf {
 					opcodes::ControlFlow::OP_IF | opcodes::ControlFlow::OP_NOTIF => {
@@ -336,7 +338,8 @@ fn execute_opcode(opcode: opcodes::Ordinary, stack: &mut Stack<'_>) -> crate::Re
 		Opc::OP_2SWAP => stack.swap(2)?,
 		Opc::OP_2ROT => {
 			let top = stack.top_slice_mut(0..6)?;
-			let to_put = [2, 3, 4, 5, 0, 1].map(|i| top[i].clone());
+			let nth = |n: usize| top[n].clone();
+			let to_put = [nth(2), nth(3), nth(4), nth(5), nth(0), nth(1)];
 			top.clone_from_slice(&to_put);
 		},
 		Opc::OP_NIP => {
@@ -346,12 +349,12 @@ fn execute_opcode(opcode: opcodes::Ordinary, stack: &mut Stack<'_>) -> crate::Re
 		},
 		Opc::OP_PICK => {
 			let i = stack.pop_int()?;
-			check(i >= 0, Error::InvalidOperand)?;
+			ensure!(i >= 0, Error::InvalidOperand);
 			stack.push(stack.top(i as usize)?.clone());
 		},
 		Opc::OP_ROLL => {
 			let i = stack.pop_int()?;
-			check(i >= 0, Error::InvalidOperand)?;
+			ensure!(i >= 0, Error::InvalidOperand);
 			let x = stack.remove(i as usize)?;
 			stack.push(x);
 		},
@@ -372,14 +375,14 @@ fn execute_opcode(opcode: opcodes::Ordinary, stack: &mut Stack<'_>) -> crate::Re
 			}
 		},
 		Opc::OP_DEPTH => {
-			check(stack.len() < i32::MAX as usize, Error::NumericOverflow)?;
+			ensure!(stack.len() < i32::MAX as usize, Error::NumericOverflow);
 			stack.push_int(stack.len() as i64);
 		},
 
 		// Stack item queries
 		Opc::OP_SIZE => {
 			let top_len = stack.top(0)?.len();
-			check(top_len < i32::MAX as usize, Error::NumericOverflow)?;
+			ensure!(top_len < i32::MAX as usize, Error::NumericOverflow);
 			stack.push_int(top_len as i64);
 		},
 		Opc::OP_EQUAL | Opc::OP_EQUALVERIFY => {
@@ -422,7 +425,8 @@ fn execute_opcode(opcode: opcodes::Ordinary, stack: &mut Stack<'_>) -> crate::Re
 		Opc::OP_HASH256 => op_hash(stack, util::hash256)?,
 	}
 
-	check(!opcode.is_verify() || stack.pop_bool()?, Error::VerifyFail)
+	ensure!(!opcode.is_verify() || stack.pop_bool()?, Error::VerifyFail);
+	Ok(())
 }
 
 /// Perform an unary arithmetic operation on the top of the stack.
@@ -538,7 +542,9 @@ mod test {
 	fn unit_multisig() {
 		let ctx = TestContext::default();
 		let txhash = ctx.hash_transaction(&[0u8; 4], &[]);
-		let sign_by = |pk: [u8; 4]| -> [u8; 4] { [0, 1, 2, 3].map(|i| pk[i] ^ txhash[i]) };
+		let sign_by = |pk: [u8; 4]| -> [u8; 4] {
+			[pk[0] ^ txhash[0], pk[1] ^ txhash[1], pk[2] ^ txhash[2], pk[3] ^ txhash[3]]
+		};
 
 		let keys = [hex!("01010101"), hex!("02020202"), hex!("03030303"), hex!("04040404")];
 		let sig0 = sign_by(hex!("00000000"));
