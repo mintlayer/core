@@ -61,5 +61,5 @@ pub mod script;
 pub use context::testcontext::TestContext;
 pub use context::Context;
 pub use error::{Error, Result};
-pub use interpreter::{run_pushdata, run_script, Stack};
+pub use interpreter::{run_pushdata, run_script, verify_witness_lock, Stack};
 pub use script::{Builder, Script};

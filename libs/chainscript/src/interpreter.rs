@@ -172,6 +172,17 @@ impl<'a> From<Vec<Item<'a>>> for Stack<'a> {
     }
 }
 
+/// Verify given witness script against given lock script.
+pub fn verify_witness_lock<Ctx: Context>(
+    ctx: &Ctx,
+    witness: &Script,
+    lock: &Script,
+) -> crate::Result<()> {
+    let stack = run_pushdata(ctx, &witness)?;
+    let stack = run_script(ctx, &lock, stack)?;
+    stack.verify()
+}
+
 /// Run given script limited to data push operations only.
 pub fn run_pushdata<'a, Ctx: Context>(ctx: &Ctx, script: &'a Script) -> crate::Result<Stack<'a>> {
     if script.len() > Ctx::MAX_SCRIPT_SIZE {
