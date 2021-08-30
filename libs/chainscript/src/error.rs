@@ -24,36 +24,36 @@ use displaydoc::Display;
 /// would help you.
 #[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Clone, Copy, Display)]
 pub enum Error {
-	/// Something did a non-minimal push
-	NonMinimalPush,
-	/// Some opcode expected a parameter, but it was missing or truncated
-	EarlyEndOfScript,
-	/// Tried to read an array off the stack as a number when it was more than 4 bytes
-	NumericOverflow,
-	/// Illegal instruction executed
-	IllegalOp,
-	/// Syntactically incorrect OP_(NOT)IF/OP_ELSE/OP_ENDIF
-	UnbalancedIfElse,
-	/// Stack has insufficient number of elements in it
-	NotEnoughElementsOnStack,
-	/// Invalid operand to a script operation.
-	InvalidOperand,
-	/// OP_*VERIFY failed verification or OP_RETURN was executed.
-	VerifyFail,
-	/// Signature is not in correct format.
-	SignatureFormat,
-	/// Pubkey is not in correct format.
-	PubkeyFormat,
-	/// Push data too large.
-	PushSize,
-	/// Maximum script size exceeded.
-	ScriptSize,
-	/// Incorrect number of public keys for multisig
-	PubkeyCount,
-	/// Incorrect number of signatures for multisig
-	SigCount,
-	/// Multisig lacks extra 0 dummy.
-	NullDummy,
+    /// Something did a non-minimal push
+    NonMinimalPush,
+    /// Some opcode expected a parameter, but it was missing or truncated
+    EarlyEndOfScript,
+    /// Tried to read an array off the stack as a number when it was more than 4 bytes
+    NumericOverflow,
+    /// Illegal instruction executed
+    IllegalOp,
+    /// Syntactically incorrect OP_(NOT)IF/OP_ELSE/OP_ENDIF
+    UnbalancedIfElse,
+    /// Stack has insufficient number of elements in it
+    NotEnoughElementsOnStack,
+    /// Invalid operand to a script operation.
+    InvalidOperand,
+    /// OP_*VERIFY failed verification or OP_RETURN was executed.
+    VerifyFail,
+    /// Signature is not in correct format.
+    SignatureFormat,
+    /// Pubkey is not in correct format.
+    PubkeyFormat,
+    /// Push data too large.
+    PushSize,
+    /// Maximum script size exceeded.
+    ScriptSize,
+    /// Incorrect number of public keys for multisig
+    PubkeyCount,
+    /// Incorrect number of signatures for multisig
+    SigCount,
+    /// Multisig lacks extra 0 dummy.
+    NullDummy,
 }
 
 #[cfg(feature = "std")]
