@@ -14,9 +14,9 @@
 // limitations under the License.
 //
 // Author(s): C. Yap
-
 use crate as pallet_utxo;
 use pallet_utxo::TransactionOutput;
+use contract_provider::ContractProvider;
 
 use frame_support::{
     parameter_types,
@@ -28,8 +28,9 @@ use frame_support::{
     traits::GenesisBuild,
 };
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-use sp_core::{sp_std::vec, sr25519::Public, testing::SR25519, H256};
+use sp_core::{sp_std::{vec, marker::PhantomData}, sr25519::Public, testing::SR25519, H256};
 use sp_keystore::{testing::KeyStore, KeystoreExt, SyncCryptoStore};
+use frame_support::{dispatch::Vec, weights::Weight};
 
 // need to manually import this crate since its no include by default
 use hex_literal::hex;
@@ -42,7 +43,32 @@ pub const ALICE_PHRASE: &str =
 
 // BlakeHash of TransactionOutput::new(100, H256::from(alice_pub_key)) in fn new_test_ext()
 pub const GENESIS_UTXO: [u8; 32] =
-    hex!("931fe49afe365072e71771cd99e13cfb54fa28fad479e23556ff9de6a3dd19a9");
+    hex!("0a08a0ef477ab5416c15bda44ff1938279e1677569b0cccaf73f0d30f4e935cb");
+
+// Dummy programmable pool for testing
+pub struct MockPool<T>(PhantomData<T>);
+
+impl<T: frame_system::Config> ContractProvider for MockPool<T> {
+    type AccountId = u64;
+
+    fn create(
+        _origin: &Self::AccountId,
+        _weight: Weight,
+        _code: &Vec<u8>,
+        _data: &Vec<u8>,
+    ) -> Result<(), &'static str> {
+        Ok(())
+    }
+
+    fn call(
+        _caller: &Self::AccountId,
+        _dest: &Self::AccountId,
+		_gas_limit: Weight,
+		_input_data: &Vec<u8>,
+    ) -> Result<(), &'static str> {
+        Ok(())
+    }
+}
 
 // Configure a mock runtime to test the pallet.
 frame_support::construct_runtime!(
@@ -54,7 +80,7 @@ frame_support::construct_runtime!(
         System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
         Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent},
         Utxo: pallet_utxo::{Pallet, Call, Config<T>, Storage, Event<T>},
-        Aura: pallet_aura::{Pallet, Call, Config<T>, Storage},
+        Aura: pallet_aura::{Pallet, Config<T>, Storage},
     }
 );
 
@@ -69,7 +95,7 @@ parameter_types! {
 }
 
 impl frame_system::Config for Test {
-    type BaseCallFilter = ();
+    type BaseCallFilter = frame_support::traits::Everything;
     type BlockWeights = ();
     type BlockLength = ();
     type Origin = Origin;
@@ -104,12 +130,14 @@ impl pallet_timestamp::Config for Test {
 
 impl pallet_aura::Config for Test {
     type AuthorityId = AuraId;
+    type DisabledValidators = ();
 }
 
 impl pallet_utxo::Config for Test {
     type Event = Event;
     type Call = Call;
     type WeightInfo = crate::weights::WeightInfo<Test>;
+    type ProgrammablePool = MockPool<Test>;
 
     fn authorities() -> Vec<H256> {
         Aura::authorities()

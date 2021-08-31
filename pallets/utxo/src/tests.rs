@@ -15,7 +15,7 @@
 //
 // Author(s): C. Yap
 
-use crate::{mock::*, Transaction, TransactionInput, TransactionOutput, UtxoStore, Value, RewardTotal};
+use crate::{mock::*, Transaction, TransactionInput, TransactionOutput, UtxoStore, Value, RewardTotal, ScriptType};
 use codec::Encode;
 use frame_support::{
     assert_err, assert_noop, assert_ok,
@@ -259,5 +259,21 @@ fn test_reward() {
 
         assert_eq!(utxos.value, 90);
         assert_eq!(reward, 10);
+    })
+}
+
+#[test]
+fn test_script() {
+    execute_with_alice(|alice_pub_key| {
+        let mut tx = Transaction {
+            inputs: vec![tx_input_gen_no_signature()],
+            outputs: vec![TransactionOutput::new(90, H256::from(alice_pub_key))],
+        };
+
+        assert_ok!(tx.outputs[0].script.set_script(ScriptType::P2pkh, &Vec::new()));
+
+        let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx.encode()).unwrap();
+        tx.inputs[0].sig_script = H512::from(alice_sig);
+        assert_ok!(Utxo::spend(Origin::signed(0), tx.clone()));
     })
 }
