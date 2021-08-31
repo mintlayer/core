@@ -180,10 +180,8 @@ fn testnet_genesis(
 	_enable_println: bool,
 ) -> GenesisConfig {
 
-	const ENDOWMENT: u128 = 1000 * DOLLARS;
+	const ENDOWMENT: u128 = 10_000_000_000 * DOLLARS;
 	const STASH: u128 = ENDOWMENT / 1000;
-
-	let num_endowed_accounts = endowed_accounts.len();
 
 	// only Alice contains 400 million coins.
 	let genesis= endowed_utxos.first().map(|x| {
@@ -194,7 +192,7 @@ fn testnet_genesis(
 		)
 	}).unwrap();
 
-	let mut stakers = initial_authorities.iter()
+	let stakers = initial_authorities.iter()
 		.map(|auth_keys|
 			(auth_keys.stash_acount_id.clone(), auth_keys.account_id.clone(),STASH, StakerStatus::Validator))
 		.collect::<Vec<_>>();
@@ -245,7 +243,7 @@ fn testnet_genesis(
 
 		pallet_elections_phragmen: ElectionsConfig {
 			members: endowed_accounts.iter()
-				.take( (num_endowed_accounts + 1) / 2)
+				.take(3)
 				.cloned()
 				.map(|member| (member, STASH))
 				.collect()
@@ -256,6 +254,8 @@ fn testnet_genesis(
 		pallet_utxo: UtxoConfig {
 			genesis_utxos: vec![genesis],
 			_marker: Default::default()
-		}
+		},
+
+		pallet_treasury: Default::default()
 	}
 }

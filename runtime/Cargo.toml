@@ -101,6 +101,7 @@ std = [
     'pallet-timestamp/std',
     'pallet-transaction-payment-rpc-runtime-api/std',
     'pallet-transaction-payment/std',
+    'pallet-treasury/std',
     'pallet-utxo/std',
     'sp-api/std',
     'sp-block-builder/std',
