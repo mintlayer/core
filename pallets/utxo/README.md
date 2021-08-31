@@ -10,29 +10,39 @@ To run the test cases, just run command `cargo test`.
 1. After running the core, declare the custom datatypes. GO to **Settings** > **Developer** tab and paste in the ff. JSON and then save:
 ```json
 {
-  "Address": "MultiAddress",
-  "LookupSource": "MultiAddress",
-  "Value": "u128",
-  "TXOutputHeader": "u16",
-  "TransactionInput": {
-    "outpoint": "H256",
-    "sig_script": "H512"
-  },
-  "TransactionOutput": {
+    "Value": "u128",
+    "ScriptPubKey": {
+        "type": "u8",
+        "script": "Vec<u8>",
+        "data": "Vec<u8>"
+    },
+    "TransactionInput": {
+        "outpoint": "Hash",
+        "sig_script": "Signature"
+    },
+    "TransactionOutput": {
+        "value": "Value",
+        "pub_key": "Hash",
+        "header": "TXOutputHeader",
+        "script": "ScriptPubKey"
+    },
+    "Transaction": {
+        "inputs": "Vec<TransactionInput>",
+        "outputs": "Vec<TransactionOutput>"
+    },
+    "Address": "MultiAddress",
+    "LookupSource": "MultiAddress",
+    "TXOutputHeader": "u16",
     "value": "Value",
     "pub_key": "H256",
-    "header": "TXOutputHeader"
-  },
-  "Transaction": {
-    "inputs": "Vec<TransactionInput>",
-    "outputs": "Vec<TransactionOutput>"
-  },
-  "Difficulty": "U256",
-  "DifficultyAndTimestamp": {
-    "difficulty": "Difficulty",
-    "timestamp": "Moment"
-  },
-  "Public": "H256"
+    "header": "TXOutputHeader",
+    "Difficulty": "U256",
+    "DifficultyAndTimestamp": {
+        "difficulty": "Difficulty",
+        "timestamp": "Moment"
+    },
+    "Public": "H256"
+}
 }
 ```
 2. To confirm that Alice already has UTXO at genesis, go to **Developer** > **Chain state** > **Storage**.  
