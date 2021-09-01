@@ -47,28 +47,14 @@ pub trait Context {
     /// Public key type.
     type Public;
 
-    /// Transaction hash type used by the chain for signatures.
-    type TxHash: AsRef<[u8]>;
-
     /// Extract a signature and check it is in the correct format.
     fn parse_signature(&self, sig: &[u8]) -> Option<Self::Signature>;
 
     /// Extract a pubkey and check it is in the correct format.
     fn parse_pubkey(&self, pk: &[u8]) -> Option<Self::Public>;
 
-    /// Hash the transaction.
-    ///
-    /// Signature is passed in as well to give the method an opportunity to extract sighash and
-    /// decide which parts of the transaction should contribute to the hash.
-    fn hash_transaction(&self, signature: &Self::Signature, subscript: &[u8]) -> Self::TxHash;
-
     /// Verify signature.
-    fn verify_signature(
-        &self,
-        sig: &Self::Signature,
-        pk: &Self::Public,
-        msg: &Self::TxHash,
-    ) -> bool;
+    fn verify_signature(&self, sig: &Self::Signature, pk: &Self::Public, subscript: &[u8]) -> bool;
 
     /// Check absolute time lock.
     fn check_lock_time(&self, _lock_time: i64) -> bool {
@@ -102,7 +88,7 @@ pub mod testcontext {
 
     #[derive(Default)]
     pub struct TestContext {
-        transaction: Vec<u8>,
+        pub transaction: Vec<u8>,
     }
 
     /// Test context.
@@ -124,7 +110,6 @@ pub mod testcontext {
         // Signatures, keys and transaction IDs are just 4-byte binary data each.
         type Signature = [u8; 4];
         type Public = [u8; 4];
-        type TxHash = [u8; 4];
 
         fn parse_signature(&self, sig: &[u8]) -> Option<Self::Signature> {
             Self::Signature::try_from(sig).ok()
@@ -134,17 +119,13 @@ pub mod testcontext {
             Self::Public::try_from(pk).ok()
         }
 
-        fn hash_transaction(&self, _sig: &Self::Signature, subscript: &[u8]) -> Self::TxHash {
-            let data = [&self.transaction[..], subscript].concat();
-            Self::TxHash::try_from(&sha256(&data)[0..4]).unwrap()
-        }
-
         fn verify_signature(
             &self,
             sig: &Self::Signature,
             pk: &Self::Public,
-            msg: &Self::TxHash,
+            subscript: &[u8],
         ) -> bool {
+            let msg = sha256(&[&self.transaction[..], subscript].concat());
             sig.iter().zip(pk.iter()).zip(msg.iter()).all(|((&s, &p), &m)| (s ^ p ^ m) == 0)
         }
     }

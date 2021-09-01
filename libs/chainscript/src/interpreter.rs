@@ -303,7 +303,6 @@ fn check_multisig<'a, Ctx: Context>(
     // Check each signature has its corresponding pubkey.
     while let Some(sig) = sigs.next() {
         let sig = ctx.parse_signature(sig).ok_or(Error::SignatureFormat)?;
-        let txhash = ctx.hash_transaction(&sig, subscript);
         // Find pubkey matching this signature.
         loop {
             if pubkeys.len() < sigs.len() + 1 {
@@ -313,7 +312,7 @@ fn check_multisig<'a, Ctx: Context>(
                 return Ok(false);
             }
             let pubkey = ctx.parse_pubkey(pubkeys.next().unwrap()).ok_or(Error::PubkeyFormat)?;
-            if ctx.verify_signature(&sig, &pubkey, &txhash) {
+            if ctx.verify_signature(&sig, &pubkey, subscript) {
                 break;
             }
         }
@@ -457,7 +456,7 @@ fn op_hash<T: AsRef<[u8]>>(stack: &mut Stack, f: impl FnOnce(&[u8]) -> T) -> cra
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{context::testcontext::TestContext, script::Builder};
+    use crate::{context::testcontext::TestContext, script::Builder, util::sha256};
     use hex_literal::hex;
     use proptest::{collection::SizeRange, prelude::*};
 
@@ -544,7 +543,7 @@ mod test {
     #[test]
     fn unit_multisig() {
         let ctx = TestContext::default();
-        let txhash = ctx.hash_transaction(&[0u8; 4], &[]);
+        let txhash = sha256(&ctx.transaction);
         let sign_by = |pk: [u8; 4]| -> [u8; 4] {
             [pk[0] ^ txhash[0], pk[1] ^ txhash[1], pk[2] ^ txhash[2], pk[3] ^ txhash[3]]
         };
