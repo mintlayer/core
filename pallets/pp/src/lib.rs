@@ -27,7 +27,7 @@ mod tests;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 
-use contract_provider::ContractProvider;
+use pp_api::ProgrammablePoolApi;
 use frame_support::{dispatch::Vec, weights::Weight};
 use sp_core::{crypto::UncheckedFrom, Bytes};
 
@@ -35,10 +35,13 @@ use sp_core::{crypto::UncheckedFrom, Bytes};
 pub mod pallet {
     use frame_support::pallet_prelude::*;
     use frame_system::pallet_prelude::*;
+    use sp_core::{H256, H512};
+    use utxo_api::UtxoApi;
 
     #[pallet::config]
     pub trait Config: frame_system::Config + pallet_contracts::Config {
         type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
+        type Utxo: UtxoApi<AccountId = Self::AccountId>;
     }
 
     #[pallet::pallet]
@@ -53,7 +56,18 @@ pub mod pallet {
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {}
 
     #[pallet::call]
-    impl<T: Config> Pallet<T> {}
+    impl<T: Config> Pallet<T> {
+        #[pallet::weight(10_000)]
+        pub fn spend(
+            origin: OriginFor<T>,
+            value: u128,
+            address: H256,
+            utxo: H256,
+            sig: H512,
+        ) -> DispatchResultWithPostInfo {
+            T::Utxo::spend(&ensure_signed(origin)?, value, address, utxo, sig)
+        }
+    }
 
     #[pallet::genesis_config]
     pub struct GenesisConfig<T: Config> {
@@ -75,7 +89,7 @@ pub mod pallet {
     }
 }
 
-impl<T: Config> ContractProvider for Pallet<T>
+impl<T: Config> ProgrammablePoolApi for Pallet<T>
 where
     T::AccountId: UncheckedFrom<T::Hash> + AsRef<[u8]>,
 {

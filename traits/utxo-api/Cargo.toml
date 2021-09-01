@@ -1,9 +1,9 @@
 [package]
-name = "contract-provider"
+name = "utxo-api"
 version = "3.0.0"
 edition = "2018"
 authors = ["RBB Lab"]
-description = "Contract provider trait filled by programmable pools"
+description = "UTXO API for programmable pools implemented by pallet-utxo"
 license = "MIT"
 
 [dependencies.frame-support]
@@ -13,6 +13,12 @@ version = '4.0.0-dev'
 branch = "master"
 
 [dependencies.sp-std]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+version = '4.0.0-dev'
+branch = "master"
+
+[dependencies.sp-core]
 default-features = false
 git = 'https://github.com/paritytech/substrate.git'
 version = '4.0.0-dev'
