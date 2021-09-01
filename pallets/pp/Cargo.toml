@@ -23,6 +23,10 @@ version = '2.0.0'
 default-features = false
 path = "../../traits/contract-provider/"
 
+[dependencies.utxo-api]
+default-features = false
+path = "../../traits/utxo-api/"
+
 [dependencies.frame-benchmarking]
 default-features = false
 git = 'https://github.com/paritytech/substrate.git'

@@ -310,6 +310,7 @@ impl pallet_utxo::Config for Runtime {
 
 impl pallet_pp::Config for Runtime {
 	type Event = Event;
+    type Utxo = pallet_utxo::Pallet<Runtime>;
 }
 
 impl pallet_randomness_collective_flip::Config for Runtime {}

@@ -410,15 +410,18 @@ pub fn validate_transaction<T: Config>(
         Ok(().into())
     }
 
+    pub fn spend<T: Config>(caller: &T::AccountId, tx: &Transaction) -> DispatchResultWithPostInfo {
+        let tx_validity = validate_transaction::<T>(tx)?;
+        ensure!(tx_validity.requires.is_empty(), "missing inputs");
+        update_storage::<T>(&caller, tx, tx_validity.priority as Value)?;
+        Ok(().into())
+    }
+
     #[pallet::call]
     impl<T: Config> Pallet<T> {
         #[pallet::weight(T::WeightInfo::spend(tx.inputs.len().saturating_add(tx.outputs.len()) as u32))]
         pub fn spend(origin: OriginFor<T>, tx: Transaction) -> DispatchResultWithPostInfo {
-            let caller = ensure_signed(origin)?;
-            let tx_validity = validate_transaction::<T>(&tx)?;
-            ensure!(tx_validity.requires.is_empty(), "missing inputs");
-            update_storage::<T>(&caller, &tx, tx_validity.priority as Value)?;
-
+            spend::<T>(&ensure_signed(origin)?, &tx)?;
             Self::deposit_event(Event::<T>::TransactionSuccess(tx));
             Ok(().into())
         }
@@ -453,5 +456,30 @@ pub fn validate_transaction<T: Config>(
 impl<T: Config> Pallet<T> {
     pub fn send() -> u32 {
         1337
+    }
+}
+
+use frame_support::pallet_prelude::DispatchResultWithPostInfo;
+use sp_core::{crypto::UncheckedFrom, {H256, H512}};
+use sp_runtime::sp_std::vec;
+use utxo_api::UtxoApi;
+
+impl<T: Config> UtxoApi for Pallet<T>
+where
+    T::AccountId: UncheckedFrom<T::Hash> + AsRef<[u8]>,
+{
+    type AccountId = T::AccountId;
+
+    fn spend(
+        caller: &T::AccountId,
+        value: u128,
+        address: H256,
+        utxo: H256,
+        sig: H512,
+    ) -> DispatchResultWithPostInfo {
+        spend::<T>(caller, &Transaction {
+            inputs: vec![TransactionInput::new(utxo, sig)],
+            outputs: vec![TransactionOutput::new(value, address)],
+        })
     }
 }
