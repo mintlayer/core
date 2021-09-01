@@ -1,9 +1,9 @@
 [package]
-name = "contract-provider"
+name = "pp-api"
 version = "3.0.0"
 edition = "2018"
 authors = ["RBB Lab"]
-description = "Contract provider trait filled by programmable pools"
+description = "Programmable pool API for UTXO implemented by pallet-pp"
 license = "MIT"
 
 [dependencies.frame-support]

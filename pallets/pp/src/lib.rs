@@ -27,7 +27,7 @@ mod tests;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 
-use contract_provider::ContractProvider;
+use pp_api::ProgrammablePoolApi;
 use frame_support::{dispatch::Vec, weights::Weight};
 use sp_core::{crypto::UncheckedFrom, Bytes};
 
@@ -89,7 +89,7 @@ pub mod pallet {
     }
 }
 
-impl<T: Config> ContractProvider for Pallet<T>
+impl<T: Config> ProgrammablePoolApi for Pallet<T>
 where
     T::AccountId: UncheckedFrom<T::Hash> + AsRef<[u8]>,
 {

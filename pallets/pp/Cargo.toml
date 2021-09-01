@@ -19,9 +19,9 @@ features = ['derive']
 package = 'parity-scale-codec'
 version = '2.0.0'
 
-[dependencies.contract-provider]
+[dependencies.pp-api]
 default-features = false
-path = "../../traits/contract-provider/"
+path = "../../traits/pp-api/"
 
 [dependencies.utxo-api]
 default-features = false

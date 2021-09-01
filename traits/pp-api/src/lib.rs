@@ -2,7 +2,7 @@
 
 use frame_support::{dispatch::Vec, weights::Weight};
 
-pub trait ContractProvider {
+pub trait ProgrammablePoolApi {
     type AccountId;
 
     fn create(

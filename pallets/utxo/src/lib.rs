@@ -42,7 +42,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{validate_header, SignatureMethod, TXOutputHeader, TXOutputHeaderImpls, TokenType};
 use crate::{ScriptPubKey, ScriptType};
-use contract_provider::ContractProvider;
+use pp_api::ProgrammablePoolApi;
 use codec::{Decode, Encode};
 use frame_support::{
     dispatch::{DispatchResultWithPostInfo, Vec},
@@ -74,7 +74,7 @@ pub trait Config: frame_system::Config {
 
     type WeightInfo: WeightInfo;
 
-    type ProgrammablePool: ContractProvider<AccountId = Self::AccountId>;
+    type ProgrammablePool: ProgrammablePoolApi<AccountId = Self::AccountId>;
 
     fn authorities() -> Vec<H256>;
 }
