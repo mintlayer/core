@@ -1,0 +1,86 @@
+[package]
+name = "pallet-utxo"
+version = "0.1.0"
+authors = ["BCarlaYap <2826165+BCarlaYap@users.noreply.github.com>"]
+edition = "2018"
+
+[features]
+runtime-benchmarks = ["frame-benchmarking"]
+default = ['std']
+std = [
+    'codec/std',
+    'frame-support/std',
+    'frame-system/std',
+    'frame-benchmarking/std',
+    'sp-core/std'
+]
+
+[dependencies]
+hex-literal = "0.2.1"
+log = "0.4.8"
+serde = '1.0.119'
+
+[dependencies.codec]
+default-features = false
+features = ['derive']
+package = 'parity-scale-codec'
+version = '2.0.0'
+
+[dependencies.pp-api]
+default-features = false
+path = "../../traits/pp-api/"
+
+[dependencies.utxo-api]
+default-features = false
+path = "../../traits/utxo-api/"
+
+[dependencies.frame-benchmarking]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+optional = true
+version = '4.0.0-dev'
+branch = "master"
+
+[dependencies.frame-support]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+version = '4.0.0-dev'
+branch = "master"
+
+[dependencies.frame-system]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+version = '4.0.0-dev'
+branch = "master"
+
+[dependencies.sp-core]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+version = '4.0.0-dev'
+branch = "master"
+
+[dependencies.sp-runtime]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+version = '4.0.0-dev'
+branch = "master"
+
+[dev-dependencies.sp-keystore]
+version = "0.10.0-dev"
+git = 'https://github.com/paritytech/substrate.git'
+branch = "master"
+
+[dev-dependencies.pallet-aura]
+git = 'https://github.com/paritytech/substrate.git'
+version = '4.0.0-dev'
+branch = "master"
+
+[dev-dependencies.sp-consensus-aura]
+git = 'https://github.com/paritytech/substrate.git'
+version = '0.10.0-dev'
+branch = "master"
+
+[dev-dependencies.pallet-timestamp]
+git = 'https://github.com/paritytech/substrate.git'
+branch = "master"
+version = '4.0.0-dev'

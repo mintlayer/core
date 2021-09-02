@@ -213,6 +213,9 @@ by appending your own. A few useful ones are as follow.
 ./scripts/docker_run.sh cargo check
 ```
 
+### Branches
+They key branches are master and staging. Master is used for fully tested code, staging is used as the development branch. Fixes or features should be created on new branches branched from staging. A pr is then created to merge the branch in to staging where it will require a review from a member of the Mintlayer team. To merge into master create a pr to merge staging to master, a review is required and CI will run. Only select people have push access to master.
+
 ### pallet-utxo
 found at branch `pallet-utxo`:
 ```bash
@@ -221,3 +224,14 @@ cd pallets/utxo
 git submodule init
 git submodule update # --init --recursive
 ```
+
+### Firewall rules
+
+The node uses TCP port 30333 for communications, this needs to be opened if you want to allow
+inbound connections.
+
+Using UFW:
+`sudo ufw allow 30333/tcp`
+
+Using iptables:
+`sudo iptables -A INPUT -p tcp --dport 30333 -j ACCEPT`

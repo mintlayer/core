@@ -1,22 +1,38 @@
 [package]
-authors = ['Substrate DevHub <https://github.com/substrate-developer-hub>']
-description = 'FRAME pallet template for defining custom runtime logic.'
+authors = ["RBB Lab"]
+description = 'Programmable pools pallet'
 edition = '2018'
-homepage = 'https://substrate.dev'
-license = 'Unlicense'
-name = 'pallet-template'
+license = 'MIT'
+name = 'pallet-pp'
 readme = 'README.md'
-repository = 'https://github.com/substrate-developer-hub/substrate-node-template/'
 version = '3.0.0'
 
 [package.metadata.docs.rs]
 targets = ['x86_64-unknown-linux-gnu']
+
+[dependencies]
+log = "0.4.8"
 
 [dependencies.codec]
 default-features = false
 features = ['derive']
 package = 'parity-scale-codec'
 version = '2.0.0'
+
+[dependencies.pp-api]
+default-features = false
+path = "../../traits/pp-api/"
+
+[dependencies.utxo-api]
+default-features = false
+path = "../../traits/utxo-api/"
+
+[dependencies.frame-benchmarking]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+optional = true
+version = '4.0.0-dev'
+branch = "master"
 
 [dependencies.frame-support]
 default-features = false
@@ -30,15 +46,32 @@ git = 'https://github.com/paritytech/substrate.git'
 version = '4.0.0-dev'
 branch = "master"
 
-[dependencies.frame-benchmarking]
+[dependencies.pallet-contracts]
 default-features = false
 git = 'https://github.com/paritytech/substrate.git'
-optional = true
+version = '4.0.0-dev'
+branch = "master"
+
+[dependencies.pallet-contracts-primitives]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+version = '4.0.0-dev'
+branch = "master"
+
+[dependencies.sp-core]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
 version = '4.0.0-dev'
 branch = "master"
 
 [dev-dependencies.serde]
 version = '1.0.126'
+
+[dev-dependencies.sp-io]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+version = '4.0.0-dev'
+branch = "master"
 
 [dev-dependencies.sp-runtime]
 default-features = false
@@ -52,12 +85,6 @@ git = 'https://github.com/paritytech/substrate.git'
 version = '4.0.0-dev'
 branch = "master"
 
-[dev-dependencies.sp-io]
-default-features = false
-git = 'https://github.com/paritytech/substrate.git'
-version = '4.0.0-dev'
-branch = "master"
-
 [features]
 default = ['std']
 runtime-benchmarks = ['frame-benchmarking']
@@ -66,5 +93,7 @@ std = [
 	'frame-support/std',
 	'frame-system/std',
 	'frame-benchmarking/std',
+	'pallet-contracts/std',
+	'pallet-contracts-primitives/std',
 ]
 try-runtime = ['frame-support/try-runtime']
