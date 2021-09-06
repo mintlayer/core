@@ -15,8 +15,8 @@
 //
 // Author(s): C. Yap
 use crate as pallet_utxo;
-use contract_provider::ContractProvider;
 use pallet_utxo::TransactionOutput;
+use pp_api::ProgrammablePoolApi;
 
 use frame_support::{dispatch::Vec, weights::Weight};
 use frame_support::{
@@ -53,7 +53,7 @@ pub const GENESIS_UTXO: [u8; 32] =
 // Dummy programmable pool for testing
 pub struct MockPool<T>(PhantomData<T>);
 
-impl<T: frame_system::Config> ContractProvider for MockPool<T> {
+impl<T: frame_system::Config> ProgrammablePoolApi for MockPool<T> {
     type AccountId = u64;
 
     fn create(
@@ -133,9 +133,14 @@ impl pallet_timestamp::Config for Test {
     type WeightInfo = ();
 }
 
+parameter_types! {
+    pub const MaxAuthorities: u32 = 1000;
+}
+
 impl pallet_aura::Config for Test {
     type AuthorityId = AuraId;
     type DisabledValidators = ();
+    type MaxAuthorities = MaxAuthorities;
 }
 
 impl pallet_utxo::Config for Test {
