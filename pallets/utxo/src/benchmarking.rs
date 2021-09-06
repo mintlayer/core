@@ -21,8 +21,8 @@ use crate::{Pallet as Utxo, Transaction, TransactionInput, TransactionOutput};
 use codec::Encode;
 use frame_benchmarking::{benchmarks, whitelisted_caller};
 use frame_system::{EventRecord, RawOrigin};
-use sp_core::{sp_std::vec, sr25519::Public, testing::SR25519, H256, H512};
 use hex_literal::hex;
+use sp_core::{sp_std::vec, sr25519::Public, testing::SR25519, H256, H512};
 
 fn assert_last_event<T: Config>(generic_event: <T as Config>::Event) {
     let events = frame_system::Pallet::<T>::events();

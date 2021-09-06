@@ -15,9 +15,10 @@
 //
 // Author(s): C. Yap
 use crate as pallet_utxo;
-use pallet_utxo::TransactionOutput;
 use contract_provider::ContractProvider;
+use pallet_utxo::TransactionOutput;
 
+use frame_support::{dispatch::Vec, weights::Weight};
 use frame_support::{
     parameter_types,
     sp_io::TestExternalities,
@@ -28,9 +29,13 @@ use frame_support::{
     traits::GenesisBuild,
 };
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-use sp_core::{sp_std::{vec, marker::PhantomData}, sr25519::Public, testing::SR25519, H256};
+use sp_core::{
+    sp_std::{marker::PhantomData, vec},
+    sr25519::Public,
+    testing::SR25519,
+    H256,
+};
 use sp_keystore::{testing::KeyStore, KeystoreExt, SyncCryptoStore};
-use frame_support::{dispatch::Vec, weights::Weight};
 
 // need to manually import this crate since its no include by default
 use hex_literal::hex;
@@ -63,8 +68,8 @@ impl<T: frame_system::Config> ContractProvider for MockPool<T> {
     fn call(
         _caller: &Self::AccountId,
         _dest: &Self::AccountId,
-		_gas_limit: Weight,
-		_input_data: &Vec<u8>,
+        _gas_limit: Weight,
+        _input_data: &Vec<u8>,
     ) -> Result<(), &'static str> {
         Ok(())
     }
@@ -158,9 +163,7 @@ pub fn new_test_ext() -> TestExternalities {
     let keystore = KeyStore::new(); // a key storage to store new key pairs during testing
     let alice_pub_key = create_pub_key(&keystore, ALICE_PHRASE);
 
-    let mut t = frame_system::GenesisConfig::default()
-        .build_storage::<Test>()
-        .unwrap();
+    let mut t = frame_system::GenesisConfig::default().build_storage::<Test>().unwrap();
 
     pallet_utxo::GenesisConfig::<Test> {
         genesis_utxos: vec![TransactionOutput::new(100, H256::from(alice_pub_key))],
@@ -183,9 +186,7 @@ pub fn new_test_ext_and_keys() -> (TestExternalities, Public, Public) {
     let alice_pub_key = create_pub_key(&keystore, ALICE_PHRASE);
     let karl_pub_key = create_pub_key(&keystore, KARL_PHRASE);
 
-    let mut t = frame_system::GenesisConfig::default()
-        .build_storage::<Test>()
-        .unwrap();
+    let mut t = frame_system::GenesisConfig::default().build_storage::<Test>().unwrap();
     pallet_utxo::GenesisConfig::<Test> {
         genesis_utxos: vec![TransactionOutput::new(100, H256::from(alice_pub_key))],
         _marker: Default::default(),
