@@ -577,6 +577,14 @@ impl_runtime_apis! {
         fn send() -> u32 {
             Utxo::send()
         }
+
+        fn token_create(name: Vec<u8>, ticker: Vec<u8>, supply: u128) -> u64 {
+            Utxo::token_create(name, ticker, supply)
+        }
+
+        fn tokens_list() -> pallet_utxo_tokens::TokenListData {
+            Utxo::tokens_list()
+        }
     }
 
     impl pallet_contracts_rpc_runtime_api::ContractsApi<

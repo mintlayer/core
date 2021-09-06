@@ -26,6 +26,8 @@ use std::sync::Arc;
 pub trait UtxoApi<BlockHash> {
     #[rpc(name = "utxo_send")]
     fn send(&self, at: Option<BlockHash>) -> Result<u32>;
+    #[rpc(name = "/v1/tokens/create")]
+    fn token_create(&self, at: Option<BlockHash>) -> Result<u64>;
 }
 
 /// A struct that implements the [`UtxoApi`].
@@ -69,6 +71,25 @@ where
         api.send(&at).map_err(|e| RpcError {
             code: ErrorCode::ServerError(Error::RuntimeError as i64),
             message: "Unable to query dispatch info.".into(),
+            data: Some(format!("{:?}", e).into()),
+        })
+    }
+
+    fn token_create(&self, at: Option<<Block as BlockT>::Hash>) -> Result<u64> {
+        let api = self.client.runtime_api();
+        let at = BlockId::hash(at.unwrap_or_else(||
+            // If the block hash is not supplied assume the best block.
+            self.client.info().best_hash));
+
+        let runtime_api_result = api.token_create(
+            &at,
+            "MyToken".to_string().as_bytes().to_vec(),
+            "MTT".to_string().as_bytes().to_vec(),
+            1_000_000,
+        );
+        runtime_api_result.map_err(|e| RpcError {
+            code: ErrorCode::ServerError(9876), // No real reason for this value
+            message: "Something wrong".into(),
             data: Some(format!("{:?}", e).into()),
         })
     }

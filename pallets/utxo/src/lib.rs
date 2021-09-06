@@ -36,13 +36,10 @@ pub mod weights;
 
 #[frame_support::pallet]
 pub mod pallet {
-    use core::marker::PhantomData;
-    #[cfg(feature = "std")]
-    use serde::{Deserialize, Serialize};
-
     use crate::{validate_header, SignatureMethod, TXOutputHeader, TXOutputHeaderImpls, TokenType};
     use crate::{ScriptPubKey, ScriptType};
     use codec::{Decode, Encode};
+    use core::marker::PhantomData;
     use frame_support::{
         dispatch::{DispatchResultWithPostInfo, Vec},
         pallet_prelude::*,
@@ -51,7 +48,10 @@ pub mod pallet {
         traits::IsSubType,
     };
     use frame_system::pallet_prelude::*;
+    use pallet_utxo_tokens::{TokenInstance, TokenListData};
     use pp_api::ProgrammablePoolApi;
+    #[cfg(feature = "std")]
+    use serde::{Deserialize, Serialize};
     use sp_core::{
         sp_std::collections::btree_map::BTreeMap,
         sr25519::{Public as SR25Pub, Signature as SR25Sig},
@@ -155,6 +155,10 @@ pub mod pallet {
         pub(crate) inputs: Vec<TransactionInput>,
         pub(crate) outputs: Vec<TransactionOutput>,
     }
+
+    #[pallet::storage]
+    #[pallet::getter(fn token_list)]
+    pub(super) type TokenList<T> = StorageValue<_, TokenListData, ValueQuery>;
 
     #[pallet::storage]
     #[pallet::getter(fn reward_total)]
@@ -445,10 +449,40 @@ pub mod pallet {
     }
 }
 
+use frame_support::inherent::Vec;
+use pallet_utxo_tokens::{TokenInstance, TokenListData};
+
 impl<T: Config> Pallet<T> {
     pub fn send() -> u32 {
         1337
     }
+
+    pub fn token_create(
+        /*_caller: &T::AccountId,*/ name: Vec<u8>,
+        ticker: Vec<u8>,
+        supply: u128,
+    ) -> u64 {
+        let mut instance = TokenInstance::new(name, ticker, supply);
+        let mut token_id: u64 = 0;
+        <TokenList<T>>::mutate(|x| {
+            token_id = x.len() as u64 + 1;
+            instance.id = token_id;
+            x.push(instance)
+        });
+        token_id
+    }
+
+    pub fn tokens_list() -> TokenListData {
+        <TokenList<T>>::get()
+    }
+
+    pub fn balance(_caller: &T::AccountId) -> Vec<TokenInstance> {
+        Vec::new()
+    }
+
+    pub fn burn_token() {}
+
+    pub fn issue_token() {}
 }
 
 use frame_support::pallet_prelude::DispatchResultWithPostInfo;

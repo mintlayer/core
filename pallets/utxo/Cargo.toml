@@ -19,6 +19,8 @@ std = [
 hex-literal = "0.2.1"
 log = "0.4.8"
 serde = '1.0.119'
+getrandom = { version = "0.2", features = ["js"] }
+pallet-utxo-tokens = { path = "./tokens" }
 
 [dependencies.codec]
 default-features = false
