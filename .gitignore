@@ -6,6 +6,10 @@
 
 .DS_Store
 
+# Intellij IDEA
+.idea/
+*.iml
+
 # The cache for docker container dependency
 .cargo
 
@@ -16,3 +20,5 @@ Cargo.lock
 
 # direnv cache
 .direnv
+
+
