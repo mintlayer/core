@@ -16,7 +16,7 @@
 // Author(s): C. Yap
 
 use crate::{
-    mock::*, RewardTotal, ScriptType, Transaction, TransactionInput, TransactionOutput, UtxoStore,
+    mock::*, Destination, RewardTotal, Transaction, TransactionInput, TransactionOutput, UtxoStore,
     Value,
 };
 use codec::Encode;
@@ -29,8 +29,9 @@ use sp_core::{sp_std::vec, sr25519::Public, testing::SR25519, H256, H512};
 
 fn tx_input_gen_no_signature() -> TransactionInput {
     TransactionInput {
-        outpoint: H256::from(GENESIS_UTXO),
-        sig_script: H512::zero(),
+        outpoint: H256::from(genesis_utxo()),
+        lock: Vec::new(),
+        witness: Vec::new(),
     }
 }
 
@@ -45,6 +46,12 @@ where
 }
 
 #[test]
+fn pubkey_commitment_hash() {
+    let dest = Destination::<u64>::Pubkey(H256::zero());
+    assert_eq!(dest.lock_commitment(), &BlakeTwo256::hash(&[]));
+}
+
+#[test]
 fn test_simple_tx() {
     execute_with_alice(|alice_pub_key| {
         // Alice wants to send herself a new utxo of value 50.
@@ -54,11 +61,13 @@ fn test_simple_tx() {
         };
 
         let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx.encode()).unwrap();
-        tx.inputs[0].sig_script = H512::from(alice_sig);
+        tx.inputs[0].witness = alice_sig.0.to_vec();
         let new_utxo_hash = BlakeTwo256::hash_of(&(&tx, 0 as u64));
 
+        let init_utxo = genesis_utxo();
+        assert!(UtxoStore::<Test>::contains_key(H256::from(init_utxo)));
         assert_ok!(Utxo::spend(Origin::signed(0), tx));
-        assert!(!UtxoStore::<Test>::contains_key(H256::from(GENESIS_UTXO)));
+        assert!(!UtxoStore::<Test>::contains_key(H256::from(init_utxo)));
         assert!(UtxoStore::<Test>::contains_key(new_utxo_hash));
         assert_eq!(50, UtxoStore::<Test>::get(new_utxo_hash).unwrap().value);
     })
@@ -72,13 +81,14 @@ fn attack_with_sending_to_own_account() {
         let mut tx = Transaction {
             inputs: vec![TransactionInput {
                 outpoint: H256::zero(),
-                sig_script: H512::zero(),
+                lock: Vec::new(),
+                witness: Vec::new(),
             }],
             outputs: vec![TransactionOutput::new(50, H256::from(karl_pub_key))],
         };
 
         let karl_sig = crypto::sr25519_sign(SR25519, &karl_pub_key, &tx.encode()).unwrap();
-        tx.inputs[0].sig_script = H512::from(karl_sig);
+        tx.inputs[0].witness = karl_sig.0.to_vec();
 
         assert_noop!(Utxo::spend(Origin::signed(0), tx), "missing inputs");
     });
@@ -119,8 +129,8 @@ fn attack_by_double_counting_input() {
 
         let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx.encode()).unwrap();
 
-        tx.inputs[0].sig_script = H512::from(alice_sig.clone());
-        tx.inputs[1].sig_script = H512::from(alice_sig);
+        tx.inputs[0].witness = alice_sig.0.to_vec();
+        tx.inputs[1].witness = alice_sig.0.to_vec();
 
         assert_err!(
             Utxo::spend(Origin::signed(0), tx),
@@ -134,9 +144,10 @@ fn attack_with_invalid_signature() {
     execute_with_alice(|alice_pub_key| {
         let tx = Transaction {
             inputs: vec![TransactionInput {
-                outpoint: H256::from(GENESIS_UTXO),
+                outpoint: H256::from(genesis_utxo()),
+                lock: Vec::new(),
                 // Just a random signature!
-                sig_script: H512::random(),
+                witness: H512::random().0.to_vec(),
             }],
             outputs: vec![TransactionOutput::new(100, H256::from(alice_pub_key))],
         };
@@ -158,7 +169,7 @@ fn attack_by_permanently_sinking_outputs() {
         };
 
         let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx.encode()).unwrap();
-        tx.inputs[0].sig_script = H512::from(alice_sig);
+        tx.inputs[0].witness = alice_sig.0.to_vec();
 
         assert_noop!(
             Utxo::spend(Origin::signed(0), tx),
@@ -180,7 +191,7 @@ fn attack_by_overflowing_value() {
         };
 
         let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx.encode()).unwrap();
-        tx.inputs[0].sig_script = H512::from(alice_sig);
+        tx.inputs[0].witness = alice_sig.0.to_vec();
 
         assert_err!(Utxo::spend(Origin::signed(0), tx), "output value overflow");
     });
@@ -199,7 +210,7 @@ fn attack_by_overspending() {
         };
 
         let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx.encode()).unwrap();
-        tx.inputs[0].sig_script = H512::from(alice_sig);
+        tx.inputs[0].witness = alice_sig.0.to_vec();
 
         assert_noop!(
             Utxo::spend(Origin::signed(0), tx),
@@ -224,7 +235,7 @@ fn tx_from_alice_to_karl() {
         };
 
         let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx.encode()).unwrap();
-        tx.inputs[0].sig_script = H512::from(alice_sig);
+        tx.inputs[0].witness = alice_sig.0.to_vec();
 
         assert_ok!(Utxo::spend(Origin::signed(0), tx.clone()));
         let new_utxo_hash = BlakeTwo256::hash_of(&(&tx, 1 as u64));
@@ -235,8 +246,9 @@ fn tx_from_alice_to_karl() {
             outputs: vec![TransactionOutput::new(90, H256::from(karl_pub_key))],
         };
 
+        tx.inputs[0].witness = Vec::new();
         let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx.encode()).unwrap();
-        tx.inputs[0].sig_script = H512::from(alice_sig);
+        tx.inputs[0].witness = alice_sig.0.to_vec();
 
         assert_ok!(Utxo::spend(Origin::signed(0), tx));
     });
@@ -252,7 +264,7 @@ fn test_reward() {
         };
 
         let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx.encode()).unwrap();
-        tx.inputs[0].sig_script = H512::from(alice_sig);
+        tx.inputs[0].witness = alice_sig.0.to_vec();
         assert_ok!(Utxo::spend(Origin::signed(0), tx.clone()));
 
         // if the previous spend succeeded, there should be one utxo
@@ -273,10 +285,10 @@ fn test_script() {
             outputs: vec![TransactionOutput::new(90, H256::from(alice_pub_key))],
         };
 
-        assert_ok!(tx.outputs[0].script.set_script(ScriptType::P2pkh, &Vec::new()));
+        tx.outputs[0].destination = Destination::Pubkey(H256::zero());
 
         let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx.encode()).unwrap();
-        tx.inputs[0].sig_script = H512::from(alice_sig);
+        tx.inputs[0].witness = alice_sig.0.to_vec();
         assert_ok!(Utxo::spend(Origin::signed(0), tx.clone()));
     })
 }
