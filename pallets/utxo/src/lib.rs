@@ -163,7 +163,7 @@ pub mod pallet {
     #[pallet::storage]
     #[pallet::getter(fn utxo_store)]
     pub(super) type UtxoStore<T: Config> =
-        StorageMap<_, Blake2_256, H256, Option<TransactionOutput>, ValueQuery>;
+        StorageMap<_, Identity, H256, Option<TransactionOutput>, ValueQuery>;
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
