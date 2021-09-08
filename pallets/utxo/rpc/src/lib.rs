@@ -13,7 +13,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// Author(s): A. Altonen
+// Author(s): A. Altonen, A. Sinitsyn
+
 use jsonrpc_core::{Error as RpcError, ErrorCode, Result};
 use jsonrpc_derive::rpc;
 pub use pallet_utxo_rpc_runtime_api::UtxoApi as UtxoRuntimeApi;
@@ -27,7 +28,13 @@ pub trait UtxoApi<BlockHash> {
     #[rpc(name = "utxo_send")]
     fn send(&self, at: Option<BlockHash>) -> Result<u32>;
     #[rpc(name = "/v1/tokens/create")]
-    fn token_create(&self, at: Option<BlockHash>) -> Result<u64>;
+    fn token_create(
+        &self,
+        at: Option<BlockHash>,
+        name: Vec<u8>,
+        ticker: Vec<u8>,
+        supply: u128,
+    ) -> Result<u64>;
 }
 
 /// A struct that implements the [`UtxoApi`].
@@ -75,18 +82,19 @@ where
         })
     }
 
-    fn token_create(&self, at: Option<<Block as BlockT>::Hash>) -> Result<u64> {
+    fn token_create(
+        &self,
+        at: Option<<Block as BlockT>::Hash>,
+        name: Vec<u8>,
+        ticker: Vec<u8>,
+        supply: u128,
+    ) -> Result<u64> {
         let api = self.client.runtime_api();
         let at = BlockId::hash(at.unwrap_or_else(||
             // If the block hash is not supplied assume the best block.
             self.client.info().best_hash));
 
-        let runtime_api_result = api.token_create(
-            &at,
-            "MyToken".to_string().as_bytes().to_vec(),
-            "MTT".to_string().as_bytes().to_vec(),
-            1_000_000,
-        );
+        let runtime_api_result = api.token_create(&at, name, ticker, supply);
         runtime_api_result.map_err(|e| RpcError {
             code: ErrorCode::ServerError(9876), // No real reason for this value
             message: "Something wrong".into(),
