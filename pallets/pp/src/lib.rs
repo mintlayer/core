@@ -111,8 +111,8 @@ where
             code,
             data.to_vec(),
             Vec::new(),
-            false, // calculate rent projection
-            true,  // enable debugging
+            //false, // calculate rent projection
+            true, // enable debugging
         );
 
         Ok(())

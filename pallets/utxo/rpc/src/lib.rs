@@ -18,6 +18,7 @@
 use jsonrpc_core::{Error as RpcError, ErrorCode, Result};
 use jsonrpc_derive::rpc;
 pub use pallet_utxo_rpc_runtime_api::UtxoApi as UtxoRuntimeApi;
+//use pallet_utxo_tokens::{TokenInstance, TokenListData};
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::HeaderBackend;
 use sp_runtime::{generic::BlockId, traits::Block as BlockT};
@@ -31,10 +32,12 @@ pub trait UtxoApi<BlockHash> {
     fn token_create(
         &self,
         at: Option<BlockHash>,
-        name: Vec<u8>,
-        ticker: Vec<u8>,
+        token_name: Vec<u8>,
+        token_ticker: Vec<u8>,
         supply: u128,
     ) -> Result<u64>;
+    #[rpc(name = "/v1/tokens/list")]
+    fn token_list(&self, at: Option<BlockHash>) -> Result<Vec<u8>>;
 }
 
 /// A struct that implements the [`UtxoApi`].
@@ -85,8 +88,8 @@ where
     fn token_create(
         &self,
         at: Option<<Block as BlockT>::Hash>,
-        name: Vec<u8>,
-        ticker: Vec<u8>,
+        token_name: Vec<u8>,
+        token_ticker: Vec<u8>,
         supply: u128,
     ) -> Result<u64> {
         let api = self.client.runtime_api();
@@ -94,7 +97,21 @@ where
             // If the block hash is not supplied assume the best block.
             self.client.info().best_hash));
 
-        let runtime_api_result = api.token_create(&at, name, ticker, supply);
+        let runtime_api_result = api.token_create(&at, token_name, token_ticker, supply);
+        runtime_api_result.map_err(|e| RpcError {
+            code: ErrorCode::ServerError(9876), // No real reason for this value
+            message: "Something wrong".into(),
+            data: Some(format!("{:?}", e).into()),
+        })
+    }
+
+    fn token_list(&self, at: Option<<Block as BlockT>::Hash>) -> Result<Vec<u8>> {
+        let api = self.client.runtime_api();
+        let at = BlockId::hash(at.unwrap_or_else(||
+            // If the block hash is not supplied assume the best block.
+            self.client.info().best_hash));
+
+        let runtime_api_result = api.tokens_list(&at);
         runtime_api_result.map_err(|e| RpcError {
             code: ErrorCode::ServerError(9876), // No real reason for this value
             message: "Something wrong".into(),

@@ -351,14 +351,6 @@ impl pallet_contracts::Config for Runtime {
     type Randomness = RandomnessCollectiveFlip;
     type Currency = Balances;
     type Event = Event;
-    type RentPayment = ();
-    type SignedClaimHandicap = SignedClaimHandicap;
-    type TombstoneDeposit = TombstoneDeposit;
-    type DepositPerContract = DepositPerContract;
-    type DepositPerStorageByte = DepositPerStorageByte;
-    type DepositPerStorageItem = DepositPerStorageItem;
-    type RentFraction = RentFraction;
-    type SurchargeReward = SurchargeReward;
     type WeightPrice = pallet_transaction_payment::Pallet<Self>;
     type WeightInfo = pallet_contracts::weights::SubstrateWeight<Self>;
     type ChainExtension = ();
@@ -374,6 +366,7 @@ impl pallet_contracts::Config for Runtime {
     type CallFilter = Nothing;
     type Schedule = Schedule;
     type CallStack = [pallet_contracts::Frame<Self>; 31];
+    type ContractDeposit = ();
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
@@ -582,8 +575,9 @@ impl_runtime_apis! {
             Utxo::token_create(name, ticker, supply)
         }
 
-        fn tokens_list() -> pallet_utxo_tokens::TokenListData {
-            Utxo::tokens_list()
+        fn tokens_list() -> Vec<u8> {//pallet_utxo_tokens::TokenListData {
+            Utxo::tokens_list();
+            Vec::new()
         }
     }
 
@@ -609,10 +603,10 @@ impl_runtime_apis! {
             code: pallet_contracts_primitives::Code<Hash>,
             data: Vec<u8>,
             salt: Vec<u8>,
-        ) -> pallet_contracts_primitives::ContractInstantiateResult<AccountId, BlockNumber> {
-            let compute_rent_projection = true;
+        ) -> pallet_contracts_primitives::ContractInstantiateResult<AccountId> {
+            let _compute_rent_projection = true;
             let debug = true;
-            Contracts::bare_instantiate(origin, endowment, gas_limit, code, data, salt, compute_rent_projection, debug)
+            Contracts::bare_instantiate(origin, endowment, gas_limit, code, data, salt, debug)
         }
 
         fn get_storage(
@@ -620,12 +614,6 @@ impl_runtime_apis! {
             key: [u8; 32],
         ) -> pallet_contracts_primitives::GetStorageResult {
             Contracts::get_storage(address, key)
-        }
-
-        fn rent_projection(
-            address: AccountId,
-        ) -> pallet_contracts_primitives::RentProjectionResult<BlockNumber> {
-            Contracts::rent_projection(address)
         }
     }
 

@@ -36,8 +36,9 @@ pub mod weights;
 
 #[frame_support::pallet]
 pub mod pallet {
-    use crate::{validate_header, SignatureMethod, TXOutputHeader, TXOutputHeaderImpls, TokenType};
+    use crate::{OutputHeader, OutputHeaderHelper, TokenID};
     use crate::{ScriptPubKey, ScriptType};
+    use crate::{SignatureMethod, TXOutputHeader};
     use codec::{Decode, Encode};
     use core::marker::PhantomData;
     use frame_support::{
@@ -48,7 +49,7 @@ pub mod pallet {
         traits::IsSubType,
     };
     use frame_system::pallet_prelude::*;
-    use pallet_utxo_tokens::{TokenInstance, TokenListData};
+    use pallet_utxo_tokens::TokenListData;
     use pp_api::ProgrammablePoolApi;
     #[cfg(feature = "std")]
     use serde::{Deserialize, Serialize};
@@ -125,27 +126,51 @@ pub mod pallet {
                 script: ScriptPubKey::new(),
             }
         }
+
+        pub fn new_tokens(token_id: TokenID, value: Value, pub_key: H256) -> Self {
+            let mut header = OutputHeader::new(0);
+            header.set_token_id(token_id);
+            let header = header.as_u128();
+            Self {
+                value,
+                pub_key,
+                header,
+                script: ScriptPubKey::new(),
+            }
+        }
     }
 
-    impl TXOutputHeaderImpls for TransactionOutput {
-        fn set_token_type(&mut self, value_token_type: TokenType) {
-            TokenType::insert(&mut self.header, value_token_type);
+    impl TransactionOutput {
+        fn set_token_id(&mut self, token_id: TokenID) {
+            let mut header = self.header.as_tx_output_header();
+            header.set_token_id(token_id);
+            self.header = header.as_u128();
         }
 
         fn set_signature_method(&mut self, signature_method: SignatureMethod) {
-            SignatureMethod::insert(&mut self.header, signature_method);
+            let mut header = self.header.as_tx_output_header();
+            header.set_sign_method(signature_method);
+            self.header = header.as_u128();
         }
 
-        fn get_token_type(&self) -> Result<TokenType, &'static str> {
-            TokenType::extract(self.header)
+        fn get_token_id(&self) -> Result<TokenID, &'static str> {
+            Ok(self.header.as_tx_output_header().token_id())
         }
 
         fn get_signature_method(&self) -> Result<SignatureMethod, &'static str> {
-            SignatureMethod::extract(self.header)
+            self.header
+                .as_tx_output_header()
+                .sign_method()
+                .ok_or("Signature method unknown")
         }
 
         fn validate_header(&self) -> Result<(), &'static str> {
-            validate_header(self.header)
+            // Check signature and token id
+            self.header
+                .as_tx_output_header()
+                .validate()
+                .then(|| ())
+                .ok_or("Incorrect header")
         }
     }
 
@@ -280,8 +305,19 @@ pub mod pallet {
             );
         }
 
-        let mut total_input: Value = 0;
-        let mut total_output: Value = 0;
+        let input_vec: Vec<(crate::TokenID, Value)> = tx
+            .inputs
+            .iter()
+            .filter_map(|input| <UtxoStore<T>>::get(&input.outpoint))
+            .map(|output| (OutputHeader::new(output.header).token_id(), output.value))
+            .collect();
+
+        let out_vec: Vec<(crate::TokenID, Value)> = tx
+            .outputs
+            .iter()
+            .map(|output| (OutputHeader::new(output.header).token_id(), output.value))
+            .collect();
+
         let mut output_index: u64 = 0;
         let simple_tx = get_simple_transaction(tx);
 
@@ -308,8 +344,6 @@ pub mod pallet {
                     ),
                     "signature must be valid"
                 );
-                total_input =
-                    total_input.checked_add(input_utxo.value).ok_or("input value overflow")?;
             } else {
                 missing_utxos.push(input.outpoint.clone().as_fixed_bytes().to_vec());
             }
@@ -330,10 +364,6 @@ pub mod pallet {
                     let hash = BlakeTwo256::hash_of(&(&tx, output_index));
                     output_index = output_index.checked_add(1).ok_or("output index overflow")?;
                     ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
-
-                    // checked add bug in example cod where it uses checked_sub
-                    total_output =
-                        total_output.checked_add(output.value).ok_or("output value overflow")?;
                     new_utxos.push(hash.as_fixed_bytes().to_vec());
                 }
                 ScriptType::OpCreate => {
@@ -347,11 +377,37 @@ pub mod pallet {
 
         // if no race condition, check the math
         if missing_utxos.is_empty() {
-            ensure!(
-                total_input >= total_output,
-                "output value must not exceed input value"
-            );
-            reward = total_input.checked_sub(total_output).ok_or("reward underflow")?;
+            // We have to check sum of input tokens is less or equal to output tokens.
+            let mut inputs_sum: BTreeMap<TokenID, Value> = BTreeMap::new();
+            let mut outputs_sum: BTreeMap<TokenID, Value> = BTreeMap::new();
+
+            for x in input_vec {
+                let value =
+                    x.1.checked_add(*inputs_sum.get(&x.0).unwrap_or(&0))
+                        .ok_or("input value overflow")?;
+                inputs_sum.insert(x.0, value);
+            }
+            for x in out_vec {
+                let value =
+                    x.1.checked_add(*outputs_sum.get(&x.0).unwrap_or(&0))
+                        .ok_or("output value overflow")?;
+                outputs_sum.insert(x.0, value);
+            }
+
+            for output_token in &outputs_sum {
+                match inputs_sum.get(&output_token.0) {
+                    Some(input_value) => ensure!(
+                        input_value >= &output_token.1,
+                        "output value must not exceed input value"
+                    ),
+                    None => frame_support::fail!("input for the token not found"),
+                }
+            }
+
+            // Reward at the moment only in MLT
+            reward = inputs_sum[&(crate::TokenType::MLT as TokenID)]
+                .checked_sub(outputs_sum[&(crate::TokenType::MLT as TokenID)])
+                .ok_or("reward underflow")?;
         }
 
         Ok(ValidTransaction {

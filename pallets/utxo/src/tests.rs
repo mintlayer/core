@@ -280,3 +280,111 @@ fn test_script() {
         assert_ok!(Utxo::spend(Origin::signed(0), tx.clone()));
     })
 }
+
+#[test]
+fn test_tokens_creation() {
+    execute_with_alice(|alice_pub_key| {
+        //
+        //
+        // let mut tx = Transaction {
+        //     inputs: vec![
+        //         // Fee an input in MLT
+        //         tx_input_gen_no_signature()],
+        //     outputs: vec![
+        //         // Output a new tokens
+        //         TransactionOutput::new(50, H256::from(alice_pub_key))],
+        // };
+        //
+        // let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx.encode()).unwrap();
+        // tx.inputs[0].sig_script = H512::from(alice_sig);
+        // let new_utxo_hash = BlakeTwo256::hash_of(&(&tx, 0 as u64));
+        //
+        // assert_ok!(Utxo::spend(Origin::signed(0), tx));
+        // assert!(!UtxoStore::<Test>::contains_key(H256::from(GENESIS_UTXO)));
+        // assert!(UtxoStore::<Test>::contains_key(new_utxo_hash));
+        // assert_eq!(50, UtxoStore::<Test>::get(new_utxo_hash).unwrap().value);
+        //
+        //
+        //
+        // let mut tx = Transaction {
+        //     inputs: vec![],
+        //     outputs: vec![TransactionOutput::new(90, H256::from(alice_pub_key))],
+        // }
+
+        let mut tx = Transaction {
+            inputs: vec![tx_input_gen_no_signature()],
+            outputs: vec![TransactionOutput::new(90, H256::from(alice_pub_key))],
+        };
+
+        assert_ok!(tx.outputs[0].script.set_script(ScriptType::P2pkh, &Vec::new()));
+
+        let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx.encode()).unwrap();
+        tx.inputs[0].sig_script = H512::from(alice_sig);
+        assert_ok!(Utxo::spend(Origin::signed(0), tx.clone()));
+    })
+}
+
+#[test]
+fn test_tokens_list() {
+    execute_with_alice(|alice_pub_key| {
+        let mut tx = Transaction {
+            inputs: vec![tx_input_gen_no_signature()],
+            outputs: vec![TransactionOutput::new(90, H256::from(alice_pub_key))],
+        };
+
+        assert_ok!(tx.outputs[0].script.set_script(ScriptType::P2pkh, &Vec::new()));
+
+        let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx.encode()).unwrap();
+        tx.inputs[0].sig_script = H512::from(alice_sig);
+        assert_ok!(Utxo::spend(Origin::signed(0), tx.clone()));
+    })
+}
+
+#[test]
+fn test_tokens_burn() {
+    execute_with_alice(|alice_pub_key| {
+        let mut tx = Transaction {
+            inputs: vec![tx_input_gen_no_signature()],
+            outputs: vec![TransactionOutput::new(90, H256::from(alice_pub_key))],
+        };
+
+        assert_ok!(tx.outputs[0].script.set_script(ScriptType::P2pkh, &Vec::new()));
+
+        let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx.encode()).unwrap();
+        tx.inputs[0].sig_script = H512::from(alice_sig);
+        assert_ok!(Utxo::spend(Origin::signed(0), tx.clone()));
+    })
+}
+
+#[test]
+fn test_tokens_issue() {
+    execute_with_alice(|alice_pub_key| {
+        let mut tx = Transaction {
+            inputs: vec![tx_input_gen_no_signature()],
+            outputs: vec![TransactionOutput::new(90, H256::from(alice_pub_key))],
+        };
+
+        assert_ok!(tx.outputs[0].script.set_script(ScriptType::P2pkh, &Vec::new()));
+
+        let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx.encode()).unwrap();
+        tx.inputs[0].sig_script = H512::from(alice_sig);
+        assert_ok!(Utxo::spend(Origin::signed(0), tx.clone()));
+    })
+}
+
+#[test]
+fn test_genesis() {
+    execute_with_alice(|alice_pub_key| {
+        use crate::mock::GENESIS_UTXO;
+        // Take hash from the input
+        let hash = *BlakeTwo256::hash_of(&TransactionOutput::new(100, H256::from(alice_pub_key)))
+            .as_fixed_bytes();
+        // Print it in hex
+        for i in &hash {
+            print!("{:02x}", i);
+        }
+        println!();
+        // Check is these equal or not
+        assert_eq!(GENESIS_UTXO, hash);
+    })
+}

@@ -8,10 +8,12 @@ use frame_support::sp_runtime::app_crypto::sp_core::H256;
 use frame_support::{
     dispatch::Vec,
     sp_runtime::traits::{BlakeTwo256, Hash},
+    RuntimeDebug,
 };
+// use sp_runtime::RuntimeDebug;
 
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-#[derive(Clone, Encode, Decode, Eq, PartialEq, Hash)] //RuntimeDebug,
+#[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, Hash)]
 pub struct TokenInstance {
     pub id: u64,
     pub name: Vec<u8>,

@@ -13,16 +13,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// Author(s): A. Altonen
+// Author(s): A. Altonen, Anton Sinitsyn
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use frame_support::inherent::Vec;
-use pallet_utxo_tokens::TokenListData;
+// use pallet_utxo_tokens::TokenListData;
 
 sp_api::decl_runtime_apis! {
     pub trait UtxoApi {
         fn send() -> u32;
         fn token_create(name: Vec<u8>, ticker: Vec<u8>, supply: u128) -> u64;
-        fn tokens_list() -> TokenListData;
+        fn tokens_list() -> Vec<u8>;
     }
 }
