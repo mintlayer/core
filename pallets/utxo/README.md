@@ -10,39 +10,47 @@ To run the test cases, just run command `cargo test`.
 1. After running the core, declare the custom datatypes. GO to **Settings** > **Developer** tab and paste in the ff. JSON and then save:
 ```json
 {
-    "Value": "u128",
-    "ScriptPubKey": {
-        "type": "u8",
-        "script": "Vec<u8>",
-        "data": "Vec<u8>"
-    },
-    "TransactionInput": {
-        "outpoint": "Hash",
-        "sig_script": "Signature"
-    },
-    "TransactionOutput": {
-        "value": "Value",
-        "pub_key": "Hash",
-        "header": "TXOutputHeader",
-        "script": "ScriptPubKey"
-    },
-    "Transaction": {
-        "inputs": "Vec<TransactionInput>",
-        "outputs": "Vec<TransactionOutput>"
-    },
-    "Address": "MultiAddress",
-    "LookupSource": "MultiAddress",
-    "TXOutputHeader": "u16",
+  "Value": "u128",
+  "Destination": {
+    "_enum": {
+      "Pubkey": "Public",
+      "CreatePP": "DestinationCreatePP",
+      "CallPP": "DestinationCallPP"
+    }
+  },
+  "DestinationCreatePP": {
+    "code": "Vec<u8>",
+    "data": "Vec<u8>"
+  },
+  "DestinationCallPP": {
+    "dest_account": "AccountId",
+    "input_data": "Vec<u8>"
+  },
+  "TransactionInput": {
+    "outpoint": "Hash",
+    "lock": "Vec<u8>",
+    "witness": "Vec<u8>"
+  },
+  "TransactionOutput": {
     "value": "Value",
-    "pub_key": "H256",
     "header": "TXOutputHeader",
-    "Difficulty": "U256",
-    "DifficultyAndTimestamp": {
-        "difficulty": "Difficulty",
-        "timestamp": "Moment"
-    },
-    "Public": "H256"
-}
+    "destination": "Destination"
+  },
+  "TransactionOutputFor": "TransactionOutput",
+  "Transaction": {
+    "inputs": "Vec<TransactionInput>",
+    "outputs": "Vec<TransactionOutput>"
+  },
+  "TransactionFor": "Transaction",
+  "Address": "MultiAddress",
+  "LookupSource": "MultiAddress",
+  "TXOutputHeader": "u16",
+  "Difficulty": "U256",
+  "DifficultyAndTimestamp": {
+    "difficulty": "Difficulty",
+    "timestamp": "Moment"
+  },
+  "Public": "H256"
 }
 ```
 2. To confirm that Alice already has UTXO at genesis, go to **Developer** > **Chain state** > **Storage**.  
@@ -58,10 +66,11 @@ Click the **+** button on the right. It should show:
 ```
 3. Let's spend 50 of Alice's utxo to Bob. Go to **Developer** > **Extrinsics**.  
 Choose `utxo` for _submit the following extrinsic_ dropdown. Input the ff. parameters (and then submit transaction):  
-    * outpoint: `0xa74e4bcf318ae52c20d8776298e3c6ab6907bcabda7a669213d33e5076178bce`  
-    * sigscript: `0xe07952db7bf4da97aed2098304c729b8f6b1d7a39abd3c1162d18ea8ee3f772ee3d7b64c7fdf0ec7cf4cacedcf9387ad2a2b03ea98f1e432fa3d35f9d9d9ed8a`  
-    * value: `50`  
-    * pubkey: `0x8eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a48`
+    * outpoint: `0x549bd1814a1e714aa4cd96f53fed26676021741d68e48a4c214d02aa13571304`
+    * lock: `0x` (empty byte string)
+    * witness (signature): `0x7860d0e15cb0dbc98c713857b334aa0fbe1c11cb7daeca09ec4b87928c9dbb34e78aea9cb5818b601c2088751477c0d3b90cd28fffc50c51a39791b8f5d3da83`
+    * value: `50`
+    * destination: Pubkey: `0x8eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a48`
 4. Wait for the upper right corner to change from 
 ```
 utxo.spend

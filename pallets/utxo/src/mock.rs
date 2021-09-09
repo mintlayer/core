@@ -24,7 +24,7 @@ use frame_support::{
     sp_io::TestExternalities,
     sp_runtime::{
         testing::Header,
-        traits::{BlakeTwo256, IdentityLookup},
+        traits::{BlakeTwo256, Hash, IdentityLookup},
     },
     traits::GenesisBuild,
 };
@@ -37,18 +37,18 @@ use sp_core::{
 };
 use sp_keystore::{testing::KeyStore, KeystoreExt, SyncCryptoStore};
 
-// need to manually import this crate since its no include by default
-use hex_literal::hex;
-
 pub type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 pub type Block = frame_system::mocking::MockBlock<Test>;
 
 pub const ALICE_PHRASE: &str =
     "news slush supreme milk chapter athlete soap sausage put clutch what kitten";
 
-// BlakeHash of TransactionOutput::new(100, H256::from(alice_pub_key)) in fn new_test_ext()
-pub const GENESIS_UTXO: [u8; 32] =
-    hex!("0a08a0ef477ab5416c15bda44ff1938279e1677569b0cccaf73f0d30f4e935cb");
+pub fn genesis_utxo() -> [u8; 32] {
+    let keystore = KeyStore::new();
+    let alice_pub_key = create_pub_key(&keystore, ALICE_PHRASE);
+    let output = TransactionOutput::<u64>::new(100, H256::from(alice_pub_key));
+    BlakeTwo256::hash_of(&output).into()
+}
 
 // Dummy programmable pool for testing
 pub struct MockPool<T>(PhantomData<T>);
