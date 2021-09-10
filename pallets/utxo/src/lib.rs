@@ -123,7 +123,7 @@ pub mod pallet {
         }
 
         /// New input with empty `lock` and `witness` to be filled later.
-        pub fn new_clean(outpoint: H256) -> Self {
+        pub fn new_empty(outpoint: H256) -> Self {
             Self {
                 outpoint,
                 lock: Vec::new(),
@@ -190,7 +190,7 @@ pub mod pallet {
             }
         }
 
-        /// Create a new output to create a smart contract.
+        /// Create a new output to call a smart contract routine.
         pub fn new_call_pp(value: Value, dest_account: AccountId, input: Vec<u8>) -> Self {
             Self {
                 value,
@@ -239,6 +239,13 @@ pub mod pallet {
         > {
             ensure!((self.outputs.len() as u32) < u32::MAX, "too many outputs");
             Ok(self.outputs.iter().enumerate().map(|(ix, out)| (ix as u64, out)))
+        }
+    }
+
+    impl<AccountId: Encode> Transaction<AccountId> {
+        /// Get hash of output at given index.
+        pub fn outpoint(&self, index: u64) -> H256 {
+            BlakeTwo256::hash_of(&(self, index)).into()
         }
     }
 
@@ -437,7 +444,7 @@ pub mod pallet {
             match output.destination {
                 Destination::Pubkey(_) => {
                     ensure!(output.value > 0, "output value must be nonzero");
-                    let hash = BlakeTwo256::hash_of(&(&tx, output_index));
+                    let hash = tx.outpoint(output_index);
                     ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
                     new_utxos.push(hash.as_fixed_bytes().to_vec());
                 }
@@ -492,7 +499,7 @@ pub mod pallet {
         for (index, output) in tx.enumerate_outputs()? {
             match &output.destination {
                 Destination::Pubkey(_) => {
-                    let hash = BlakeTwo256::hash_of(&(&tx, index));
+                    let hash = tx.outpoint(index);
                     log::debug!("inserting to UtxoStore {:?} as key {:?}", output, hash);
                     <UtxoStore<T>>::insert(hash, Some(output));
                 }

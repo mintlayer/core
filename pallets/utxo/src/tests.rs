@@ -28,7 +28,7 @@ use frame_support::{
 use sp_core::{sp_std::vec, sr25519::Public, testing::SR25519, H256, H512};
 
 fn tx_input_gen_no_signature() -> TransactionInput {
-    TransactionInput::new_clean(H256::from(genesis_utxo()))
+    TransactionInput::new_empty(H256::from(genesis_utxo()))
 }
 
 fn execute_with_alice<F>(mut execute: F)
@@ -62,7 +62,7 @@ fn test_unchecked_2nd_output() {
         tx1.inputs[0].witness = alice_sig1.0.to_vec();
 
         // Calculate output 1 hash.
-        let utxo1_hash = BlakeTwo256::hash_of(&(&tx1, 1u64));
+        let utxo1_hash = tx1.outpoint(1);
         // Now artificially insert utxo1 (that pays to a pubkey) to the output set.
         UtxoStore::<Test>::insert(utxo1_hash, Some(&tx1.outputs[1]));
         // When adding a transaction, the output should be reported as already present.
@@ -81,7 +81,7 @@ fn test_simple_tx() {
 
         let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx.encode()).unwrap();
         tx.inputs[0].witness = alice_sig.0.to_vec();
-        let new_utxo_hash = BlakeTwo256::hash_of(&(&tx, 0 as u64));
+        let new_utxo_hash = tx.outpoint(0);
 
         let init_utxo = genesis_utxo();
         assert!(UtxoStore::<Test>::contains_key(H256::from(init_utxo)));
@@ -98,7 +98,7 @@ fn attack_with_sending_to_own_account() {
     test_ext.execute_with(|| {
         // Karl wants to send himself a new utxo of value 50 out of thin air.
         let mut tx = Transaction {
-            inputs: vec![TransactionInput::new_clean(H256::zero())],
+            inputs: vec![TransactionInput::new_empty(H256::zero())],
             outputs: vec![TransactionOutput::new_pubkey(50, H256::from(karl_pub_key))],
         };
 
@@ -252,11 +252,11 @@ fn tx_from_alice_to_karl() {
         tx.inputs[0].witness = alice_sig.0.to_vec();
 
         assert_ok!(Utxo::spend(Origin::signed(0), tx.clone()));
-        let new_utxo_hash = BlakeTwo256::hash_of(&(&tx, 1 as u64));
+        let new_utxo_hash = tx.outpoint(1);
 
         // then send rest of the tokens to karl (proving that the first tx was successful)
         let mut tx = Transaction {
-            inputs: vec![TransactionInput::new_clean(new_utxo_hash)],
+            inputs: vec![TransactionInput::new_empty(new_utxo_hash)],
             outputs: vec![TransactionOutput::new_pubkey(90, H256::from(karl_pub_key))],
         };
 
