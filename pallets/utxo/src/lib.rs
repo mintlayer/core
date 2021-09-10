@@ -113,11 +113,21 @@ pub mod pallet {
     }
 
     impl TransactionInput {
-        pub fn new(outpoint: H256, sig_script: H512) -> Self {
+        /// New input with a signature in the `witness` field.
+        pub fn new_with_signature(outpoint: H256, sig_script: H512) -> Self {
             Self {
                 outpoint,
                 lock: Vec::new(),
                 witness: (&sig_script[..]).to_vec(),
+            }
+        }
+
+        /// New input with empty `lock` and `witness` to be filled later.
+        pub fn new_clean(outpoint: H256) -> Self {
+            Self {
+                outpoint,
+                lock: Vec::new(),
+                witness: Vec::new(),
             }
         }
     }
@@ -163,7 +173,7 @@ pub mod pallet {
         /// token type for both the value and fee is MLT,
         /// and the signature method is BLS.
         /// functions are available in TXOutputHeaderImpls to update the header.
-        pub fn new(value: Value, pub_key: H256) -> Self {
+        pub fn new_pubkey(value: Value, pub_key: H256) -> Self {
             Self {
                 value,
                 header: 0,
@@ -177,6 +187,15 @@ pub mod pallet {
                 value,
                 header: 0,
                 destination: Destination::CreatePP(code, data),
+            }
+        }
+
+        /// Create a new output to create a smart contract.
+        pub fn new_call_pp(value: Value, dest_account: AccountId, input: Vec<u8>) -> Self {
+            Self {
+                value,
+                header: 0,
+                destination: Destination::CallPP(dest_account, input),
             }
         }
     }
@@ -286,7 +305,7 @@ pub mod pallet {
         for authority in auths {
             // TODO: where do we get the header info?
             // TODO: are the rewards always of MLT token type?
-            let utxo = TransactionOutput::new(share_value, *authority);
+            let utxo = TransactionOutput::new_pubkey(share_value, *authority);
 
             let hash = {
                 let b_num = block_number.saturated_into::<u64>();
@@ -568,8 +587,8 @@ where
         spend::<T>(
             caller,
             &Transaction {
-                inputs: vec![TransactionInput::new(utxo, sig)],
-                outputs: vec![TransactionOutputFor::<T>::new(value, address)],
+                inputs: vec![TransactionInput::new_with_signature(utxo, sig)],
+                outputs: vec![TransactionOutputFor::<T>::new_pubkey(value, address)],
             },
         )
     }

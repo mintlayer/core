@@ -46,7 +46,7 @@ pub const ALICE_PHRASE: &str =
 pub fn genesis_utxo() -> [u8; 32] {
     let keystore = KeyStore::new();
     let alice_pub_key = create_pub_key(&keystore, ALICE_PHRASE);
-    let output = TransactionOutput::<u64>::new(100, H256::from(alice_pub_key));
+    let output = TransactionOutput::<u64>::new_pubkey(100, H256::from(alice_pub_key));
     BlakeTwo256::hash_of(&output).into()
 }
 
@@ -171,7 +171,7 @@ pub fn new_test_ext() -> TestExternalities {
     let mut t = frame_system::GenesisConfig::default().build_storage::<Test>().unwrap();
 
     pallet_utxo::GenesisConfig::<Test> {
-        genesis_utxos: vec![TransactionOutput::new(100, H256::from(alice_pub_key))],
+        genesis_utxos: vec![TransactionOutput::new_pubkey(100, H256::from(alice_pub_key))],
         _marker: Default::default(),
     }
     .assimilate_storage(&mut t)
@@ -193,7 +193,7 @@ pub fn new_test_ext_and_keys() -> (TestExternalities, Public, Public) {
 
     let mut t = frame_system::GenesisConfig::default().build_storage::<Test>().unwrap();
     pallet_utxo::GenesisConfig::<Test> {
-        genesis_utxos: vec![TransactionOutput::new(100, H256::from(alice_pub_key))],
+        genesis_utxos: vec![TransactionOutput::new_pubkey(100, H256::from(alice_pub_key))],
         _marker: Default::default(),
     }
     .assimilate_storage(&mut t)
