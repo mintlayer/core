@@ -170,6 +170,15 @@ pub mod pallet {
                 destination: Destination::Pubkey(pub_key),
             }
         }
+
+        /// Create a new output to create a smart contract.
+        pub fn new_create_pp(value: Value, code: Vec<u8>, data: Vec<u8>) -> Self {
+            Self {
+                value,
+                header: 0,
+                destination: Destination::CreatePP(code, data),
+            }
+        }
     }
 
     impl<AccountId> TXOutputHeaderImpls for TransactionOutput<AccountId> {
@@ -199,6 +208,19 @@ pub mod pallet {
     pub struct Transaction<AccountId> {
         pub(crate) inputs: Vec<TransactionInput>,
         pub(crate) outputs: Vec<TransactionOutput<AccountId>>,
+    }
+
+    impl<AccountId> Transaction<AccountId> {
+        /// Iterator over transaction outputs together with output indices
+        pub fn enumerate_outputs(
+            &self,
+        ) -> Result<
+            impl Iterator<Item = (u64, &TransactionOutput<AccountId>)> + ExactSizeIterator,
+            &'static str,
+        > {
+            ensure!((self.outputs.len() as u32) < u32::MAX, "too many outputs");
+            Ok(self.outputs.iter().enumerate().map(|(ix, out)| (ix as u64, out)))
+        }
     }
 
     // Transaction output type associated with given Config.
@@ -333,7 +355,6 @@ pub mod pallet {
 
         let mut total_input: Value = 0;
         let mut total_output: Value = 0;
-        let mut output_index: u64 = 0;
         let simple_tx = get_simple_transaction(tx);
 
         // In order to avoid race condition in network we maintain a list of required utxos for a tx
@@ -386,7 +407,7 @@ pub mod pallet {
         }
 
         // Check that outputs are valid
-        for output in tx.outputs.iter() {
+        for (output_index, output) in tx.enumerate_outputs()? {
             // Check the header is valid
             let res = output.validate_header();
             if let Err(e) = res {
@@ -398,7 +419,6 @@ pub mod pallet {
                 Destination::Pubkey(_) => {
                     ensure!(output.value > 0, "output value must be nonzero");
                     let hash = BlakeTwo256::hash_of(&(&tx, output_index));
-                    output_index = output_index.checked_add(1).ok_or("output index overflow")?;
                     ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
                     new_utxos.push(hash.as_fixed_bytes().to_vec());
                 }
@@ -450,8 +470,7 @@ pub mod pallet {
             <UtxoStore<T>>::remove(input.outpoint);
         }
 
-        let mut index: u64 = 0;
-        for output in &tx.outputs {
+        for (index, output) in tx.enumerate_outputs()? {
             match &output.destination {
                 Destination::Pubkey(_) => {
                     let hash = BlakeTwo256::hash_of(&(&tx, index));
@@ -465,7 +484,6 @@ pub mod pallet {
                     call::<T>(caller, acct_id, data);
                 }
             }
-            index = index.checked_add(1).ok_or("output index overflow")?;
         }
 
         Ok(().into())
