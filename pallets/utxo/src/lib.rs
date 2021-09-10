@@ -242,6 +242,13 @@ pub mod pallet {
         }
     }
 
+    impl<AccountId: Encode> Transaction<AccountId> {
+        /// Get hash of output at given index.
+        pub fn outpoint(&self, index: u64) -> H256 {
+            BlakeTwo256::hash_of(&(self, index)).into()
+        }
+    }
+
     // Transaction output type associated with given Config.
     #[allow(type_alias_bounds)]
     pub type TransactionOutputFor<T: Config> = TransactionOutput<T::AccountId>;
@@ -437,7 +444,7 @@ pub mod pallet {
             match output.destination {
                 Destination::Pubkey(_) => {
                     ensure!(output.value > 0, "output value must be nonzero");
-                    let hash = BlakeTwo256::hash_of(&(&tx, output_index));
+                    let hash = tx.outpoint(output_index);
                     ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
                     new_utxos.push(hash.as_fixed_bytes().to_vec());
                 }
@@ -492,7 +499,7 @@ pub mod pallet {
         for (index, output) in tx.enumerate_outputs()? {
             match &output.destination {
                 Destination::Pubkey(_) => {
-                    let hash = BlakeTwo256::hash_of(&(&tx, index));
+                    let hash = tx.outpoint(index);
                     log::debug!("inserting to UtxoStore {:?} as key {:?}", output, hash);
                     <UtxoStore<T>>::insert(hash, Some(output));
                 }

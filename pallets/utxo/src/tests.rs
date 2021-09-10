@@ -62,7 +62,7 @@ fn test_unchecked_2nd_output() {
         tx1.inputs[0].witness = alice_sig1.0.to_vec();
 
         // Calculate output 1 hash.
-        let utxo1_hash = BlakeTwo256::hash_of(&(&tx1, 1u64));
+        let utxo1_hash = tx1.outpoint(1);
         // Now artificially insert utxo1 (that pays to a pubkey) to the output set.
         UtxoStore::<Test>::insert(utxo1_hash, Some(&tx1.outputs[1]));
         // When adding a transaction, the output should be reported as already present.
@@ -81,7 +81,7 @@ fn test_simple_tx() {
 
         let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx.encode()).unwrap();
         tx.inputs[0].witness = alice_sig.0.to_vec();
-        let new_utxo_hash = BlakeTwo256::hash_of(&(&tx, 0 as u64));
+        let new_utxo_hash = tx.outpoint(0);
 
         let init_utxo = genesis_utxo();
         assert!(UtxoStore::<Test>::contains_key(H256::from(init_utxo)));
@@ -252,7 +252,7 @@ fn tx_from_alice_to_karl() {
         tx.inputs[0].witness = alice_sig.0.to_vec();
 
         assert_ok!(Utxo::spend(Origin::signed(0), tx.clone()));
-        let new_utxo_hash = BlakeTwo256::hash_of(&(&tx, 1 as u64));
+        let new_utxo_hash = tx.outpoint(1);
 
         // then send rest of the tokens to karl (proving that the first tx was successful)
         let mut tx = Transaction {
