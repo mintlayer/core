@@ -28,11 +28,7 @@ use frame_support::{
 use sp_core::{sp_std::vec, sr25519::Public, testing::SR25519, H256, H512};
 
 fn tx_input_gen_no_signature() -> TransactionInput {
-    TransactionInput {
-        outpoint: H256::from(genesis_utxo()),
-        lock: Vec::new(),
-        witness: Vec::new(),
-    }
+    TransactionInput::new_clean(H256::from(genesis_utxo()))
 }
 
 fn execute_with_alice<F>(mut execute: F)
@@ -59,7 +55,7 @@ fn test_unchecked_2nd_output() {
             inputs: vec![tx_input_gen_no_signature()],
             outputs: vec![
                 TransactionOutput::new_create_pp(0, vec![], vec![]),
-                TransactionOutput::new(50, H256::from(alice_pub_key)),
+                TransactionOutput::new_pubkey(50, H256::from(alice_pub_key)),
             ],
         };
         let alice_sig1 = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx1.encode()).unwrap();
@@ -80,7 +76,7 @@ fn test_simple_tx() {
         // Alice wants to send herself a new utxo of value 50.
         let mut tx = Transaction {
             inputs: vec![tx_input_gen_no_signature()],
-            outputs: vec![TransactionOutput::new(50, H256::from(alice_pub_key))],
+            outputs: vec![TransactionOutput::new_pubkey(50, H256::from(alice_pub_key))],
         };
 
         let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx.encode()).unwrap();
@@ -102,12 +98,8 @@ fn attack_with_sending_to_own_account() {
     test_ext.execute_with(|| {
         // Karl wants to send himself a new utxo of value 50 out of thin air.
         let mut tx = Transaction {
-            inputs: vec![TransactionInput {
-                outpoint: H256::zero(),
-                lock: Vec::new(),
-                witness: Vec::new(),
-            }],
-            outputs: vec![TransactionOutput::new(50, H256::from(karl_pub_key))],
+            inputs: vec![TransactionInput::new_clean(H256::zero())],
+            outputs: vec![TransactionOutput::new_pubkey(50, H256::from(karl_pub_key))],
         };
 
         let karl_sig = crypto::sr25519_sign(SR25519, &karl_pub_key, &tx.encode()).unwrap();
@@ -147,7 +139,7 @@ fn attack_by_double_counting_input() {
                 // a double spend of the same UTXO!
                 tx_input_gen_no_signature(),
             ],
-            outputs: vec![TransactionOutput::new(100, H256::from(alice_pub_key))],
+            outputs: vec![TransactionOutput::new_pubkey(100, H256::from(alice_pub_key))],
         };
 
         let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx.encode()).unwrap();
@@ -166,13 +158,12 @@ fn attack_by_double_counting_input() {
 fn attack_with_invalid_signature() {
     execute_with_alice(|alice_pub_key| {
         let tx = Transaction {
-            inputs: vec![TransactionInput {
-                outpoint: H256::from(genesis_utxo()),
-                lock: Vec::new(),
+            inputs: vec![TransactionInput::new_with_signature(
+                H256::from(genesis_utxo()),
                 // Just a random signature!
-                witness: H512::random().0.to_vec(),
-            }],
-            outputs: vec![TransactionOutput::new(100, H256::from(alice_pub_key))],
+                H512::random(),
+            )],
+            outputs: vec![TransactionOutput::new_pubkey(100, H256::from(alice_pub_key))],
         };
 
         assert_err!(
@@ -188,7 +179,7 @@ fn attack_by_permanently_sinking_outputs() {
         let mut tx = Transaction {
             inputs: vec![tx_input_gen_no_signature()],
             //A 0 value output burns this output forever!
-            outputs: vec![TransactionOutput::new(0, H256::from(alice_pub_key))],
+            outputs: vec![TransactionOutput::new_pubkey(0, H256::from(alice_pub_key))],
         };
 
         let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx.encode()).unwrap();
@@ -207,9 +198,9 @@ fn attack_by_overflowing_value() {
         let mut tx = Transaction {
             inputs: vec![tx_input_gen_no_signature()],
             outputs: vec![
-                TransactionOutput::new(Value::MAX, H256::from(alice_pub_key)),
+                TransactionOutput::new_pubkey(Value::MAX, H256::from(alice_pub_key)),
                 // Attempts to do overflow total output value
-                TransactionOutput::new(10, H256::from(alice_pub_key)),
+                TransactionOutput::new_pubkey(10, H256::from(alice_pub_key)),
             ],
         };
 
@@ -226,9 +217,9 @@ fn attack_by_overspending() {
         let mut tx = Transaction {
             inputs: vec![tx_input_gen_no_signature()],
             outputs: vec![
-                TransactionOutput::new(100, H256::from(alice_pub_key)),
+                TransactionOutput::new_pubkey(100, H256::from(alice_pub_key)),
                 // Creates 2 new utxo out of thin air
-                TransactionOutput::new(2, H256::from(alice_pub_key)),
+                TransactionOutput::new_pubkey(2, H256::from(alice_pub_key)),
             ],
         };
 
@@ -252,8 +243,8 @@ fn tx_from_alice_to_karl() {
         let mut tx = Transaction {
             inputs: vec![tx_input_gen_no_signature()],
             outputs: vec![
-                TransactionOutput::new(10, H256::from(karl_pub_key)),
-                TransactionOutput::new(90, H256::from(alice_pub_key)),
+                TransactionOutput::new_pubkey(10, H256::from(karl_pub_key)),
+                TransactionOutput::new_pubkey(90, H256::from(alice_pub_key)),
             ],
         };
 
@@ -265,11 +256,10 @@ fn tx_from_alice_to_karl() {
 
         // then send rest of the tokens to karl (proving that the first tx was successful)
         let mut tx = Transaction {
-            inputs: vec![TransactionInput::new(new_utxo_hash, H512::zero())],
-            outputs: vec![TransactionOutput::new(90, H256::from(karl_pub_key))],
+            inputs: vec![TransactionInput::new_clean(new_utxo_hash)],
+            outputs: vec![TransactionOutput::new_pubkey(90, H256::from(karl_pub_key))],
         };
 
-        tx.inputs[0].witness = Vec::new();
         let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx.encode()).unwrap();
         tx.inputs[0].witness = alice_sig.0.to_vec();
 
@@ -283,7 +273,7 @@ fn test_reward() {
     execute_with_alice(|alice_pub_key| {
         let mut tx = Transaction {
             inputs: vec![tx_input_gen_no_signature()],
-            outputs: vec![TransactionOutput::new(90, H256::from(alice_pub_key))],
+            outputs: vec![TransactionOutput::new_pubkey(90, H256::from(alice_pub_key))],
         };
 
         let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx.encode()).unwrap();
@@ -305,7 +295,7 @@ fn test_script() {
     execute_with_alice(|alice_pub_key| {
         let mut tx = Transaction {
             inputs: vec![tx_input_gen_no_signature()],
-            outputs: vec![TransactionOutput::new(90, H256::from(alice_pub_key))],
+            outputs: vec![TransactionOutput::new_pubkey(90, H256::from(alice_pub_key))],
         };
 
         tx.outputs[0].destination = Destination::Pubkey(H256::zero());
