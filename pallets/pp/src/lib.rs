@@ -27,8 +27,8 @@ mod tests;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 
-use pp_api::ProgrammablePoolApi;
 use frame_support::{dispatch::Vec, weights::Weight};
+use pp_api::ProgrammablePoolApi;
 use sp_core::{crypto::UncheckedFrom, Bytes};
 
 #[frame_support::pallet]

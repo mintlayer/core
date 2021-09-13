@@ -16,24 +16,26 @@
 // Author(s): C. Yap
 use crate as pallet_utxo;
 use pallet_utxo::TransactionOutput;
-use contract_provider::ContractProvider;
+use pp_api::ProgrammablePoolApi;
 
+use frame_support::{dispatch::Vec, weights::Weight};
 use frame_support::{
     parameter_types,
     sp_io::TestExternalities,
     sp_runtime::{
         testing::Header,
-        traits::{BlakeTwo256, IdentityLookup},
+        traits::{BlakeTwo256, Hash, IdentityLookup},
     },
     traits::GenesisBuild,
 };
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-use sp_core::{sp_std::{vec, marker::PhantomData}, sr25519::Public, testing::SR25519, H256};
+use sp_core::{
+    sp_std::{marker::PhantomData, vec},
+    sr25519::Public,
+    testing::SR25519,
+    H256,
+};
 use sp_keystore::{testing::KeyStore, KeystoreExt, SyncCryptoStore};
-use frame_support::{dispatch::Vec, weights::Weight};
-
-// need to manually import this crate since its no include by default
-use hex_literal::hex;
 
 pub type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 pub type Block = frame_system::mocking::MockBlock<Test>;
@@ -41,14 +43,17 @@ pub type Block = frame_system::mocking::MockBlock<Test>;
 pub const ALICE_PHRASE: &str =
     "news slush supreme milk chapter athlete soap sausage put clutch what kitten";
 
-// BlakeHash of TransactionOutput::new(100, H256::from(alice_pub_key)) in fn new_test_ext()
-pub const GENESIS_UTXO: [u8; 32] =
-    hex!("0a08a0ef477ab5416c15bda44ff1938279e1677569b0cccaf73f0d30f4e935cb");
+pub fn genesis_utxo() -> [u8; 32] {
+    let keystore = KeyStore::new();
+    let alice_pub_key = create_pub_key(&keystore, ALICE_PHRASE);
+    let output = TransactionOutput::<u64>::new_pubkey(100, H256::from(alice_pub_key));
+    BlakeTwo256::hash_of(&output).into()
+}
 
 // Dummy programmable pool for testing
 pub struct MockPool<T>(PhantomData<T>);
 
-impl<T: frame_system::Config> ContractProvider for MockPool<T> {
+impl<T: frame_system::Config> ProgrammablePoolApi for MockPool<T> {
     type AccountId = u64;
 
     fn create(
@@ -63,8 +68,8 @@ impl<T: frame_system::Config> ContractProvider for MockPool<T> {
     fn call(
         _caller: &Self::AccountId,
         _dest: &Self::AccountId,
-		_gas_limit: Weight,
-		_input_data: &Vec<u8>,
+        _gas_limit: Weight,
+        _input_data: &Vec<u8>,
     ) -> Result<(), &'static str> {
         Ok(())
     }
@@ -128,9 +133,14 @@ impl pallet_timestamp::Config for Test {
     type WeightInfo = ();
 }
 
+parameter_types! {
+    pub const MaxAuthorities: u32 = 1000;
+}
+
 impl pallet_aura::Config for Test {
     type AuthorityId = AuraId;
     type DisabledValidators = ();
+    type MaxAuthorities = MaxAuthorities;
 }
 
 impl pallet_utxo::Config for Test {
@@ -158,12 +168,10 @@ pub fn new_test_ext() -> TestExternalities {
     let keystore = KeyStore::new(); // a key storage to store new key pairs during testing
     let alice_pub_key = create_pub_key(&keystore, ALICE_PHRASE);
 
-    let mut t = frame_system::GenesisConfig::default()
-        .build_storage::<Test>()
-        .unwrap();
+    let mut t = frame_system::GenesisConfig::default().build_storage::<Test>().unwrap();
 
     pallet_utxo::GenesisConfig::<Test> {
-        genesis_utxos: vec![TransactionOutput::new(100, H256::from(alice_pub_key))],
+        genesis_utxos: vec![TransactionOutput::new_pubkey(100, H256::from(alice_pub_key))],
         _marker: Default::default(),
     }
     .assimilate_storage(&mut t)
@@ -183,11 +191,9 @@ pub fn new_test_ext_and_keys() -> (TestExternalities, Public, Public) {
     let alice_pub_key = create_pub_key(&keystore, ALICE_PHRASE);
     let karl_pub_key = create_pub_key(&keystore, KARL_PHRASE);
 
-    let mut t = frame_system::GenesisConfig::default()
-        .build_storage::<Test>()
-        .unwrap();
+    let mut t = frame_system::GenesisConfig::default().build_storage::<Test>().unwrap();
     pallet_utxo::GenesisConfig::<Test> {
-        genesis_utxos: vec![TransactionOutput::new(100, H256::from(alice_pub_key))],
+        genesis_utxos: vec![TransactionOutput::new_pubkey(100, H256::from(alice_pub_key))],
         _marker: Default::default(),
     }
     .assimilate_storage(&mut t)

@@ -64,10 +64,7 @@ impl SignatureMethod {
         SignatureMethod::try_from(header & 7u16)
     }
 
-    pub(crate) fn insert(
-        header: &mut TXOutputHeader,
-        signature_method: SignatureMethod,
-    ) {
+    pub(crate) fn insert(header: &mut TXOutputHeader, signature_method: SignatureMethod) {
         *header = header.clone() & 0b1_111111_111111_000; // remove the original signature, if any.
         let signature_method = signature_method as u16;
         *header = header.clone() | signature_method;
@@ -89,10 +86,7 @@ impl TokenType {
         TokenType::try_from(header & 504u16)
     }
 
-    pub(crate) fn insert(
-        header: &mut TXOutputHeader,
-        token_type: TokenType,
-    ) {
+    pub(crate) fn insert(header: &mut TXOutputHeader, token_type: TokenType) {
         *header = header.clone() & 0b1_111111_000000_111; // remove original token type, if any.
         let token_type = token_type as u16;
         *header = header.clone() | token_type;
