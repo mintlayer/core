@@ -58,6 +58,12 @@ git = 'https://github.com/paritytech/substrate.git'
 version = '4.0.0-dev'
 branch = "master"
 
+[dependencies.pallet-balances]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+version = '4.0.0-dev'
+branch = "master"
+
 [dependencies.sp-core]
 default-features = false
 git = 'https://github.com/paritytech/substrate.git'

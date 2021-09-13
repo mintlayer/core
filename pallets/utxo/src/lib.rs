@@ -334,10 +334,10 @@ pub mod pallet {
         }
     }
 
-    pub fn call<T: Config>(caller: &T::AccountId, dest: &T::AccountId, data: &Vec<u8>) {
+    pub fn call<T: Config>(caller: &T::AccountId, dest: &T::AccountId, utxo: H256, value: u128, data: &Vec<u8>) {
         let weight: Weight = 6000000000;
 
-        match T::ProgrammablePool::call(caller, dest, weight, data) {
+        match T::ProgrammablePool::call(caller, dest, weight, utxo, value, data) {
             Ok(_) => log::info!("success!"),
             Err(e) => log::error!("failure: {:#?}", e),
         }
@@ -497,17 +497,18 @@ pub mod pallet {
         }
 
         for (index, output) in tx.enumerate_outputs()? {
+            let hash = tx.outpoint(index);
+            log::debug!("inserting to UtxoStore {:?} as key {:?}", output, hash);
+
             match &output.destination {
                 Destination::Pubkey(_) => {
-                    let hash = tx.outpoint(index);
-                    log::debug!("inserting to UtxoStore {:?} as key {:?}", output, hash);
                     <UtxoStore<T>>::insert(hash, Some(output));
                 }
                 Destination::CreatePP(script, data) => {
                     create::<T>(caller, script, &data);
                 }
                 Destination::CallPP(acct_id, data) => {
-                    call::<T>(caller, acct_id, data);
+                    call::<T>(caller, acct_id, hash, output.value, data);
                 }
             }
         }

@@ -27,19 +27,40 @@ mod tests;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 
-use frame_support::{dispatch::Vec, weights::Weight};
+use frame_support::sp_runtime::SaturatedConversion;
+pub use frame_support::{
+    construct_runtime,
+    inherent::Vec,
+    parameter_types,
+    sp_runtime::DispatchError,
+    traits::{
+        Currency, Everything, IsSubType, KeyOwnerProofSystem, LockableCurrency, Nothing,
+        Randomness, ReservableCurrency,
+    },
+    weights::{
+        constants::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight, WEIGHT_PER_SECOND},
+        Weight,
+    },
+    StorageValue,
+};
+use pallet_contracts::chain_extension::{
+    ChainExtension, Environment, Ext, InitState, RetVal, SysConfig,
+};
 use pp_api::ProgrammablePoolApi;
-use sp_core::{crypto::UncheckedFrom, Bytes};
+use sp_core::{crypto::UncheckedFrom, Bytes, H256};
 
 #[frame_support::pallet]
 pub mod pallet {
+    use frame_support::inherent::Vec;
     use frame_support::pallet_prelude::*;
     use frame_system::pallet_prelude::*;
     use sp_core::{H256, H512};
     use utxo_api::UtxoApi;
 
     #[pallet::config]
-    pub trait Config: frame_system::Config + pallet_contracts::Config {
+    pub trait Config:
+        frame_system::Config + pallet_contracts::Config + pallet_balances::Config
+    {
         type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
         type Utxo: UtxoApi<AccountId = Self::AccountId>;
     }
@@ -49,8 +70,25 @@ pub mod pallet {
     pub struct Pallet<T>(_);
 
     #[pallet::event]
-    #[pallet::metadata(T::AccountId = "AccountId")]
     pub enum Event<T: Config> {}
+
+    #[derive(
+        Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, RuntimeDebug, Hash, Default,
+    )]
+    pub struct ContractFundInfo<Balance> {
+        pub balance: Balance,
+        pub utxos: Vec<H256>,
+    }
+
+    #[pallet::storage]
+    #[pallet::getter(fn fundable_contracts)]
+    pub(super) type FundableContracts<T: Config> =
+        StorageMap<_, Identity, T::AccountId, Option<T::AccountId>, ValueQuery>;
+
+    #[pallet::storage]
+    #[pallet::getter(fn contract_info)]
+    pub(super) type ContractInfo<T: Config> =
+        StorageMap<_, Identity, T::AccountId, Option<ContractFundInfo<T::Balance>>, ValueQuery>;
 
     #[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {}
@@ -104,15 +142,37 @@ where
         let code = pallet_contracts_primitives::Code::Upload(Bytes(code.to_vec()));
         let endowment = pallet_contracts::Pallet::<T>::subsistence_threshold();
 
-        let _ = pallet_contracts::Pallet::<T>::bare_instantiate(
+        let addr = match pallet_contracts::Pallet::<T>::bare_instantiate(
             caller.clone(),
-            endowment * 100_u32.into(), // TODO
+            endowment * 2u32.into(),
             gas_limit,
             code,
             data.to_vec(),
             Vec::new(),
             false, // calculate rent projection
             true,  // enable debugging
+        )
+        .result
+        {
+            Ok(v) => v.account_id,
+            Err(e) => return Err("Failed to instantiate smart contract"),
+        };
+
+        // TODO: one level of indirection is needed here to allow the ownership of multiple smart contracts
+        // TODO: add selector? or derive new address for funding?
+
+        // contract owned by the caller (needed because contract is called using `caller` [it's a hack])
+        <FundableContracts<T>>::insert(caller, Some(addr.clone()));
+
+        // funding information of newly created contract
+        //
+        // TODO: save (value, utxo_hash) instead to allow coin picker algorithm to function more efficiently
+        <ContractInfo<T>>::insert(
+            addr,
+            Some(ContractFundInfo {
+                balance: 0u32.into(),
+                utxos: Vec::new(),
+            }),
         );
 
         Ok(())
@@ -120,16 +180,29 @@ where
 
     fn call(
         caller: &T::AccountId,
-        dest: &T::AccountId,
+        dest: &T::AccountId, // TODO this should be the fundable sub-address/selector
         gas_limit: Weight,
+        utxo_hash: H256,
+        utxo_value: u128,
         input_data: &Vec<u8>,
     ) -> Result<(), &'static str> {
-        let value = pallet_contracts::Pallet::<T>::subsistence_threshold();
+        let acc_id = match <FundableContracts<T>>::get(&dest) {
+            Some(v) => v,
+            None => {
+                log::error!("{:?} does not own any smart contracts!", caller);
+                return Err("No contracts");
+            }
+        };
 
-        let _ = pallet_contracts::Pallet::<T>::bare_call(
+        <ContractInfo<T>>::mutate(&acc_id, |info| {
+            info.as_mut().unwrap().balance += utxo_value.saturated_into();
+            info.as_mut().unwrap().utxos.push(utxo_hash);
+        });
+
+        let res = pallet_contracts::Pallet::<T>::bare_call(
             caller.clone(),
-            dest.clone(),
-            value * 0u32.into(),
+            acc_id,
+            0u32.into(),
             gas_limit,
             input_data.to_vec(),
             true, // enable debugging
