@@ -52,6 +52,29 @@ fn pubkey_commitment_hash() {
 }
 
 #[test]
+fn test_unchecked_2nd_output() {
+    execute_with_alice(|alice_pub_key| {
+        // Create and sign a transaction
+        let mut tx1 = Transaction {
+            inputs: vec![tx_input_gen_no_signature()],
+            outputs: vec![
+                TransactionOutput::new_create_pp(0, vec![], vec![]),
+                TransactionOutput::new(50, H256::from(alice_pub_key)),
+            ],
+        };
+        let alice_sig1 = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx1.encode()).unwrap();
+        tx1.inputs[0].witness = alice_sig1.0.to_vec();
+
+        // Calculate output 1 hash.
+        let utxo1_hash = BlakeTwo256::hash_of(&(&tx1, 1u64));
+        // Now artificially insert utxo1 (that pays to a pubkey) to the output set.
+        UtxoStore::<Test>::insert(utxo1_hash, Some(&tx1.outputs[1]));
+        // When adding a transaction, the output should be reported as already present.
+        assert_err!(Utxo::spend(Origin::signed(0), tx1), "output already exists");
+    })
+}
+
+#[test]
 fn test_simple_tx() {
     execute_with_alice(|alice_pub_key| {
         // Alice wants to send herself a new utxo of value 50.
