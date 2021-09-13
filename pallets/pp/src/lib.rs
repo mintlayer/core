@@ -211,3 +211,101 @@ where
         Ok(())
     }
 }
+
+use codec::Encode;
+
+// TODO: move elsewhere & rename
+fn test_func<T: Config>(value: &T::Balance) -> Vec<u8>
+where
+    T::Balance: Encode,
+{
+    value.encode()
+}
+
+impl<T: pallet_contracts::Config + pallet_balances::Config + pallet::Config> ChainExtension<T>
+    for Pallet<T>
+{
+    fn call<E: Ext>(func_id: u32, env: Environment<E, InitState>) -> Result<RetVal, DispatchError>
+    where
+        <E::T as SysConfig>::AccountId: UncheckedFrom<<E::T as SysConfig>::Hash> + AsRef<[u8]>,
+    {
+        match func_id {
+            1000 => {
+                let mut env = env.buf_in_buf_out();
+                let (acc_id, dest, value): (T::AccountId, T::AccountId, T::Balance) =
+                    env.read_as()?;
+
+                log::info!(
+                    "P2PKH: smart contract {:?} wants to transfer {:?} to address {:?}",
+                    acc_id,
+                    value,
+                    dest
+                );
+
+                let spendable = match <ContractInfo<T>>::get(&acc_id) {
+                    Some(v) => v,
+                    None => return Err(DispatchError::Other("Contract doesn't own any UTXO!")),
+                };
+
+                log::info!("contract owns: {:?} UTXO", spendable.balance);
+                let tmp = test_func::<T>(&spendable.balance);
+                log::info!("{:?} vs {:?}", spendable.balance, tmp);
+
+                if spendable.balance < value.saturated_into() {
+                    return Err(DispatchError::Other("Contract doesn't own enough UTXO!"));
+                }
+
+                // TODO use coin picking algorithm here?
+
+                // TODO: create ECTL TX using events?
+                // Self::deposit_event(Event::<T>::TransferInitiated(acc_id, dest, value));
+            }
+            1001 => {
+                let mut env = env.buf_in_buf_out();
+                let (acc_id, dest, value): (T::AccountId, T::AccountId, T::Balance) =
+                    env.read_as()?;
+
+                log::info!(
+                    "C2C: smart contract {:?} wants to transfer {:?} to address {:?}",
+                    acc_id,
+                    value,
+                    dest
+                );
+
+                // TODO: how to find the smart contract owner?
+            }
+            1002 => {
+                let mut env = env.buf_in_buf_out();
+                let acc_id: T::AccountId = env.read_as()?;
+
+                log::info!(
+                    "Balance: smart contract {:?} wants to check its balance",
+                    acc_id
+                );
+
+                let spendable = match <ContractInfo<T>>::get(&acc_id) {
+                    Some(v) => v,
+                    None => return Err(DispatchError::Other("Contract doesn't own any UTXO!")),
+                };
+
+                log::info!("contract owns: {:?} UTXO", spendable.balance);
+
+                let tmp = test_func::<T>(&spendable.balance);
+                log::info!("{:?} vs {:?}", spendable.balance, tmp);
+
+                // TODO: verify that this works
+                env.write(&test_func::<T>(&spendable.balance), false, None)
+                    .map_err(|_| DispatchError::Other("Failed to return value?"))?;
+            }
+            _ => {
+                log::error!("Called an unregistered `func_id`: {:}", func_id);
+                return Err(DispatchError::Other("Unimplemented func_id"));
+            }
+        }
+        Ok(RetVal::Converging(0))
+    }
+
+    fn enabled() -> bool {
+        true
+    }
+}

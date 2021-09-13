@@ -361,7 +361,7 @@ impl pallet_contracts::Config for Runtime {
     type SurchargeReward = SurchargeReward;
     type WeightPrice = pallet_transaction_payment::Pallet<Self>;
     type WeightInfo = pallet_contracts::weights::SubstrateWeight<Self>;
-    type ChainExtension = ();
+    type ChainExtension = pallet_pp::Pallet<Runtime>;
     type DeletionQueueDepth = DeletionQueueDepth;
     type DeletionWeightLimit = DeletionWeightLimit;
     type Call = Call;
