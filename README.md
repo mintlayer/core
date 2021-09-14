@@ -1,5 +1,8 @@
 # core
 
+#### Parity seems to hate Windows so this branch exists to try an ensure Mintlayer Core can always be built on Windows
+
+#### Never merge this branch into a working or dev branch - we will attempt to keep this branch in line with master but make no promises so you may need to merge into this branch
 
 Code base uses the substrate node v3.0.0 template as a base.
 More information can be found on substrate.dev
