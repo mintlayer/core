@@ -1,4 +1,3 @@
-
 name: build
 
 on:
@@ -6,6 +5,8 @@ on:
     branches:
       - master
       - staging
+  schedule:
+    - cron: '0 0 * * *'
 
 env:
   CARGO_TERM_COLOR: always
@@ -47,6 +48,25 @@ jobs:
       with:
         submodules: recursive
     - name: CheckL
+      run: cargo check
+      
+  check_w:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install nightly
+      uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: nightly-2021-08-01
+        target: wasm32-unknown-unknown
+        components: rustfmt
+        default: true
+    - name: Checkout repo
+      uses: actions/checkout@v2
+      with:
+        submodules: recursive
+    - name: CheckW
       run: cargo check
       
   build:
