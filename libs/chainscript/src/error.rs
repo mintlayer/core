@@ -40,6 +40,8 @@ pub enum Error {
     InvalidOperand,
     /// OP_*VERIFY failed verification or OP_RETURN was executed.
     VerifyFail,
+    /// Stack not clean after a script run.
+    StackNotClean,
     /// Signature is not in correct format.
     SignatureFormat,
     /// Pubkey is not in correct format.

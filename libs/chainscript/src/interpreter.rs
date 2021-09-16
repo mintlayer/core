@@ -48,6 +48,14 @@ impl<'a> Stack<'a> {
         Some(self.len()).filter(|&l| l >= num).ok_or(Error::NotEnoughElementsOnStack)
     }
 
+    /// Check the stack state represents a successful script verification.
+    pub fn verify(&self) -> crate::Result<()> {
+        match &self.0[..] {
+            [x] => script::read_scriptbool(x).then(|| ()).ok_or(Error::VerifyFail),
+            _ => Err(Error::StackNotClean),
+        }
+    }
+
     /// Pop an item off of the stack.
     fn pop(&mut self) -> crate::Result<Item<'a>> {
         self.0.pop().ok_or(Error::NotEnoughElementsOnStack)
