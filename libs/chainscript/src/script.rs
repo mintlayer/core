@@ -428,7 +428,6 @@ pub enum Instruction<'a> {
 /// Iterator over a script returning parsed opcodes
 pub struct Instructions<'a> {
     data: &'a [u8],
-    cur_subscript: &'a [u8],
     enforce_minimal: bool,
 }
 
@@ -436,7 +435,6 @@ impl<'a> Instructions<'a> {
     fn new(data: &'a [u8], enforce_minimal: bool) -> Self {
         Instructions {
             data,
-            cur_subscript: data,
             enforce_minimal,
         }
     }
@@ -448,9 +446,8 @@ impl<'a> Instructions<'a> {
         Some(Err(e))
     }
 
-    // Extract the script remainder
     pub fn subscript(&self) -> &'a [u8] {
-        self.cur_subscript
+        self.data
     }
 }
 
@@ -458,7 +455,6 @@ impl<'a> Iterator for Instructions<'a> {
     type Item = Result<Instruction<'a>, Error>;
 
     fn next(&mut self) -> Option<Result<Instruction<'a>, Error>> {
-        self.cur_subscript = self.data;
         if self.data.is_empty() {
             return None;
         }
