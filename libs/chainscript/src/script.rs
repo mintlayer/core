@@ -26,9 +26,9 @@
 //!
 //! This module provides the structures and functions needed to support scripts.
 
-use sp_std::prelude::*;
-
+use codec::{Decode, Encode};
 use core::{default::Default, fmt};
+use sp_std::prelude::*;
 
 use crate::{error::Error, opcodes};
 
@@ -36,9 +36,15 @@ use crate::{error::Error, opcodes};
 type PubkeyHash = [u8];
 type ScriptHash = [u8];
 
-#[derive(Clone, Default, PartialOrd, Ord, PartialEq, Eq, Hash)]
+#[derive(Clone, Default, PartialOrd, Ord, PartialEq, Eq, Hash, Encode)]
 /// A Bitcoin script
 pub struct Script(Box<[u8]>);
+
+impl Decode for Script {
+    fn decode<I: codec::Input>(input: &mut I) -> Result<Self, codec::Error> {
+        Vec::decode(input).map(Script::from)
+    }
+}
 
 impl AsRef<[u8]> for Script {
     fn as_ref(&self) -> &[u8] {

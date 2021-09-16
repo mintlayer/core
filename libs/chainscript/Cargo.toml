@@ -17,6 +17,8 @@ ripemd160 = { default-features = false, version = "0.9.1" }
 displaydoc = { default-features = false, version = "0.2" }
 
 # Substrate dependencies
+
+codec = { default-features = false, features = ['derive'], package = 'parity-scale-codec', version = '2.0.0' }
 sp-core = { default-features = false, version = '4.0.0-dev', git = 'https://github.com/paritytech/substrate.git', branch = 'master'}
 sp-io = {default-features = false, version = '4.0.0-dev', git = 'https://github.com/paritytech/substrate.git', branch = 'master'}
 sp-std = { default-features = false, version = '4.0.0-dev', git = 'https://github.com/paritytech/substrate.git', branch = 'master'}
@@ -32,6 +34,7 @@ proptest = "1.0.0"
 default = ['std', 'testcontext']
 testcontext = []
 std = [
+        "codec/std",
         "sp-io/std",
         "sp-core/std",
         "sp-std/std",
