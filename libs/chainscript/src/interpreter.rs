@@ -164,6 +164,33 @@ impl<'a> From<Vec<Item<'a>>> for Stack<'a> {
     }
 }
 
+/// Run given script limited to data push operations only.
+pub fn run_pushdata<'a, Ctx: Context>(ctx: &Ctx, script: &'a Script) -> crate::Result<Stack<'a>> {
+    if script.len() > Ctx::MAX_SCRIPT_SIZE {
+        return Err(Error::ScriptSize);
+    }
+    let mut stack = Stack::default();
+
+    for instr in script.instructions_iter(ctx.enforce_minimal_push()) {
+        let instr = instr?;
+        match instr {
+            Instruction::PushBytes(data) => {
+                ensure!(data.len() <= Ctx::MAX_SCRIPT_ELEMENT_SIZE, Error::PushSize);
+                stack.push(data.into());
+            }
+            Instruction::Op(opcode) => {
+                if let opcodes::Class::PushNum(x) = opcode.classify() {
+                    stack.push_int(x as i64)
+                } else {
+                    return Err(Error::PushOnly);
+                }
+            }
+        }
+    }
+
+    Ok(stack)
+}
+
 /// Run given script with given initial stack.
 ///
 /// Consumes the stack. Returns either an error or the final stack.
@@ -583,9 +610,11 @@ mod test {
         test_case(&[sig1, sig2, sig3, sig0][..], Ok(false));
     }
 
+    use prop::collection::vec as gen_vec;
+
     // Generate stack item as an array of bytes
     fn gen_item_bytes<'a>(num_bytes: Range<usize>) -> impl Strategy<Value = Item<'a>> {
-        prop::collection::vec(prop::num::u8::ANY, num_bytes).prop_map(|v| v.into())
+        gen_vec(prop::num::u8::ANY, num_bytes).prop_map(|v| v.into())
     }
 
     // Generate stack with given item generation strategy.
@@ -593,7 +622,7 @@ mod test {
         gen_item: impl Strategy<Value = Item<'a>>,
         size: impl Into<SizeRange>,
     ) -> impl Strategy<Value = Stack<'a>> {
-        prop::collection::vec(gen_item, size).prop_map(Stack)
+        gen_vec(gen_item, size).prop_map(Stack)
     }
 
     proptest! {
@@ -606,7 +635,7 @@ mod test {
         }
 
         #[test]
-        fn prop_exec_stack_push(items in prop::collection::vec(prop::bool::ANY, 0..9)) {
+        fn prop_exec_stack_push(items in gen_vec(prop::bool::ANY, 0..9)) {
             let mut exec_stack = ExecStack::default();
             items.iter().for_each(|i| exec_stack.push(*i));
 
@@ -619,8 +648,8 @@ mod test {
         }
 
         #[test]
-        fn prop_exec_stack_push_pop(items0 in prop::collection::vec(prop::bool::ANY, 0..9),
-                                    items1 in prop::collection::vec(prop::bool::ANY, 1..9)) {
+        fn prop_exec_stack_push_pop(items0 in gen_vec(prop::bool::ANY, 0..9),
+                                    items1 in gen_vec(prop::bool::ANY, 1..9)) {
             let mut exec_stack = ExecStack::default();
             items0.iter().for_each(|i| exec_stack.push(*i));
             let orig_exec_stack = exec_stack.clone();
@@ -729,6 +758,20 @@ mod test {
             execute_opcode(opcode, &mut stack).unwrap();
             // These opcodes should not fabricate elements out of thin air.
             prop_assert!(stack.0.iter().all(|item| orig_stack.0.iter().any(|i| i == item)));
+        }
+
+        #[test]
+        fn prop_pushdata_eq(data in gen_vec(gen_vec(prop::num::u8::ANY, 0..500), 0..20)) {
+            let mut builder = Builder::default();
+            for x in &data {
+                builder = builder.push_slice_minimal(&x);
+            }
+            let script = builder.into_script();
+            let stack0 = run_pushdata(&TestContext::default(), &script);
+            let stack1 = run_script(&TestContext::default(), &script, Stack::default());
+            prop_assert!(stack0.is_ok());
+            prop_assert_eq!(&stack0, &stack1);
+            prop_assert_eq!(stack0.unwrap().0, data);
         }
     }
 }

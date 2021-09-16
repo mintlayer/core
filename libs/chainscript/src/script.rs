@@ -578,6 +578,15 @@ impl Builder {
         self
     }
 
+    /// Adds instructions to push some arbitrary data onto the stack in minimal encoding
+    pub fn push_slice_minimal(self, data: &[u8]) -> Builder {
+        match data {
+            [129] => self.push_int(-1),
+            [x] if (1..=16).contains(x) => self.push_int(*x as i64),
+            _ => self.push_slice(data),
+        }
+    }
+
     /// Adds a single opcode to the script
     pub fn push_opcode(mut self, data: opcodes::All) -> Builder {
         self.0.push(data.into_u8());

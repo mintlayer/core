@@ -46,6 +46,8 @@ pub enum Error {
     PubkeyFormat,
     /// Push data too large.
     PushSize,
+    /// Non-push operation present in context where only data push opcodes are allowed.
+    PushOnly,
     /// Maximum script size exceeded.
     ScriptSize,
     /// Incorrect number of public keys for multisig
