@@ -12,5 +12,5 @@ the following modules:
 * `src/script.rs`
 * `src/util.rs`
 
-For more detailed docs, see the [module-leve comments](src/lib.rs) in the top-level module
+For more detailed docs, see the [module-level comments](src/lib.rs) in the top-level module
 or alternatively run `cargo doc --open`.
