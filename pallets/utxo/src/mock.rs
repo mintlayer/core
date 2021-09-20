@@ -148,6 +148,7 @@ impl pallet_utxo::Config for Test {
     type Call = Call;
     type WeightInfo = crate::weights::WeightInfo<Test>;
     type ProgrammablePool = MockPool<Test>;
+    type AssetId = u64;
 
     fn authorities() -> Vec<H256> {
         Aura::authorities()

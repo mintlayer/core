@@ -4,13 +4,7 @@
 use serde::{Deserialize, Serialize};
 
 use codec::{Decode, Encode};
-use frame_support::sp_runtime::app_crypto::sp_core::H256;
-use frame_support::{
-    dispatch::Vec,
-    sp_runtime::traits::{BlakeTwo256, Hash},
-    RuntimeDebug,
-};
-// use sp_runtime::RuntimeDebug;
+use frame_support::{dispatch::Vec, RuntimeDebug};
 
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 #[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, Hash)]
@@ -19,9 +13,10 @@ pub struct TokenInstance {
     pub name: Vec<u8>,
     pub ticker: Vec<u8>,
     pub supply: u128,
-    // pub number_format: NumberFormat,
-    // pub image: UUID,
-    // pub transaction: XXX,
+    // We can add another fields like:
+    //      pub number_format: NumberFormat,
+    //      pub image: UUID,
+    //      pub transaction: XXX,
 }
 
 impl Default for TokenInstance {
@@ -36,17 +31,13 @@ impl Default for TokenInstance {
 }
 
 impl TokenInstance {
-    pub fn new(name: Vec<u8>, ticker: Vec<u8>, supply: u128) -> Self {
+    pub fn new(id: u64, name: Vec<u8>, ticker: Vec<u8>, supply: u128) -> Self {
         Self {
-            id: 0, //BlakeTwo256::hash_of(&name).to_low_u64_le(),
+            id,
             name,
             ticker,
             supply,
         }
-    }
-
-    pub fn hash(&self) -> H256 {
-        BlakeTwo256::hash_of(&self.name)
     }
 }
 

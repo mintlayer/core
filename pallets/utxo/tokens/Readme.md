@@ -1,25 +1,20 @@
 # Token creation
 
+Call the extrinsic: 
 ```bash
-curl http://localhost:9933 -H "Content-Type:application/json;charset=utf-8" -d   '{
-  "jsonrpc":"2.0",
-  "id":1,
-  "method":"/v1/tokens/create",
-  "params": ["My Test Token", "MTT", 1000]
-}'
-
+* Creator - Alice 
+* Pubkey - 2e1e60ac02d5a716b300e83b04bb4ddd48360ea119f5024f0ea7b2b1c1578a52
+* Input - we will take Fee over here
+* Token name - any value
+* Token ticker - any value
+* Supply - any value
 ```
-
-# Issue new tokens
-# List of available tokens
-# Burn tokens 
-# List tokens 
 
 ```bash
 curl http://localhost:9933 -H "Content-Type:application/json;charset=utf-8" -d   '{
     "jsonrpc":"2.0",
     "id":1,
-    "method":"/v1/tokens/list",
+    "method":"tokens_list",
     "params": []
 }'
 ```

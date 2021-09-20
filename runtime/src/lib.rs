@@ -302,6 +302,7 @@ impl pallet_utxo::Config for Runtime {
     type Call = Call;
     type WeightInfo = pallet_utxo::weights::WeightInfo<Runtime>;
     type ProgrammablePool = pallet_pp::Pallet<Runtime>;
+    type AssetId = u64;
 
     fn authorities() -> Vec<H256> {
         Aura::authorities()
@@ -571,13 +572,13 @@ impl_runtime_apis! {
             Utxo::send()
         }
 
-        fn token_create(name: Vec<u8>, ticker: Vec<u8>, supply: u128) -> u64 {
-            Utxo::token_create(name, ticker, supply)
-        }
-
-        fn tokens_list() -> Vec<u8> {//pallet_utxo_tokens::TokenListData {
-            Utxo::tokens_list();
-            Vec::new()
+        // What means Vec<(u64, Vec<u8>)> ?
+        // At the moment we have some problems with use serde in RPC, we can serialize and deserialize
+        // only simple types. This approach allow us to return Vec<(TokenId, TokenName)> instead of
+        // pallet_utxo_tokens::TokenListData
+        fn tokens_list() -> Vec<(u64, Vec<u8>)> {
+            let list = Utxo::tokens_list();
+            list.into_iter().map(|x| (x.id, x.name)).collect()
         }
     }
 

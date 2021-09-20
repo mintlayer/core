@@ -18,7 +18,6 @@
 use jsonrpc_core::{Error as RpcError, ErrorCode, Result};
 use jsonrpc_derive::rpc;
 pub use pallet_utxo_rpc_runtime_api::UtxoApi as UtxoRuntimeApi;
-//use pallet_utxo_tokens::{TokenInstance, TokenListData};
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::HeaderBackend;
 use sp_runtime::{generic::BlockId, traits::Block as BlockT};
@@ -28,16 +27,13 @@ use std::sync::Arc;
 pub trait UtxoApi<BlockHash> {
     #[rpc(name = "utxo_send")]
     fn send(&self, at: Option<BlockHash>) -> Result<u32>;
-    #[rpc(name = "/v1/tokens/create")]
-    fn token_create(
-        &self,
-        at: Option<BlockHash>,
-        token_name: Vec<u8>,
-        token_ticker: Vec<u8>,
-        supply: u128,
-    ) -> Result<u64>;
-    #[rpc(name = "/v1/tokens/list")]
-    fn token_list(&self, at: Option<BlockHash>) -> Result<Vec<u8>>;
+
+    // What means Vec<(u64, Vec<u8>)> ?
+    // At the moment we have some problems with use serde in RPC, we can serialize and deserialize
+    // only simple types. This approach allow us to return Vec<(TokenId, TokenName)> instead of
+    // pallet_utxo_tokens::TokenListData
+    #[rpc(name = "tokens_list")]
+    fn tokens_list(&self, at: Option<BlockHash>) -> Result<Vec<(u64, Vec<u8>)>>;
 }
 
 /// A struct that implements the [`UtxoApi`].
@@ -62,6 +58,8 @@ pub enum Error {
     DecodeError = 1,
     /// The call to runtime failed.
     RuntimeError = 2,
+    /// The access to Storage failed
+    StorageError = 3,
 }
 
 impl<C, Block> UtxoApi<<Block as BlockT>::Hash> for Utxo<C, Block>
@@ -85,27 +83,7 @@ where
         })
     }
 
-    fn token_create(
-        &self,
-        at: Option<<Block as BlockT>::Hash>,
-        token_name: Vec<u8>,
-        token_ticker: Vec<u8>,
-        supply: u128,
-    ) -> Result<u64> {
-        let api = self.client.runtime_api();
-        let at = BlockId::hash(at.unwrap_or_else(||
-            // If the block hash is not supplied assume the best block.
-            self.client.info().best_hash));
-
-        let runtime_api_result = api.token_create(&at, token_name, token_ticker, supply);
-        runtime_api_result.map_err(|e| RpcError {
-            code: ErrorCode::ServerError(9876), // No real reason for this value
-            message: "Something wrong".into(),
-            data: Some(format!("{:?}", e).into()),
-        })
-    }
-
-    fn token_list(&self, at: Option<<Block as BlockT>::Hash>) -> Result<Vec<u8>> {
+    fn tokens_list(&self, at: Option<<Block as BlockT>::Hash>) -> Result<Vec<(u64, Vec<u8>)>> {
         let api = self.client.runtime_api();
         let at = BlockId::hash(at.unwrap_or_else(||
             // If the block hash is not supplied assume the best block.
@@ -113,7 +91,7 @@ where
 
         let runtime_api_result = api.tokens_list(&at);
         runtime_api_result.map_err(|e| RpcError {
-            code: ErrorCode::ServerError(9876), // No real reason for this value
+            code: ErrorCode::ServerError(Error::StorageError as i64),
             message: "Something wrong".into(),
             data: Some(format!("{:?}", e).into()),
         })
