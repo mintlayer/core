@@ -340,6 +340,8 @@ pub mod pallet {
             .map(|output| (OutputHeader::new(output.header).token_id(), output.value))
             .collect();
 
+        // If this is token creation call, then in out_vec we will have a token that doesn't registered yet
+
         let mut output_index: u64 = 0;
         let simple_tx = get_simple_transaction(tx);
 
@@ -546,10 +548,6 @@ pub mod pallet {
         amount: Value,
     ) -> DispatchResultWithPostInfo {
         // let dest = T::Lookup::lookup(dest)?;
-        //let fee = UtxoStore::<T>::get(input_for_fee.outpoint).unwrap().value;
-
-        // At least one of inputs shall have MLT for fee
-
         let tx = Transaction {
             inputs,
             outputs: crate::vec![
@@ -557,7 +555,6 @@ pub mod pallet {
                 TransactionOutput::new_tokens(token_id, amount, public),
             ],
         };
-
         spend::<T>(caller, &tx)?;
         Ok(().into())
     }
