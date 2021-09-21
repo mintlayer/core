@@ -253,9 +253,8 @@ pub fn run_script<'a, Ctx: Context>(
                     opcodes::AltStack::OP_TOALTSTACK => alt_stack.push(stack.pop()?),
                     opcodes::AltStack::OP_FROMALTSTACK => stack.push(alt_stack.pop()?),
                 },
-                opcodes::Class::Signature(sig_opcode) => {
+                opcodes::Class::Signature(sig_opcode) if executing => {
                     match sig_opcode {
-                        opcodes::Signature::OP_CODESEPARATOR => subscript = instr_iter.subscript(),
                         opcodes::Signature::OP_CHECKSIG | opcodes::Signature::OP_CHECKSIGVERIFY => {
                             let pubkey = stack.pop()?;
                             let sig = stack.pop()?;
@@ -302,6 +301,9 @@ pub fn run_script<'a, Ctx: Context>(
                     );
                 }
                 opcodes::Class::ControlFlow(cf) => match cf {
+                    opcodes::ControlFlow::OP_CODESEPARATOR => {
+                        subscript = instr_iter.subscript();
+                    }
                     opcodes::ControlFlow::OP_IF | opcodes::ControlFlow::OP_NOTIF => {
                         let cond = executing && {
                             let cond = match stack.pop()?.as_ref() {
@@ -584,6 +586,19 @@ mod test {
                 .push_opcode(OP_ENDIF)
                 .into_script(),
         );
+    }
+
+    #[test]
+    fn unit_checksig_not_executed() {
+        use opcodes::all::*;
+        let script = Builder::new()
+            .push_int(0)
+            .push_opcode(OP_IF)
+            .push_opcode(OP_CHECKSIGVERIFY)
+            .push_opcode(OP_ENDIF)
+            .into_script();
+        let result = run_script(&TestContext::default(), &script, vec![].into());
+        assert_eq!(result, Ok(vec![].into()));
     }
 
     #[test]
