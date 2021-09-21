@@ -54,7 +54,13 @@ pub trait Context {
     fn parse_pubkey(&self, pk: &[u8]) -> Option<Self::Public>;
 
     /// Verify signature.
-    fn verify_signature(&self, sig: &Self::Signature, pk: &Self::Public, subscript: &[u8]) -> bool;
+    fn verify_signature(
+        &self,
+        sig: &Self::Signature,
+        pk: &Self::Public,
+        subscript: &[u8],
+        codesep_idx: u32,
+    ) -> bool;
 
     /// Check absolute time lock.
     fn check_lock_time(&self, _lock_time: i64) -> bool {
@@ -124,6 +130,7 @@ pub mod testcontext {
             sig: &Self::Signature,
             pk: &Self::Public,
             subscript: &[u8],
+            _codesep_idx: u32,
         ) -> bool {
             let msg = sha256(&[&self.transaction[..], subscript].concat());
             sig.iter().zip(pk.iter()).zip(msg.iter()).all(|((&s, &p), &m)| (s ^ p ^ m) == 0)
