@@ -24,7 +24,7 @@ use frame_support::{
     sp_io::TestExternalities,
     sp_runtime::{
         testing::Header,
-        traits::{BlakeTwo256, IdentityLookup},
+        traits::{BlakeTwo256, Hash, IdentityLookup},
     },
     traits::GenesisBuild,
 };
@@ -37,18 +37,18 @@ use sp_core::{
 };
 use sp_keystore::{testing::KeyStore, KeystoreExt, SyncCryptoStore};
 
-// need to manually import this crate since its no include by default
-use hex_literal::hex;
-
 pub type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 pub type Block = frame_system::mocking::MockBlock<Test>;
 
 pub const ALICE_PHRASE: &str =
     "news slush supreme milk chapter athlete soap sausage put clutch what kitten";
 
-// BlakeHash of TransactionOutput::new(100, H256::from(alice_pub_key)) in fn new_test_ext()
-pub const GENESIS_UTXO: [u8; 32] =
-    hex!("2e1e60ac02d5a716b300e83b04bb4ddd48360ea119f5024f0ea7b2b1c1578a52");
+pub fn genesis_utxo() -> [u8; 32] {
+    let keystore = KeyStore::new();
+    let alice_pub_key = create_pub_key(&keystore, ALICE_PHRASE);
+    let output = TransactionOutput::<u64>::new_pubkey(100, H256::from(alice_pub_key));
+    BlakeTwo256::hash_of(&output).into()
+}
 
 // Dummy programmable pool for testing
 pub struct MockPool<T>(PhantomData<T>);
@@ -172,7 +172,7 @@ pub fn new_test_ext() -> TestExternalities {
     let mut t = frame_system::GenesisConfig::default().build_storage::<Test>().unwrap();
 
     pallet_utxo::GenesisConfig::<Test> {
-        genesis_utxos: vec![TransactionOutput::new(100, H256::from(alice_pub_key))],
+        genesis_utxos: vec![TransactionOutput::new_pubkey(100, H256::from(alice_pub_key))],
         _marker: Default::default(),
     }
     .assimilate_storage(&mut t)
@@ -194,7 +194,7 @@ pub fn new_test_ext_and_keys() -> (TestExternalities, Public, Public) {
 
     let mut t = frame_system::GenesisConfig::default().build_storage::<Test>().unwrap();
     pallet_utxo::GenesisConfig::<Test> {
-        genesis_utxos: vec![TransactionOutput::new(100, H256::from(alice_pub_key))],
+        genesis_utxos: vec![TransactionOutput::new_pubkey(100, H256::from(alice_pub_key))],
         _marker: Default::default(),
     }
     .assimilate_storage(&mut t)

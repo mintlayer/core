@@ -13,13 +13,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// Author(s): C. Yap
+// Author(s): C. Yap, L. Kuklinek
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
 pub use header::*;
 pub use pallet::*;
-pub use script::*;
 
 #[cfg(test)]
 mod mock;
@@ -31,7 +30,6 @@ mod tests;
 mod benchmarking;
 
 mod header;
-mod script;
 pub mod weights;
 
 #[frame_support::pallet]
@@ -39,6 +37,12 @@ pub mod pallet {
     use crate::TXOutputHeader;
     use crate::{OutputHeader, OutputHeaderHelper, TokenID};
     use crate::{ScriptPubKey, ScriptType};
+    use core::convert::TryInto;
+    use core::marker::PhantomData;
+    use hex_literal::hex;
+    #[cfg(feature = "std")]
+    use serde::{Deserialize, Serialize};
+
     use codec::{Decode, Encode};
     use core::marker::PhantomData;
     use frame_support::{
@@ -119,49 +123,122 @@ pub mod pallet {
         fn tokens_create(u: u32) -> Weight;
     }
 
+    /// Transaction input
+    ///
+    /// The input contains two pieces of information used to unlock the funds being spent. The
+    /// first one is `lock` and is usually committed to in UTXO specifed by the `outpoint`. It
+    /// contains data used to protect the funds. The second one is `witness` that contains a proof
+    /// that redeemer is allowed to spend the funds. The `witness` field does not contribute to the
+    /// transaction ID hash to emulate the behaviour of SegWit.
+    ///
+    /// Both `lock` and `witness` are raw byte arrays. The exact interpretation depends on the
+    /// [Destination] kind of the UTXO being spent. A couple of examples:
+    ///
+    /// * `Destination::Pubkey(key)`
+    ///   * `lock` has to be empty
+    ///   * `witness` contains the signature for the transaction and given pubkey
+    /// * `Destination::ScriptHash(script_hash)` (P2SH, not yet implemented)
+    ///   * `lock` is the script fully expanded out, hash of `lock` has to match `script_hash`
+    ///   * `witness` is a script that generates the input to the `lock` script
     #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
     #[derive(
         Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, RuntimeDebug, Hash, Default,
     )]
     pub struct TransactionInput {
+        /// The output being spent
         pub(crate) outpoint: H256,
-        pub(crate) sig_script: H512,
+        /// The lock data
+        pub(crate) lock: Vec<u8>,
+        /// The witness data
+        pub(crate) witness: Vec<u8>,
     }
 
     impl TransactionInput {
-        pub fn new(outpoint: H256, sig_script: H512) -> Self {
+        /// New input with a signature in the `witness` field.
+        pub fn new_with_signature(outpoint: H256, sig_script: H512) -> Self {
             Self {
                 outpoint,
-                sig_script,
+                lock: Vec::new(),
+                witness: (&sig_script[..]).to_vec(),
+            }
+        }
+
+        /// New input with empty `lock` and `witness` to be filled later.
+        pub fn new_empty(outpoint: H256) -> Self {
+            Self {
+                outpoint,
+                lock: Vec::new(),
+                witness: Vec::new(),
             }
         }
     }
 
+    /// Destination specifies where a payment goes. Can be a pubkey hash, script, etc.
     #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-    #[derive(
-        Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, RuntimeDebug, Hash, Default,
-    )]
-    pub struct TransactionOutput {
-        pub(crate) value: Value,
-        pub(crate) pub_key: H256,
-        pub(crate) header: TXOutputHeader,
-        pub(crate) script: ScriptPubKey,
+    #[derive(Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, RuntimeDebug, Hash)]
+    pub enum Destination<AccountId> {
+        /// Plain pay-to-pubkey
+        Pubkey(H256),
+        /// Pay to fund a new programmable pool. Takes code and data.
+        CreatePP(Vec<u8>, Vec<u8>),
+        /// Pay to an existing contract. Takes a destination account and input data.
+        CallPP(AccountId, Vec<u8>),
     }
 
-    impl TransactionOutput {
+    impl<AccountId> Destination<AccountId> {
+        /// Hash of an empty byte array
+        const EMPTY: H256 = H256(hex!(
+            "0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8"
+        ));
+
+        /// Calculate lock commitment for given destination.
+        ///
+        /// The `lock` field of the input spending the UTXO has to match this hash.
+        pub fn lock_commitment(&self) -> &H256 {
+            // We always commit to empty lock for now.
+            &Self::EMPTY
+        }
+    }
+
+    /// Output of a transaction
+    #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+    #[derive(Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, RuntimeDebug, Hash)]
+    pub struct TransactionOutput<AccountId> {
+        pub(crate) value: Value,
+        pub(crate) header: TXOutputHeader,
+        pub(crate) destination: Destination<AccountId>,
+    }
+
+    impl<AccountId> TransactionOutput<AccountId> {
         /// By default the header is 0:
         /// token type for both the value and fee is MLT,
         /// and the signature method is BLS.
         /// functions are available in TXOutputHeaderImpls to update the header.
-        pub fn new(value: Value, pub_key: H256) -> Self {
+        pub fn new_pubkey(value: Value, pub_key: H256) -> Self {
             Self {
                 value,
-                pub_key,
                 header: 0,
-                script: ScriptPubKey::new(),
+                destination: Destination::Pubkey(pub_key),
             }
         }
 
+        /// Create a new output to create a smart contract.
+        pub fn new_create_pp(value: Value, code: Vec<u8>, data: Vec<u8>) -> Self {
+            Self {
+                value,
+                header: 0,
+                destination: Destination::CreatePP(code, data),
+            }
+        }
+
+        /// Create a new output to call a smart contract routine.
+        pub fn new_call_pp(value: Value, dest_account: AccountId, input: Vec<u8>) -> Self {
+            Self {
+                value,
+                header: 0,
+                destination: Destination::CallPP(dest_account, input),
+            }
+        }
         pub fn new_tokens(token_id: TokenID, value: Value, pub_key: H256) -> Self {
             let mut header = OutputHeader::new(0);
             header.set_token_id(token_id);
@@ -188,10 +265,38 @@ pub mod pallet {
 
     #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
     #[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, Hash, Default)]
-    pub struct Transaction {
+    pub struct Transaction<AccountId> {
         pub(crate) inputs: Vec<TransactionInput>,
-        pub(crate) outputs: Vec<TransactionOutput>,
+        pub(crate) outputs: Vec<TransactionOutput<AccountId>>,
     }
+
+    impl<AccountId> Transaction<AccountId> {
+        /// Iterator over transaction outputs together with output indices
+        pub fn enumerate_outputs(
+            &self,
+        ) -> Result<
+            impl Iterator<Item = (u64, &TransactionOutput<AccountId>)> + ExactSizeIterator,
+            &'static str,
+        > {
+            ensure!((self.outputs.len() as u32) < u32::MAX, "too many outputs");
+            Ok(self.outputs.iter().enumerate().map(|(ix, out)| (ix as u64, out)))
+        }
+    }
+
+    impl<AccountId: Encode> Transaction<AccountId> {
+        /// Get hash of output at given index.
+        pub fn outpoint(&self, index: u64) -> H256 {
+            BlakeTwo256::hash_of(&(self, index)).into()
+        }
+    }
+
+    // Transaction output type associated with given Config.
+    #[allow(type_alias_bounds)]
+    pub type TransactionOutputFor<T: Config> = TransactionOutput<T::AccountId>;
+
+    // Transaction type associated with given Config.
+    #[allow(type_alias_bounds)]
+    pub type TransactionFor<T: Config> = Transaction<T::AccountId>;
 
     #[pallet::storage]
     #[pallet::getter(fn token_list)]
@@ -208,18 +313,18 @@ pub mod pallet {
     #[pallet::storage]
     #[pallet::getter(fn utxo_store)]
     pub(super) type UtxoStore<T: Config> =
-        StorageMap<_, Blake2_256, H256, Option<TransactionOutput>, ValueQuery>;
+        StorageMap<_, Identity, H256, Option<TransactionOutputFor<T>>, ValueQuery>;
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     #[pallet::metadata(
-        T::AccountId = "AccountId",    //     T::Balance = "Balance",
+        T::AccountId = "AccountId",
         T::AssetId = "AssetId"
     )]
     pub enum Event<T: Config> {
         /// Some asset class was created. \[asset_id, creator and owner\]
         TokenCreated(u32, T::AccountId),
-        TransactionSuccess(Transaction),
+        TransactionSuccess(TransactionFor<T>),
     }
 
     #[pallet::hooks]
@@ -230,10 +335,12 @@ pub mod pallet {
     }
 
     // Strips a transaction of its Signature fields by replacing value with ZERO-initialized fixed hash.
-    pub fn get_simple_transaction(tx: &Transaction) -> Vec<u8> {
+    pub fn get_simple_transaction<AccountId: Encode + Clone>(
+        tx: &Transaction<AccountId>,
+    ) -> Vec<u8> {
         let mut trx = tx.clone();
         for input in trx.inputs.iter_mut() {
-            input.sig_script = H512::zero();
+            input.witness = Vec::new();
         }
         trx.encode()
     }
@@ -259,7 +366,7 @@ pub mod pallet {
         for authority in auths {
             // TODO: where do we get the header info?
             // TODO: are the rewards always of MLT token type?
-            let utxo = TransactionOutput::new(share_value, *authority);
+            let utxo = TransactionOutput::new_pubkey(share_value, *authority);
 
             let hash = {
                 let b_num = block_number.saturated_into::<u64>();
@@ -291,7 +398,7 @@ pub mod pallet {
     }
 
     pub fn validate_transaction<T: Config>(
-        tx: &Transaction,
+        tx: &TransactionFor<T>,
     ) -> Result<ValidTransaction, &'static str> {
         //ensure rather than assert to avoid panic
         //both inputs and outputs should contain at least 1 utxo
@@ -376,21 +483,40 @@ pub mod pallet {
         // Check that inputs are valid
         for input in tx.inputs.iter() {
             if let Some(input_utxo) = <UtxoStore<T>>::get(&input.outpoint) {
+                let lock_commitment = input_utxo.destination.lock_commitment();
                 ensure!(
-                    crypto::sr25519_verify(
-                        &SR25Sig::from_raw(*input.sig_script.as_fixed_bytes()),
-                        &simple_tx,
-                        &SR25Pub::from_h256(input_utxo.pub_key)
-                    ),
-                    "signature must be valid"
+                    &BlakeTwo256::hash(&input.lock) == lock_commitment,
+                    "Commitment does not match lock hash"
                 );
+
+                match input_utxo.destination {
+                    Destination::Pubkey(pubkey) => {
+                        let sig = (&input.witness[..])
+                            .try_into()
+                            .map_err(|_| "signature length incorrect")?;
+                        ensure!(
+                            crypto::sr25519_verify(
+                                &SR25Sig::from_raw(sig),
+                                &simple_tx,
+                                &SR25Pub::from_h256(pubkey)
+                            ),
+                            "signature must be valid"
+                        );
+                    }
+                    Destination::CreatePP(_, _) => {
+                        log::info!("TODO validate spending of OP_CREATE");
+                    }
+                    Destination::CallPP(_, _) => {
+                        log::info!("TODO validate spending of OP_CALL");
+                    }
+                }
             } else {
                 missing_utxos.push(input.outpoint.clone().as_fixed_bytes().to_vec());
             }
         }
 
         // Check that outputs are valid
-        for output in tx.outputs.iter() {
+        for (output_index, output) in tx.enumerate_outputs()? {
             // Check the header is valid
             let res = output.validate_header();
             if let Err(e) = res {
@@ -398,18 +524,17 @@ pub mod pallet {
             }
             ensure!(res.is_ok(), "header error. Please check the logs.");
 
-            match output.script.stype {
-                ScriptType::P2pkh => {
+            match output.destination {
+                Destination::Pubkey(_) => {
                     ensure!(output.value > 0, "output value must be nonzero");
-                    let hash = BlakeTwo256::hash_of(&(&tx, output_index));
-                    output_index = output_index.checked_add(1).ok_or("output index overflow")?;
+                    let hash = tx.outpoint(output_index);
                     ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
                     new_utxos.push(hash.as_fixed_bytes().to_vec());
                 }
-                ScriptType::OpCreate => {
+                Destination::CreatePP(_, _) => {
                     log::info!("TODO validate OP_CREATE");
                 }
-                ScriptType::OpCall => {
+                Destination::CallPP(_, _) => {
                     log::info!("TODO validate OP_CALL");
                 }
             }
@@ -453,11 +578,6 @@ pub mod pallet {
             }
 
             // Reward at the moment only in MLT
-            // if cfg!(test) {
-            //     println!("Verification...");
-            //     println!("{:?}", &inputs_sum);
-            //     println!("{:?}", &outputs_sum);
-            // }
             reward = if inputs_sum.contains_key(&(crate::TokenType::MLT as TokenID))
                 && outputs_sum.contains_key(&(crate::TokenType::MLT as TokenID))
             {
@@ -482,7 +602,7 @@ pub mod pallet {
     /// Where each utxo key is a hash of the entire transaction and its order in the TransactionOutputs vector
     pub fn update_storage<T: Config>(
         caller: &T::AccountId,
-        tx: &Transaction,
+        tx: &TransactionFor<T>,
         reward: Value,
     ) -> DispatchResultWithPostInfo {
         // Calculate new reward total
@@ -497,23 +617,18 @@ pub mod pallet {
             <UtxoStore<T>>::remove(input.outpoint);
         }
 
-        let mut index: u64 = 0;
-        for output in &tx.outputs {
-            match output.script.stype {
-                ScriptType::P2pkh => {
-                    let hash = BlakeTwo256::hash_of(&(&tx, index));
-                    index = index.checked_add(1).ok_or("output index overflow")?;
+        for (index, output) in tx.enumerate_outputs()? {
+            match &output.destination {
+                Destination::Pubkey(_) => {
+                    let hash = tx.outpoint(index);
                     log::debug!("inserting to UtxoStore {:?} as key {:?}", output, hash);
                     <UtxoStore<T>>::insert(hash, Some(output));
                 }
-                ScriptType::OpCreate => {
-                    create::<T>(caller, &output.script.script, &output.script.data);
+                Destination::CreatePP(script, data) => {
+                    create::<T>(caller, script, &data);
                 }
-                ScriptType::OpCall => {
-                    // TODO convert pubkey of tx to the destination (contract transaction), fix this
-                    let mut tmp = output.pub_key.as_bytes().clone();
-                    let id = T::AccountId::decode(&mut tmp).unwrap();
-                    call::<T>(caller, &id, &output.script.data);
+                Destination::CallPP(acct_id, data) => {
+                    call::<T>(caller, acct_id, data);
                 }
             }
         }
@@ -521,10 +636,13 @@ pub mod pallet {
         Ok(().into())
     }
 
-    pub fn spend<T: Config>(caller: &T::AccountId, tx: &Transaction) -> DispatchResultWithPostInfo {
+    pub fn spend<T: Config>(
+        caller: &T::AccountId,
+        tx: &TransactionFor<T>,
+    ) -> DispatchResultWithPostInfo {
         let tx_validity = validate_transaction::<T>(tx)?;
         ensure!(tx_validity.requires.is_empty(), "missing inputs");
-        update_storage::<T>(&caller, tx, tx_validity.priority as Value)?;
+        update_storage::<T>(caller, tx, tx_validity.priority as Value)?;
         Ok(().into())
     }
 
@@ -583,7 +701,10 @@ pub mod pallet {
     #[pallet::call]
     impl<T: Config> Pallet<T> {
         #[pallet::weight(T::WeightInfo::spend(tx.inputs.len().saturating_add(tx.outputs.len()) as u32))]
-        pub fn spend(origin: OriginFor<T>, tx: Transaction) -> DispatchResultWithPostInfo {
+        pub fn spend(
+            origin: OriginFor<T>,
+            tx: Transaction<T::AccountId>,
+        ) -> DispatchResultWithPostInfo {
             spend::<T>(&ensure_signed(origin)?, &tx)?;
             Self::deposit_event(Event::<T>::TransactionSuccess(tx));
             Ok(().into())
@@ -614,7 +735,7 @@ pub mod pallet {
 
     #[pallet::genesis_config]
     pub struct GenesisConfig<T: Config> {
-        pub genesis_utxos: Vec<TransactionOutput>,
+        pub genesis_utxos: Vec<TransactionOutputFor<T>>,
         pub _marker: PhantomData<T>,
     }
 
@@ -674,8 +795,8 @@ where
         spend::<T>(
             caller,
             &Transaction {
-                inputs: vec![crate::TransactionInput::new(utxo, sig)],
-                outputs: vec![crate::TransactionOutput::new(value, address)],
+                inputs: vec![TransactionInput::new_with_signature(utxo, sig)],
+                outputs: vec![TransactionOutputFor::<T>::new_pubkey(value, address)],
             },
         )
     }

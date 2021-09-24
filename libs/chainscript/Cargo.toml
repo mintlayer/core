@@ -1,0 +1,43 @@
+[package]
+authors = ['Lukas Kuklinek <lukas.kuklinek@mintlayer.com>']
+description = 'An interpreter for bitcoin script and its dialects'
+edition = '2018'
+name = 'chainscript'
+readme = 'README.md'
+version = '0.1.0'
+license = 'MIT'
+
+[package.metadata.docs.rs]
+targets = ['x86_64-unknown-linux-gnu']
+
+[dependencies]
+# external dependencies
+sha-1 = { default-features = false, version = "0.9.7" }
+ripemd160 = { default-features = false, version = "0.9.1" }
+displaydoc = { default-features = false, version = "0.2" }
+
+# Substrate dependencies
+
+codec = { default-features = false, features = ['derive'], package = 'parity-scale-codec', version = '2.0.0' }
+sp-core = { default-features = false, version = '4.0.0-dev', git = 'https://github.com/paritytech/substrate.git', branch = 'master'}
+sp-io = {default-features = false, version = '4.0.0-dev', git = 'https://github.com/paritytech/substrate.git', branch = 'master'}
+sp-std = { default-features = false, version = '4.0.0-dev', git = 'https://github.com/paritytech/substrate.git', branch = 'master'}
+frame-support = { default-features = false, version = '4.0.0-dev', git = 'https://github.com/paritytech/substrate.git', branch = 'master'}
+
+[dev-dependencies]
+# serde = '1.0.119'
+sp-runtime = {default-features = false, version = '4.0.0-dev', git = 'https://github.com/paritytech/substrate.git', branch = 'master'}
+hex-literal = "0.3.1"
+proptest = "1.0.0"
+
+[features]
+default = ['std', 'testcontext']
+testcontext = []
+std = [
+        "codec/std",
+        "sp-io/std",
+        "sp-core/std",
+        "sp-std/std",
+        "sp-runtime/std",
+        "frame-support/std",
+]
