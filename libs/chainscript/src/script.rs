@@ -584,7 +584,8 @@ impl Builder {
         self
     }
 
-    /// Adds instructions to push some arbitrary data onto the stack in minimal encoding
+    /// Adds instructions to push some arbitrary data onto the stack in minimal encoding when
+    /// interpreted as a byte array (numbers have a different minimal encoding).
     pub fn push_slice_minimal(self, data: &[u8]) -> Builder {
         match data {
             [129] => self.push_int(-1),

@@ -51,7 +51,7 @@
 #[macro_use]
 mod util;
 
-mod context;
+pub mod context;
 mod error;
 mod interpreter;
 pub mod opcodes;
