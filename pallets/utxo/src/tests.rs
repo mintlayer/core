@@ -16,7 +16,7 @@
 // Author(s): C. Yap
 
 use crate::{
-    mock::*, Destination, RewardTotal, TransactionInput, ScriptType, TokenList, Transaction, TransactionInput, TransactionOutput,
+    mock::*, Destination, RewardTotal, TokenList, Transaction, TransactionInput, TransactionOutput,
     UtxoStore, Value,
 };
 use codec::Encode;
@@ -332,11 +332,11 @@ fn test_tokens() {
                 // 100 a new tokens
                 TransactionOutput::new_tokens(token_id, instance.supply, H256::from(alice_pub_key)),
                 // 20 MLT to be paid as a fee, 80 MLT returning
-                TransactionOutput::new(80, H256::from(alice_pub_key)),
+                TransactionOutput::new_pubkey(80, H256::from(alice_pub_key)),
             ],
         };
         let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &first_tx.encode()).unwrap();
-        first_tx.inputs[0].sig_script = H512::from(alice_sig);
+        first_tx.inputs[0].witness = alice_sig.0.to_vec();
         assert_ok!(Utxo::spend(Origin::signed(0), first_tx.clone()));
         // Store a new TokenInstance to the Storage
         <TokenList<Test>>::mutate(|x| {
@@ -354,8 +354,8 @@ fn test_tokens() {
 
         let mut tx = Transaction {
             inputs: vec![
-                TransactionInput::new(utxo_hash_mlt, H512::zero()),
-                TransactionInput::new(utxo_hash_token, H512::zero()),
+                TransactionInput::new_empty(utxo_hash_mlt),
+                TransactionInput::new_empty(utxo_hash_token),
             ],
             outputs: vec![TransactionOutput::new_tokens(token_id, 10, H256::from(karl_pub_key))],
         };
@@ -363,7 +363,7 @@ fn test_tokens() {
         let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx.encode()).unwrap();
         let sig_script = H512::from(alice_sig.clone());
         for input in tx.inputs.iter_mut() {
-            input.sig_script = sig_script;
+            input.witness = sig_script.0.to_vec();
         }
         assert_ok!(Utxo::spend(Origin::signed(0), tx.clone()));
     });

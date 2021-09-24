@@ -36,7 +36,6 @@ pub mod weights;
 pub mod pallet {
     use crate::TXOutputHeader;
     use crate::{OutputHeader, OutputHeaderHelper, TokenID};
-    use crate::{ScriptPubKey, ScriptType};
     use core::convert::TryInto;
     use core::marker::PhantomData;
     use hex_literal::hex;
@@ -44,7 +43,6 @@ pub mod pallet {
     use serde::{Deserialize, Serialize};
 
     use codec::{Decode, Encode};
-    use core::marker::PhantomData;
     use frame_support::{
         dispatch::{DispatchResultWithPostInfo, Vec},
         pallet_prelude::*,
@@ -55,8 +53,6 @@ pub mod pallet {
     use frame_system::pallet_prelude::*;
     use pallet_utxo_tokens::TokenListData;
     use pp_api::ProgrammablePoolApi;
-    #[cfg(feature = "std")]
-    use serde::{Deserialize, Serialize};
     use sp_core::{
         sp_std::collections::btree_map::BTreeMap,
         sr25519::{Public as SR25Pub, Signature as SR25Sig},
@@ -245,14 +241,11 @@ pub mod pallet {
             let header = header.as_u128();
             Self {
                 value,
-                pub_key,
                 header,
-                script: ScriptPubKey::new(),
+                destination: Destination::Pubkey(pub_key),
             }
         }
-    }
 
-    impl TransactionOutput {
         fn validate_header(&self) -> Result<(), &'static str> {
             // Check signature and token id
             self.header
@@ -317,10 +310,7 @@ pub mod pallet {
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
-    #[pallet::metadata(
-        T::AccountId = "AccountId",
-        T::AssetId = "AssetId"
-    )]
+    #[pallet::metadata(T::AccountId = "AccountId", T::AssetId = "AssetId")]
     pub enum Event<T: Config> {
         /// Some asset class was created. \[asset_id, creator and owner\]
         TokenCreated(u32, T::AccountId),
@@ -433,7 +423,7 @@ pub mod pallet {
             );
         }
 
-        let full_inputs: Vec<(crate::TokenID, TransactionOutput)> = tx
+        let full_inputs: Vec<(crate::TokenID, TransactionOutputFor<T>)> = tx
             .inputs
             .iter()
             .filter_map(|input| <UtxoStore<T>>::get(&input.outpoint))
@@ -464,8 +454,6 @@ pub mod pallet {
                 );
             }
         }
-
-        let mut output_index: u64 = 0;
         let simple_tx = get_simple_transaction(tx);
 
         // In order to avoid race condition in network we maintain a list of required utxos for a tx
@@ -681,7 +669,7 @@ pub mod pallet {
 
         // We shall make an output to return odd funds
         if fee > 100 {
-            tx.outputs.push(TransactionOutput::new(fee - 100, public));
+            tx.outputs.push(TransactionOutput::new_pubkey(fee - 100, public));
         }
 
         // Save in Store
