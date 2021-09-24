@@ -19,7 +19,35 @@ use crate::cli::{Cli, Subcommand};
 use crate::{chain_spec, service};
 use node_template_runtime::Block;
 use sc_cli::{ChainSpec, Role, RuntimeVersion, SubstrateCli};
+use sc_network::config::MultiaddrWithPeerId;
 use sc_service::PartialComponents;
+use std::error::Error;
+use std::time::Duration;
+use ureq::Agent;
+
+const BOOTNODE_LIST_URL: &str =
+    "https://raw.githubusercontent.com/mintlayer/core/master/assets/bootnodes.json";
+const HTTP_TIMEOUT: u64 = 3000;
+
+/// Fetch an up-to-date list of bootnodes from Github
+fn fetch_bootnode_list() -> Result<Vec<MultiaddrWithPeerId>, Box<dyn Error>> {
+    let agent: Agent = ureq::AgentBuilder::new()
+        .timeout_read(Duration::from_millis(HTTP_TIMEOUT))
+        .timeout_write(Duration::from_millis(HTTP_TIMEOUT))
+        .build();
+
+    let response: String = agent.get(BOOTNODE_LIST_URL).call()?.into_string()?;
+    let json: serde_json::Value = serde_json::from_str(&response)?;
+
+    let nodes = json["nodes"].as_array().ok_or("Invalid JSON")?;
+    let mut parsed_nodes: Vec<MultiaddrWithPeerId> = Vec::new();
+
+    for node in nodes.iter() {
+        parsed_nodes.push(node.as_str().ok_or("Invalid JSON")?.parse()?);
+    }
+
+    Ok(parsed_nodes)
+}
 
 impl SubstrateCli for Cli {
     fn impl_name() -> String {
@@ -146,7 +174,16 @@ pub fn run() -> sc_cli::Result<()> {
         }
         None => {
             let runner = cli.create_runner(&cli.run)?;
-            runner.run_node_until_exit(|config| async move {
+            runner.run_node_until_exit(|mut config| async move {
+                // if dev chainspec is not used, fetch an up-to-date bootnode list from Github
+                match config.chain_spec.id() {
+                    "dev" => {}
+                    _ => match fetch_bootnode_list() {
+                        Ok(mut bootnodes) => config.network.boot_nodes.append(&mut bootnodes),
+                        Err(e) => log::error!("Failed to update bootnode list: {:?}", e),
+                    },
+                }
+
                 match config.role {
                     Role::Light => service::new_light(config),
                     _ => service::new_full(config),
