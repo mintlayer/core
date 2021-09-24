@@ -18,7 +18,7 @@
 //! Chain script interpreter
 
 use crate::{
-    context::Context,
+    context::{Context, ParseResult},
     error::Error,
     opcodes,
     script::{self, Instruction, Script},
@@ -355,8 +355,6 @@ fn check_multisig<'a, Ctx: Context>(
 ) -> crate::Result<bool> {
     // Check each signature has its corresponding pubkey.
     while let Some(sig) = sigs.next() {
-        let sig = ctx.parse_signature(sig).ok_or(Error::SignatureFormat)?;
-        // Find pubkey matching this signature.
         loop {
             if pubkeys.len() < sigs.len() + 1 {
                 // Not enough pubkeys to cover all the remaining signatures.
@@ -364,9 +362,19 @@ fn check_multisig<'a, Ctx: Context>(
                 // signature being processed that has just been taken out of the iterator.
                 return Ok(false);
             }
-            let pubkey = ctx.parse_pubkey(pubkeys.next().unwrap()).ok_or(Error::PubkeyFormat)?;
-            if ctx.verify_signature(&sig, &pubkey, subscript, codesep_idx) {
-                break;
+            match ctx.parse_pubkey(pubkeys.next().unwrap()) {
+                // error -> quit immediately
+                ParseResult::Err => return Err(Error::PubkeyFormat),
+                // unrecognized pubkey type -> accept and continue
+                ParseResult::Reserved => break,
+                // parsed a pubkey -> check signature
+                ParseResult::Ok(pubkey) => {
+                    if let Some(sigdata) = ctx.parse_signature(pubkey, sig) {
+                        if ctx.verify_signature(&sigdata, subscript, codesep_idx) {
+                            break;
+                        }
+                    }
+                }
             }
         }
     }
