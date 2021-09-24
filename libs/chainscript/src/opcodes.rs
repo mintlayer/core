@@ -821,7 +821,7 @@ macro_rules! opcode_category {
 
 // Control flow opcodes
 opcode_category! {
-    ControlFlow -> OP_IF, OP_NOTIF, OP_ELSE, OP_ENDIF
+    ControlFlow -> OP_IF, OP_NOTIF, OP_ELSE, OP_ENDIF, OP_CODESEPARATOR
 }
 
 // Alt stack manipulation opcodes
@@ -832,8 +832,7 @@ opcode_category! {
 // Signature verification opcodes
 opcode_category! {
     Signature ->
-        OP_CHECKSIG, OP_CHECKSIGVERIFY, OP_CHECKMULTISIG, OP_CHECKMULTISIGVERIFY,
-        OP_CODESEPARATOR
+        OP_CHECKSIG, OP_CHECKSIGVERIFY, OP_CHECKMULTISIG, OP_CHECKMULTISIGVERIFY
 }
 
 // Pushdata opcodes

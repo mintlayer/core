@@ -48,6 +48,38 @@ fn pubkey_commitment_hash() {
 }
 
 #[test]
+fn test_script_preimage() {
+    use chainscript::{opcodes::all as opc, Builder};
+    execute_with_alice(|alice_pub_key| {
+        // Create a transaction that can be redeemed by revealing a preimage of a hash.
+        let password: &[u8] = "Hello!".as_bytes();
+        let password_hash = sp_core::hashing::sha2_256(&password);
+        let script = Builder::new()
+            .push_opcode(opc::OP_SHA256)
+            .push_slice(&password_hash)
+            .push_opcode(opc::OP_EQUAL)
+            .into_script();
+        let script_hash: H256 = BlakeTwo256::hash(script.as_ref());
+        let witness_script = Builder::new().push_slice(password).into_script();
+
+        let mut tx1 = Transaction {
+            inputs: vec![tx_input_gen_no_signature()],
+            outputs: vec![TransactionOutput::new_script_hash(50, script_hash)],
+        };
+        let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx1.encode()).unwrap();
+        tx1.inputs[0].witness = alice_sig.0.to_vec();
+
+        let tx2 = Transaction {
+            inputs: vec![TransactionInput::new_script(tx1.outpoint(0), script, witness_script)],
+            outputs: vec![TransactionOutput::new_script_hash(20, H256::zero())],
+        };
+
+        assert_ok!(Utxo::spend(Origin::signed(0), tx1));
+        assert_ok!(Utxo::spend(Origin::signed(0), tx2));
+    })
+}
+
+#[test]
 fn test_unchecked_2nd_output() {
     execute_with_alice(|alice_pub_key| {
         // Create and sign a transaction
