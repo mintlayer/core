@@ -117,7 +117,6 @@ pub mod pallet {
     pub trait WeightInfo {
         fn spend(u: u32) -> Weight;
         fn tokens_create(u: u32) -> Weight;
-        fn tokens_spend(u: u32) -> Weight;
     }
 
     #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
@@ -327,12 +326,15 @@ pub mod pallet {
             );
         }
 
-        let input_vec: Vec<(crate::TokenID, Value)> = tx
+        let full_inputs: Vec<(crate::TokenID, TransactionOutput)> = tx
             .inputs
             .iter()
             .filter_map(|input| <UtxoStore<T>>::get(&input.outpoint))
-            .map(|output| (OutputHeader::new(output.header).token_id(), output.value))
+            .map(|output| (OutputHeader::new(output.header).token_id(), output))
             .collect();
+
+        let input_vec: Vec<(crate::TokenID, Value)> =
+            full_inputs.iter().map(|output| (output.0, output.1.value)).collect();
 
         let out_vec: Vec<(crate::TokenID, Value)> = tx
             .outputs
@@ -340,7 +342,21 @@ pub mod pallet {
             .map(|output| (OutputHeader::new(output.header).token_id(), output.value))
             .collect();
 
-        // If this is token creation call, then in out_vec we will have a token that doesn't registered yet
+        // Check for token creation
+        let tokens_list = <TokenList<T>>::get();
+        for output in tx.outputs.iter() {
+            let tid = OutputHeader::new(output.header).token_id();
+            // If we have input and output for the same token it's not a problem
+            if full_inputs.iter().find(|&x| (x.0 == tid) && (x.1 != *output)).is_some() {
+                continue;
+            } else {
+                // But when we don't have an input for token but token id exist in TokenList it's appear vulnerability
+                ensure!(
+                    tokens_list.iter().find(|&x| x.id == tid).is_none(),
+                    "no inputs for the token id"
+                );
+            }
+        }
 
         let mut output_index: u64 = 0;
         let simple_tx = get_simple_transaction(tx);
@@ -418,20 +434,39 @@ pub mod pallet {
                 outputs_sum.insert(x.0, value);
             }
 
+            let mut new_token_exist = false;
             for output_token in &outputs_sum {
                 match inputs_sum.get(&output_token.0) {
                     Some(input_value) => ensure!(
                         input_value >= &output_token.1,
                         "output value must not exceed input value"
                     ),
-                    None => frame_support::fail!("input for the token not found"),
+                    None => {
+                        // If the transaction has one an output with a new token ID
+                        if new_token_exist {
+                            frame_support::fail!("input for the token not found")
+                        } else {
+                            new_token_exist = true;
+                        }
+                    }
                 }
             }
 
             // Reward at the moment only in MLT
-            reward = inputs_sum[&(crate::TokenType::MLT as TokenID)]
-                .checked_sub(outputs_sum[&(crate::TokenType::MLT as TokenID)])
-                .ok_or("reward underflow")?;
+            // if cfg!(test) {
+            //     println!("Verification...");
+            //     println!("{:?}", &inputs_sum);
+            //     println!("{:?}", &outputs_sum);
+            // }
+            reward = if inputs_sum.contains_key(&(crate::TokenType::MLT as TokenID))
+                && outputs_sum.contains_key(&(crate::TokenType::MLT as TokenID))
+            {
+                inputs_sum[&(crate::TokenType::MLT as TokenID)]
+                    .checked_sub(outputs_sum[&(crate::TokenType::MLT as TokenID)])
+                    .ok_or("reward underflow")?
+            } else {
+                *inputs_sum.get(&(crate::TokenType::MLT as TokenID)).ok_or("fee doesn't exist")?
+            }
         }
 
         Ok(ValidTransaction {
@@ -532,29 +567,15 @@ pub mod pallet {
         }
 
         // Save in Store
-        <TokenList<T>>::mutate(|x| x.push(instance));
+        <TokenList<T>>::mutate(|x| {
+            if x.iter().find(|&x| x.id == token_id).is_none() {
+                x.push(instance.clone())
+            } else {
+                panic!("the token has already existed with the same id")
+            }
+        });
 
         // Success
-        spend::<T>(caller, &tx)?;
-        Ok(().into())
-    }
-
-    pub fn tokens_spend<T: Config>(
-        caller: &T::AccountId,
-        public: H256,
-        inputs: Vec<TransactionInput>,
-        // dest: <T::Lookup as StaticLookup>::Source,
-        token_id: TokenID,
-        amount: Value,
-    ) -> DispatchResultWithPostInfo {
-        // let dest = T::Lookup::lookup(dest)?;
-        let tx = Transaction {
-            inputs,
-            outputs: crate::vec![
-                // Output a new tokens
-                TransactionOutput::new_tokens(token_id, amount, public),
-            ],
-        };
         spend::<T>(caller, &tx)?;
         Ok(().into())
     }
@@ -568,8 +589,7 @@ pub mod pallet {
             Ok(().into())
         }
 
-        #[pallet::weight(100)]
-        //T::WeightInfo::tokens_create(input_for_fee.len().saturating_add(100) as u32))]
+        #[pallet::weight(T::WeightInfo::tokens_create(768_usize.saturating_add(token_name.len()) as u32))]
         pub fn tokens_create(
             origin: OriginFor<T>,
             public: H256,
@@ -588,22 +608,6 @@ pub mod pallet {
                 supply,
             )?;
             Self::deposit_event(Event::<T>::TokenCreated(1u32, caller.clone()));
-            Ok(().into())
-        }
-
-        #[pallet::weight(100)]
-        // T::WeightInfo::tokens_spend(inputs.len().saturating_add(100) as u32))]
-        pub fn tokens_spend(
-            origin: OriginFor<T>,
-            public: H256,
-            inputs: Vec<TransactionInput>,
-            //dest: <T::Lookup as StaticLookup>::Source,
-            token_id: TokenID,
-            amount: Value,
-        ) -> DispatchResultWithPostInfo {
-            let caller = &ensure_signed(origin)?;
-            tokens_spend::<T>(caller, public, inputs, token_id, amount)?;
-            //Self::deposit_event(Event::<T>::TransactionSuccess(tx));
             Ok(().into())
         }
     }
@@ -634,7 +638,6 @@ pub mod pallet {
     }
 }
 
-use frame_support::inherent::Vec;
 use pallet_utxo_tokens::{TokenInstance, TokenListData};
 
 impl<T: Config> crate::Pallet<T> {
@@ -644,10 +647,6 @@ impl<T: Config> crate::Pallet<T> {
 
     pub fn tokens_list() -> TokenListData {
         <TokenList<T>>::get()
-    }
-
-    pub fn balance(_caller: &T::AccountId) -> Vec<TokenInstance> {
-        Vec::new()
     }
 }
 
