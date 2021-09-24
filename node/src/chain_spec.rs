@@ -141,25 +141,17 @@ fn testnet_genesis(
     endowed_utxos: Vec<sr25519::Public>,
     _enable_println: bool,
 ) -> GenesisConfig {
-    // This prints upon creation of the genesis block
-    println!("============ HELPER INPUTS FOR THE UI DEMO ============");
-    println!("OUTPOINT (Alice's UTXO Hash): 0x76584168d10a20084082ed80ec71e2a783abbb8dd6eb9d4893b089228498e9ff\n");
-    println!("SIGSCRIPT (Alice Signature on a transaction where she spends 50 utxo on Bob): 0x6ceab99702c60b111c12c2867679c5555c00dcd4d6ab40efa01e3a65083bfb6c6f5c1ed3356d7141ec61894153b8ba7fb413bf1e990ed99ff6dee5da1b24fd83\n");
-    println!("PUBKEY (Bob's public key hash): 0x8eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a48\n");
-    println!("NEW UTXO HASH in UTXOStore onchain: 0xdbc75ab8ee9b83dcbcea4695f9c42754d94e92c3c397d63b1bc627c2a2ef94e6\n");
-
-    //
-    // // only Alice contains 400 million coins.
-    // let genesis = endowed_utxos
-    //     .first()
-    //     .map(|x| {
-    //         // may need to create a const variable to represent 1_000 and 100_000_000
-    //         pallet_utxo::TransactionOutput::new(
-    //             1_000 * 100_000_000 * 400_000_000 as pallet_utxo::Value,
-    //             H256::from_slice(x.as_slice()),
-    //         )
-    //     })
-    //     .unwrap();
+    // only Alice contains 400 million coins.
+    let genesis = endowed_utxos
+        .first()
+        .map(|x| {
+            // may need to create a const variable to represent 1_000 and 100_000_000
+            pallet_utxo::TransactionOutput::new(
+                1_000 * 100_000_000 * 400_000_000 as pallet_utxo::Value,
+                H256::from_slice(x.as_slice()),
+            )
+        })
+        .unwrap();
 
     GenesisConfig {
         system: SystemConfig {
@@ -182,17 +174,7 @@ fn testnet_genesis(
             key: root_key,
         },
         utxo: UtxoConfig {
-            // genesis_utxos: vec![genesis],
-            // https://github.com/substrate-developer-hub/utxo-workshop/blob/cacc031f0de027de24f8dfa092fe9e386cefc31f/node/src/chain_spec.rs
-            genesis_utxos: endowed_utxos
-                .iter()
-                .map(|x| {
-                    pallet_utxo::TransactionOutput::new(
-                        100 as pallet_utxo::Value,
-                        H256::from_slice(x.as_slice()),
-                    )
-                })
-                .collect(),
+            genesis_utxos: vec![genesis],
             _marker: Default::default(),
         },
         pp: PpConfig {
