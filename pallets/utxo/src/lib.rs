@@ -36,16 +36,11 @@ pub mod weights;
 #[frame_support::pallet]
 pub mod pallet {
     use crate::TXOutputHeader;
-    use crate::{OutputHeader, OutputHeaderHelper, TokenID};
-    use core::convert::TryInto;
-    use core::marker::PhantomData;
-    use hex_literal::hex;
-    #[cfg(feature = "std")]
-    use serde::{Deserialize, Serialize};
-
-    use crate::{validate_header, SignatureMethod, TXOutputHeader, TXOutputHeaderImpls, TokenType};
+    use crate::{OutputHeaderData, OutputHeaderHelper, TokenID};
     use chainscript::Script;
     use codec::{Decode, Encode};
+    use core::convert::TryInto;
+    use core::marker::PhantomData;
     use frame_support::{
         dispatch::{DispatchResultWithPostInfo, Vec},
         pallet_prelude::*,
@@ -54,8 +49,11 @@ pub mod pallet {
         traits::IsSubType,
     };
     use frame_system::pallet_prelude::*;
+    use hex_literal::hex;
     use pallet_utxo_tokens::TokenListData;
     use pp_api::ProgrammablePoolApi;
+    #[cfg(feature = "std")]
+    use serde::{Deserialize, Serialize};
     use sp_core::{
         sp_std::collections::btree_map::BTreeMap,
         sr25519::{Public as SR25Pub, Signature as SR25Sig},
@@ -258,7 +256,7 @@ pub mod pallet {
         }
 
         pub fn new_tokens(token_id: TokenID, value: Value, pub_key: H256) -> Self {
-            let mut header = OutputHeader::new(0);
+            let mut header = OutputHeaderData::new(0);
             header.set_token_id(token_id);
             let header = header.as_u128();
             Self {
@@ -278,23 +276,7 @@ pub mod pallet {
         }
     }
 
-    impl<AccountId> TXOutputHeaderImpls for TransactionOutput<AccountId> {
-        fn set_token_type(&mut self, value_token_type: TokenType) {
-            TokenType::insert(&mut self.header, value_token_type);
-        }
-
-        fn set_signature_method(&mut self, signature_method: SignatureMethod) {
-            SignatureMethod::insert(&mut self.header, signature_method);
-        }
-
-        fn get_token_type(&self) -> Result<TokenType, &'static str> {
-            TokenType::extract(self.header)
-        }
-
-        fn get_signature_method(&self) -> Result<SignatureMethod, &'static str> {
-            SignatureMethod::extract(self.header)
-        }
-
+    impl<AccountId> TransactionOutput<AccountId> {
         fn validate_header(&self) -> Result<(), &'static str> {
             // Check signature and token id
             self.header
@@ -476,7 +458,7 @@ pub mod pallet {
             .inputs
             .iter()
             .filter_map(|input| <UtxoStore<T>>::get(&input.outpoint))
-            .map(|output| (OutputHeader::new(output.header).token_id(), output))
+            .map(|output| (OutputHeaderData::new(output.header).token_id(), output))
             .collect();
 
         let input_vec: Vec<(crate::TokenID, Value)> =
@@ -485,18 +467,23 @@ pub mod pallet {
         let out_vec: Vec<(crate::TokenID, Value)> = tx
             .outputs
             .iter()
-            .map(|output| (OutputHeader::new(output.header).token_id(), output.value))
+            .map(|output| {
+                (
+                    OutputHeaderData::new(output.header).token_id(),
+                    output.value,
+                )
+            })
             .collect();
 
         // Check for token creation
         let tokens_list = <TokenList<T>>::get();
         for output in tx.outputs.iter() {
-            let tid = OutputHeader::new(output.header).token_id();
+            let tid = OutputHeaderData::new(output.header).token_id();
             // If we have input and output for the same token it's not a problem
             if full_inputs.iter().find(|&x| (x.0 == tid) && (x.1 != *output)).is_some() {
                 continue;
             } else {
-                // But when we don't have an input for token but token id exist in TokenList it's appear vulnerability
+                // But when we don't have an input for token but token id exist in TokenList
                 ensure!(
                     tokens_list.iter().find(|&x| x.id == tid).is_none(),
                     "no inputs for the token id"
