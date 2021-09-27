@@ -694,8 +694,8 @@ pub mod pallet {
         sp_runtime::print(&token_id);
 
         // Input with MLT FEE
-        let fee = UtxoStore::<T>::get(input_for_fee.outpoint).unwrap().value;
-        ensure!(fee < 99, Error::<T>::Unapproved);
+        let fee = UtxoStore::<T>::get(input_for_fee.outpoint).ok_or(Error::<T>::Unapproved)?.value;
+        ensure!(fee >= 100, Error::<T>::Unapproved);
 
         // Save in UTXO
         let instance = crate::TokenInstance::new(token_id, token_name, token_ticker, supply);
