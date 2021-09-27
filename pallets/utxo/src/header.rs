@@ -63,14 +63,12 @@ struct BitsField {
     pub data: u128,
 }
 
-// Size of bit fields, total 72 bits
-const SIGNATURE_METHOD_SIZE: u32 = 3;
+// Size of bit fields, total 69 bits
 const TOKEN_ID_SIZE: u32 = 64;
 const VERSION_SIZE: u32 = 5;
 
 #[derive(Debug)]
 pub struct OutputHeaderData {
-    sign_method: BitsField,
     token_id: BitsField,
     version: BitsField,
     reserve: BitsField,
@@ -79,14 +77,6 @@ pub struct OutputHeaderData {
 impl OutputHeaderData {
     pub fn new(header: u128) -> OutputHeaderData {
         let mut offset = 0;
-
-        // Signature method
-        let sign_method = BitsField {
-            length: SIGNATURE_METHOD_SIZE,
-            offset,
-            data: fit_in_bits(header, offset, SIGNATURE_METHOD_SIZE),
-        };
-        offset += SIGNATURE_METHOD_SIZE;
 
         // Token ID
         let token_id = BitsField {
@@ -106,7 +96,6 @@ impl OutputHeaderData {
 
         // You can add another field here. Just do not forget to add offset
         OutputHeaderData {
-            sign_method,
             token_id,
             version,
             reserve: BitsField {
@@ -121,21 +110,11 @@ impl OutputHeaderData {
         // Easy one because these bits have a concrete place
         let mut result = 0u128;
         let mut offset = 0;
-        result += move_bits(self.sign_method.data, 0, SIGNATURE_METHOD_SIZE, offset);
-        offset += SIGNATURE_METHOD_SIZE;
         result += move_bits(self.token_id.data, 0, TOKEN_ID_SIZE, offset);
         offset += TOKEN_ID_SIZE;
         result += move_bits(self.version.data, 0, VERSION_SIZE, offset);
 
         result
-    }
-
-    pub fn sign_method(&self) -> Option<SignatureMethod> {
-        TryFrom::try_from(self.sign_method.data).ok()
-    }
-
-    pub fn set_sign_method(&mut self, sign_method: SignatureMethod) {
-        self.sign_method.data = sign_method as u128;
     }
 
     pub fn token_id(&self) -> TokenID {
@@ -163,7 +142,7 @@ impl OutputHeaderData {
     }
 
     pub fn validate(&self) -> bool {
-        self.token_type().is_some() & self.sign_method().is_some()
+        self.token_type().is_some()
     }
 }
 
