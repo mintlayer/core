@@ -30,6 +30,7 @@ mod tests;
 mod benchmarking;
 
 mod header;
+mod script;
 pub mod weights;
 
 #[frame_support::pallet]
@@ -42,6 +43,8 @@ pub mod pallet {
     #[cfg(feature = "std")]
     use serde::{Deserialize, Serialize};
 
+    use crate::{validate_header, SignatureMethod, TXOutputHeader, TXOutputHeaderImpls, TokenType};
+    use chainscript::Script;
     use codec::{Decode, Encode};
     use frame_support::{
         dispatch::{DispatchResultWithPostInfo, Vec},
@@ -133,7 +136,7 @@ pub mod pallet {
     /// * `Destination::Pubkey(key)`
     ///   * `lock` has to be empty
     ///   * `witness` contains the signature for the transaction and given pubkey
-    /// * `Destination::ScriptHash(script_hash)` (P2SH, not yet implemented)
+    /// * `Destination::ScriptHash(script_hash)`
     ///   * `lock` is the script fully expanded out, hash of `lock` has to match `script_hash`
     ///   * `witness` is a script that generates the input to the `lock` script
     #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
@@ -167,6 +170,20 @@ pub mod pallet {
                 witness: Vec::new(),
             }
         }
+
+        /// New input with lock script and witness script.
+        pub fn new_script(outpoint: H256, lock: Script, witness: Script) -> Self {
+            Self {
+                outpoint,
+                lock: lock.into_bytes(),
+                witness: witness.into_bytes(),
+            }
+        }
+
+        /// Get lock hash.
+        pub fn lock_hash(&self) -> H256 {
+            BlakeTwo256::hash(&self.lock)
+        }
     }
 
     /// Destination specifies where a payment goes. Can be a pubkey hash, script, etc.
@@ -179,6 +196,8 @@ pub mod pallet {
         CreatePP(Vec<u8>, Vec<u8>),
         /// Pay to an existing contract. Takes a destination account and input data.
         CallPP(AccountId, Vec<u8>),
+        /// Pay to script hash
+        ScriptHash(H256),
     }
 
     impl<AccountId> Destination<AccountId> {
@@ -191,8 +210,10 @@ pub mod pallet {
         ///
         /// The `lock` field of the input spending the UTXO has to match this hash.
         pub fn lock_commitment(&self) -> &H256 {
-            // We always commit to empty lock for now.
-            &Self::EMPTY
+            match self {
+                Destination::ScriptHash(hash) => hash,
+                _ => &Self::EMPTY,
+            }
         }
     }
 
@@ -235,6 +256,7 @@ pub mod pallet {
                 destination: Destination::CallPP(dest_account, input),
             }
         }
+
         pub fn new_tokens(token_id: TokenID, value: Value, pub_key: H256) -> Self {
             let mut header = OutputHeader::new(0);
             header.set_token_id(token_id);
@@ -244,6 +266,33 @@ pub mod pallet {
                 header,
                 destination: Destination::Pubkey(pub_key),
             }
+        }
+
+        /// Create a new output to given script hash.
+        pub fn new_script_hash(value: Value, hash: H256) -> Self {
+            Self {
+                value,
+                header: 0,
+                destination: Destination::ScriptHash(hash),
+            }
+        }
+    }
+
+    impl<AccountId> TXOutputHeaderImpls for TransactionOutput<AccountId> {
+        fn set_token_type(&mut self, value_token_type: TokenType) {
+            TokenType::insert(&mut self.header, value_token_type);
+        }
+
+        fn set_signature_method(&mut self, signature_method: SignatureMethod) {
+            SignatureMethod::insert(&mut self.header, signature_method);
+        }
+
+        fn get_token_type(&self) -> Result<TokenType, &'static str> {
+            TokenType::extract(self.header)
+        }
+
+        fn get_signature_method(&self) -> Result<SignatureMethod, &'static str> {
+            SignatureMethod::extract(self.header)
         }
 
         fn validate_header(&self) -> Result<(), &'static str> {
@@ -473,8 +522,8 @@ pub mod pallet {
             if let Some(input_utxo) = <UtxoStore<T>>::get(&input.outpoint) {
                 let lock_commitment = input_utxo.destination.lock_commitment();
                 ensure!(
-                    &BlakeTwo256::hash(&input.lock) == lock_commitment,
-                    "Commitment does not match lock hash"
+                    input.lock_hash() == *lock_commitment,
+                    "Lock hash does not match"
                 );
 
                 match input_utxo.destination {
@@ -497,6 +546,13 @@ pub mod pallet {
                     Destination::CallPP(_, _) => {
                         log::info!("TODO validate spending of OP_CALL");
                     }
+                    Destination::ScriptHash(_hash) => {
+                        use crate::script::verify;
+                        ensure!(
+                            verify(&simple_tx, input.witness.clone(), input.lock.clone()).is_ok(),
+                            "script verification failed"
+                        );
+                    }
                 }
             } else {
                 missing_utxos.push(input.outpoint.clone().as_fixed_bytes().to_vec());
@@ -513,7 +569,7 @@ pub mod pallet {
             ensure!(res.is_ok(), "header error. Please check the logs.");
 
             match output.destination {
-                Destination::Pubkey(_) => {
+                Destination::Pubkey(_) | Destination::ScriptHash(_) => {
                     ensure!(output.value > 0, "output value must be nonzero");
                     let hash = tx.outpoint(output_index);
                     ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
@@ -607,7 +663,7 @@ pub mod pallet {
 
         for (index, output) in tx.enumerate_outputs()? {
             match &output.destination {
-                Destination::Pubkey(_) => {
+                Destination::Pubkey(_) | Destination::ScriptHash(_) => {
                     let hash = tx.outpoint(index);
                     log::debug!("inserting to UtxoStore {:?} as key {:?}", output, hash);
                     <UtxoStore<T>>::insert(hash, Some(output));

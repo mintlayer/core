@@ -2,13 +2,13 @@ use node_template_runtime::{
     pallet_utxo, AccountId, AuraConfig, BalancesConfig, GenesisConfig, GrandpaConfig, PpConfig,
     Signature, SudoConfig, SystemConfig, UtxoConfig, WASM_BINARY,
 };
+use sc_network::config::MultiaddrWithPeerId;
 use sc_service::ChainType;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
+use sp_core::H256;
 use sp_core::{sr25519, Pair, Public};
 use sp_finality_grandpa::AuthorityId as GrandpaId;
 use sp_runtime::traits::{IdentifyAccount, Verify};
-
-use sp_core::H256;
 
 // The URL for the telemetry server.
 // const STAGING_TELEMETRY_URL: &str = "wss://telemetry.polkadot.io/submit/";
@@ -38,8 +38,24 @@ pub fn authority_keys_from_seed(s: &str) -> (AuraId, GrandpaId) {
     (get_from_seed::<AuraId>(s), get_from_seed::<GrandpaId>(s))
 }
 
+/// Return a list of bootnodes
+fn get_bootnodes() -> Vec<MultiaddrWithPeerId> {
+    vec![
+        "/ip4/13.59.157.140/tcp/30333/p2p/12D3KooWEEBFM1JumGXaaeimNV1UMjhoBjKMnHCeEJ4Dr5i4hLnG"
+            .parse()
+            .expect("Unable to parse bootnode address!"),
+        "/ip4/18.222.194.251/tcp/30333/p2p/12D3KooWB11zFddP43zTSiGXvYxUuELTRigVscf9RgUpKFXeqxzF"
+            .parse()
+            .expect("Unable to parse bootnode address!"),
+        "/ip4/3.138.108.99/tcp/30333/p2p/12D3KooWHW8LoXQhGL5aGNtvRFUUoG7UYV2qRQtwj5m57kWDwpHS"
+            .parse()
+            .expect("Unable to parse bootnode address!"),
+    ]
+}
+
 pub fn development_config() -> Result<ChainSpec, String> {
     let wasm_binary = WASM_BINARY.ok_or_else(|| "Development wasm not available".to_string())?;
+    let bootnodes = get_bootnodes();
 
     Ok(ChainSpec::from_genesis(
         // Name
@@ -69,7 +85,7 @@ pub fn development_config() -> Result<ChainSpec, String> {
             )
         },
         // Bootnodes
-        vec![],
+        bootnodes,
         // Telemetry
         None,
         // Protocol ID
@@ -83,6 +99,7 @@ pub fn development_config() -> Result<ChainSpec, String> {
 
 pub fn local_testnet_config() -> Result<ChainSpec, String> {
     let wasm_binary = WASM_BINARY.ok_or_else(|| "Development wasm not available".to_string())?;
+    let bootnodes = get_bootnodes();
 
     Ok(ChainSpec::from_genesis(
         // Name
@@ -120,7 +137,7 @@ pub fn local_testnet_config() -> Result<ChainSpec, String> {
             )
         },
         // Bootnodes
-        vec![],
+        bootnodes,
         // Telemetry
         None,
         // Protocol ID
