@@ -33,7 +33,7 @@
   "TransactionFor": "Transaction",
   "Address": "MultiAddress",
   "LookupSource": "MultiAddress",
-  "TXOutputHeader": "u16",
+  "TXOutputHeader": "u128",
   "Difficulty": "U256",
   "DifficultyAndTimestamp": {
     "difficulty": "Difficulty",
