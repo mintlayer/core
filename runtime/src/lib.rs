@@ -572,10 +572,7 @@ impl_runtime_apis! {
             Utxo::send()
         }
 
-        // What means Vec<(u64, Vec<u8>)> ?
-        // At the moment we have some problems with use serde in RPC, we can serialize and deserialize
-        // only simple types. This approach allow us to return Vec<(TokenId, TokenName)> instead of
-        // pallet_utxo_tokens::TokenListData
+        // What means Vec<(u64, Vec<u8>)> ? Have a look at utxo/rpc/runtime-api/src/lib.rs
         fn tokens_list() -> Vec<(u64, Vec<u8>)> {
             let list = Utxo::tokens_list();
             list.into_iter().map(|x| (x.id, x.name)).collect()
