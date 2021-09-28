@@ -63,12 +63,14 @@ struct BitsField {
     pub data: u128,
 }
 
-// Size of bit fields, total 69 bits
+// Size of bit fields, total  72 bits
+const TOKEN_TYPE_SIZE: u32 = 3;
 const TOKEN_ID_SIZE: u32 = 64;
 const VERSION_SIZE: u32 = 5;
 
 #[derive(Debug)]
 pub struct OutputHeaderData {
+    token_type: BitsField,
     token_id: BitsField,
     version: BitsField,
     reserve: BitsField,
@@ -77,6 +79,14 @@ pub struct OutputHeaderData {
 impl OutputHeaderData {
     pub fn new(header: u128) -> OutputHeaderData {
         let mut offset = 0;
+
+        // Signature method
+        let token_type = BitsField {
+            length: TOKEN_TYPE_SIZE,
+            offset,
+            data: fit_in_bits(header, offset, TOKEN_TYPE_SIZE),
+        };
+        offset += TOKEN_TYPE_SIZE;
 
         // Token ID
         let token_id = BitsField {
@@ -96,6 +106,7 @@ impl OutputHeaderData {
 
         // You can add another field here. Just do not forget to add offset
         OutputHeaderData {
+            token_type,
             token_id,
             version,
             reserve: BitsField {
@@ -110,6 +121,8 @@ impl OutputHeaderData {
         // Easy one because these bits have a concrete place
         let mut result = 0u128;
         let mut offset = 0;
+        result += move_bits(self.token_type.data, 0, TOKEN_TYPE_SIZE, offset);
+        offset += TOKEN_TYPE_SIZE;
         result += move_bits(self.token_id.data, 0, TOKEN_ID_SIZE, offset);
         offset += TOKEN_ID_SIZE;
         result += move_bits(self.version.data, 0, VERSION_SIZE, offset);
@@ -117,19 +130,19 @@ impl OutputHeaderData {
         result
     }
 
+    pub fn token_type(&self) -> Option<TokenType> {
+        TryFrom::try_from(self.token_type.data).ok()
+    }
+
+    pub fn set_token_type(&mut self, token_id: TokenType) {
+        self.token_type.data = token_id as u128;
+    }
+
     pub fn token_id(&self) -> TokenID {
         self.token_id.data as u64
     }
 
     pub fn set_token_id(&mut self, token_id: TokenID) {
-        self.token_id.data = token_id as u128;
-    }
-
-    pub fn token_type(&self) -> Option<TokenType> {
-        TryFrom::try_from(self.token_id.data).ok()
-    }
-
-    pub fn set_token_type(&mut self, token_id: TokenType) {
         self.token_id.data = token_id as u128;
     }
 
@@ -183,21 +196,13 @@ macro_rules! u128_to_enum {
 }
 
 u128_to_enum! {
-    #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-    #[derive(Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, Hash, Debug)]
-    pub enum SignatureMethod {
-        BLS = 0,
-        Schnorr = 1,
-        ZkSnark = 2,
-    }
-}
-
-u128_to_enum! {
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 #[derive(Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, Hash, Debug)]
 pub enum TokenType {
-    MLT = 0,
-    BTC = 1,
+        MLT = 0,
+        Normal = 1,
+        CT = 2,
+        NFT = 3,
     }
 }
 
@@ -208,9 +213,9 @@ mod tests {
     #[test]
     fn validate() {
         // improper sig meth
-        assert_eq!(OutputHeaderData::new(0b11111_011u128).validate(), false);
+        assert_eq!(OutputHeaderData::new(0b11111_111u128).validate(), false);
         // improper token type
-        assert_eq!(OutputHeaderData::new(0b11000_000u128).validate(), false);
+        assert_eq!(OutputHeaderData::new(0b11000_100u128).validate(), false);
 
         // Proper header
         assert!(OutputHeaderData::new(
@@ -225,33 +230,40 @@ mod tests {
     }
 
     #[test]
-    fn signatures() {
-        let x = 0b11011_000u128; // last 3 bits are 000, so signature should be 0 or BLS.
+    fn token_types() {
+        let x = 0b11011_000u128; // last 3 bits are 000, so token_type should be 0 or MLT.
         let header = OutputHeaderData::new(x);
-        assert!(header.sign_method().is_some());
-        assert_eq!(header.sign_method().unwrap(), SignatureMethod::BLS);
+        assert!(header.token_type().is_some());
+        assert_eq!(header.token_type().unwrap(), TokenType::MLT);
 
-        let x = 0b0000100_001; // last 3 bits are 001, so signature should be Schnorr
+        let x = 0b0000100_001; // last 3 bits are 001, so token_type should be Normal
         assert_eq!(
-            OutputHeaderData::new(x).sign_method().unwrap(),
-            SignatureMethod::Schnorr
+            OutputHeaderData::new(x).token_type().unwrap(),
+            TokenType::Normal
         );
 
-        let x = 0b111110_010; // last 3 bits are 010, so signature should be ZkSnark
+        let x = 0b111110_010; // last 3 bits are 010, so token_type should be CT
         assert_eq!(
-            OutputHeaderData::new(x).sign_method().unwrap(),
-            SignatureMethod::ZkSnark
+            OutputHeaderData::new(x).token_type().unwrap(),
+            TokenType::CT
+        );
+
+        let x = 0b111110_011; // last 3 bits are 011, so token_type should be NFT
+        assert_eq!(
+            OutputHeaderData::new(x).token_type().unwrap(),
+            TokenType::NFT
         );
 
         let x = 0b10_111; // last 3 bits is are, and it's not yet supported.
-        assert_eq!(OutputHeaderData::new(x).sign_method(), None);
+        assert_eq!(OutputHeaderData::new(x).token_type(), None);
 
-        let mut header = OutputHeaderData::new(185u128); // last 3 bits are 001. Convert to 000 for BLS.
-        header.set_sign_method(SignatureMethod::BLS);
+        // last 3 bits are 001. Convert to 000 for MLT.
+        let mut header = OutputHeaderData::new(185u128);
+        header.set_token_type(TokenType::MLT);
         assert_eq!(header.as_u128(), 184);
 
-        // last 3 bits of header are 000. Convert to 010 for ZkSnark.
-        header.set_sign_method(SignatureMethod::ZkSnark);
+        // last 3 bits of header are 000. Convert to 010 for CT.
+        header.set_token_type(TokenType::CT);
         assert_eq!(header.as_u128(), 186);
     }
 
@@ -274,38 +286,32 @@ mod tests {
     }
 
     #[test]
-    fn token_types() {
-        // the middle 64 bits are 000000, so type is MLT.
+    fn token_ids() {
+        const TOKENID_TEST_0: u64 = 0;
+        const TOKENID_TEST_1: u64 = 1;
+        const TOKENID_TEST_2: u64 = 2;
+
+        // the middle 64 bits are 000000, so type is TOKENID_TEST_0.
         let header = OutputHeaderData::new(
             0b1010_0000000000000000000000000000000000000000000000000000000000000000_110,
         );
-        assert!(header.token_type().is_some());
-        assert_eq!(header.token_type().unwrap(), TokenType::MLT);
+        assert_eq!(header.token_id(), TOKENID_TEST_0);
 
-        // the middle 64 bits are 000001, so type is BTC.
+        // the middle 64 bits are 000001, so type is TOKENID_TEST_1.
         let header = OutputHeaderData::new(
             0b1010_0000000000000000000000000000000000000000000000000000000000000001_110,
         );
-        assert!(header.token_type().is_some());
-        assert_eq!(header.token_type().unwrap(), TokenType::BTC);
+        assert_eq!(header.token_id(), TOKENID_TEST_1);
 
-        // the first 64 bits are 000010, so type is BTC.
+        // the first 64 bits are 000010, so type is TOKENID_TEST_1.
         assert_eq!(
-            OutputHeaderData::new(0b000001_101).token_type().unwrap(),
-            TokenType::BTC
+            OutputHeaderData::new(0b000001_101).token_id(),
+            TOKENID_TEST_1
         );
-        assert_eq!(
-            OutputHeaderData::new(3u128).token_type().unwrap(),
-            TokenType::MLT
-        );
-        assert_eq!(OutputHeaderData::new(0b110001_000).token_type(), None);
+        assert_eq!(OutputHeaderData::new(3u128).token_id(), TOKENID_TEST_0);
 
-        let mut improper_header = OutputHeaderData::new(321u128); // 101000_001, and must be converted to 10_001.
-        improper_header.set_token_type(TokenType::BTC);
-        assert_eq!(improper_header.as_u128(), 0b000000001_001);
-
-        improper_header = OutputHeaderData::new(178u128); // 10110_010, and must be converted to 000000_010 or 2.
-        improper_header.set_token_type(TokenType::MLT);
-        assert_eq!(improper_header.as_u128(), 2);
+        let mut improper_header = OutputHeaderData::new(u128::MAX);
+        improper_header.set_token_id(TOKENID_TEST_2);
+        assert_eq!(improper_header.token_id(), TOKENID_TEST_2);
     }
 }
