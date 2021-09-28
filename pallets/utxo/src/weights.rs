@@ -43,6 +43,6 @@ impl<T: frame_system::Config> crate::WeightInfo for WeightInfo<T> {
 
     fn token_create(u: u32) -> Weight {
         // Under construction
-        (u as Weight).saturating_add((100 * 1_000 * 100_000_000 as Weight))
+        (u as Weight).saturating_add((100 as Weight))
     }
 }
