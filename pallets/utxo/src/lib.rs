@@ -684,6 +684,8 @@ pub mod pallet {
         token_ticker: String,
         supply: Value,
     ) -> DispatchResultWithPostInfo {
+        ensure!(token_name.len() <= 25, Error::<T>::Unapproved);
+        ensure!(token_ticker.len() <= 5, Error::<T>::Unapproved);
         ensure!(!supply.is_zero(), Error::<T>::MinBalanceZero);
 
         // Take a free TokenID
