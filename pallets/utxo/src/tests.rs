@@ -362,7 +362,7 @@ fn test_tokens() {
             ],
             outputs: vec![
                 // 100 a new tokens
-                TransactionOutput::new_tokens(token_id, instance.supply, H256::from(alice_pub_key)),
+                TransactionOutput::new_token(token_id, instance.supply, H256::from(alice_pub_key)),
                 // 20 MLT to be paid as a fee, 80 MLT returning
                 TransactionOutput::new_pubkey(80, H256::from(alice_pub_key)),
             ],
@@ -389,7 +389,7 @@ fn test_tokens() {
                 TransactionInput::new_empty(utxo_hash_mlt),
                 TransactionInput::new_empty(utxo_hash_token),
             ],
-            outputs: vec![TransactionOutput::new_tokens(token_id, 10, H256::from(karl_pub_key))],
+            outputs: vec![TransactionOutput::new_token(token_id, 10, H256::from(karl_pub_key))],
         };
 
         let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx.encode()).unwrap();

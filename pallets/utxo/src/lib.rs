@@ -255,7 +255,7 @@ pub mod pallet {
             }
         }
 
-        pub fn new_tokens(token_id: TokenID, value: Value, pub_key: H256) -> Self {
+        pub fn new_token(token_id: TokenID, value: Value, pub_key: H256) -> Self {
             let mut header = OutputHeaderData::new(0);
             header.set_token_id(token_id);
             let header = header.as_u128();
@@ -706,7 +706,7 @@ pub mod pallet {
             ],
             outputs: crate::vec![
                 // Output a new tokens
-                TransactionOutput::new_tokens(token_id, supply, public),
+                TransactionOutput::new_token(token_id, supply, public),
             ],
         };
 
