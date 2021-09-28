@@ -68,6 +68,13 @@ pub mod pallet {
     pub type Value = u128;
     pub type String = Vec<u8>;
 
+    pub struct Mlt(Value);
+    impl Mlt {
+        pub fn to_munit(&self) -> Value {
+            self.0 * 1_000 * 100_000_000
+        }
+    }
+
     #[pallet::error]
     pub enum Error<T> {
         /// Account balance must be greater than or equal to the transfer amount.
@@ -697,7 +704,7 @@ pub mod pallet {
 
         // Input with MLT FEE
         let fee = UtxoStore::<T>::get(input_for_fee.outpoint).ok_or(Error::<T>::Unapproved)?.value;
-        ensure!(fee >= 100, Error::<T>::Unapproved);
+        ensure!(fee >= Mlt(100).to_munit(), Error::<T>::Unapproved);
 
         // Save in UTXO
         let instance = crate::TokenInstance::new(token_id, token_name, token_ticker, supply);
@@ -713,8 +720,11 @@ pub mod pallet {
         };
 
         // We shall make an output to return odd funds
-        if fee > 100 {
-            tx.outputs.push(TransactionOutput::new_pubkey(fee - 100, public));
+        if fee > Mlt(100).to_munit() {
+            tx.outputs.push(TransactionOutput::new_pubkey(
+                fee - Mlt(100).to_munit(),
+                public,
+            ));
         }
 
         // Save in Store
