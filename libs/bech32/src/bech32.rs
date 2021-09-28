@@ -1,4 +1,5 @@
 // Copyright (c) 2017 Clark Moody
+// Copyright (c) 2021 RBB S.r.l
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -35,6 +36,9 @@
 //! ```
 
 use super::CodingError;
+use crate::String;
+use frame_support::dispatch::Vec;
+use sp_std::vec;
 
 /// Grouping structure for the human-readable part and the data part
 /// of decoded Bech32 string.
@@ -74,15 +78,15 @@ impl Bech32 {
         if self.hrp.len() < 1 {
             return Err(CodingError::InvalidLength);
         }
-        let hrp_bytes: Vec<u8> = self.hrp.clone().into_bytes();
+        let hrp_bytes: Vec<u8> = self.hrp.clone();
         let mut combined: Vec<u8> = self.data.clone();
         combined.extend_from_slice(&create_checksum(&hrp_bytes, &self.data));
-        let mut encoded: String = format!("{}{}", self.hrp, SEP);
+        let mut encoded: String = [self.hrp.clone(), vec![SEP as u8]].concat();
         for p in combined {
             if p >= 32 {
                 return Err(CodingError::InvalidData);
             }
-            encoded.push(CHARSET[p as usize]);
+            encoded.push(CHARSET[p as usize] as u8);
         }
         Ok(encoded)
     }
@@ -96,12 +100,12 @@ impl Bech32 {
         }
 
         // Check for missing separator
-        if s.find(SEP).is_none() {
+        if s.iter().find(|&&x| x == SEP as u8).is_none() {
             return Err(CodingError::MissingSeparator);
         }
 
         // Split at separator and check for two pieces
-        let parts: Vec<&str> = s.rsplitn(2, SEP).collect();
+        let parts: Vec<&[u8]> = s.rsplitn(2, |x| *x == SEP as u8).collect();
         let raw_hrp = parts[1];
         let raw_data = parts[0];
         if raw_hrp.len() < 1 || raw_data.len() < 6 {
@@ -111,7 +115,8 @@ impl Bech32 {
         let mut has_lower: bool = false;
         let mut has_upper: bool = false;
         let mut hrp_bytes: Vec<u8> = Vec::new();
-        for b in raw_hrp.bytes() {
+        for b in raw_hrp {
+            let b = *b;
             // Valid subset of ASCII
             if b < 33 || b > 126 {
                 return Err(CodingError::InvalidChar);
@@ -132,7 +137,8 @@ impl Bech32 {
 
         // Check data payload
         let mut data_bytes: Vec<u8> = Vec::new();
-        for b in raw_data.bytes() {
+        for b in raw_data {
+            let b = *b;
             // Aphanumeric only
             if !((b >= b'0' && b <= b'9') || (b >= b'A' && b <= b'Z') || (b >= b'a' && b <= b'z')) {
                 return Err(CodingError::InvalidChar);
@@ -170,7 +176,7 @@ impl Bech32 {
         data_bytes.truncate(dbl - 6);
 
         Ok(Bech32 {
-            hrp: String::from_utf8(hrp_bytes).unwrap(),
+            hrp: hrp_bytes,
             data: data_bytes,
         })
     }

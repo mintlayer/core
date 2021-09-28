@@ -1,4 +1,5 @@
 // Copyright (c) 2017 Clark Moody
+// Copyright (c) 2021 RBB S.r.l
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -40,12 +41,16 @@
 //!     "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4".to_string());
 //! ```
 
+use crate::bech32::Bech32;
+use crate::String;
+use frame_support::dispatch::Vec;
+use sp_std::vec;
+
 use super::AddressError;
 use super::BitConversionError;
 use super::CodingError;
 use super::ScriptPubKeyError;
 use super::WitnessProgramError;
-use bech32::Bech32;
 
 /// Witness version and program data
 #[derive(PartialEq, Debug, Clone)]
@@ -96,7 +101,10 @@ impl WitnessProgram {
     /// `hrp` and decodes as proper Bech32-encoded string. Allowed values of
     /// the human-readable part are 'bc' and 'tb'.
     pub fn from_address(hrp: String, address: String) -> DecodeResult {
-        if hrp != "bc".to_string() && hrp != "tb".to_string() {
+        let mainnet_hrp = vec!['b' as u8, 'c' as u8];
+        let testnet_hrp = vec!['t' as u8, 'b' as u8];
+
+        if hrp != mainnet_hrp && hrp != testnet_hrp {
             return Err(AddressError::InvalidHumanReadablePart);
         }
         let b32 = match Bech32::from_string(address) {

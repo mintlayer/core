@@ -1,4 +1,5 @@
 // Copyright (c) 2017 Clark Moody
+// Copyright (c) 2021 RBB S.r.l
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -17,8 +18,7 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
-
-#![warn(missing_docs)]
+#![cfg_attr(not(feature = "std"), no_std)]
 
 //! Encoding and decoding Bech32 Bitcoin Segwit Addresses
 //!
@@ -51,9 +51,12 @@
 //! assert_eq!(enc_result.unwrap(),
 //!     "tb1qqqqqp399et2xygdj5xreqhjjvcmzhxw4aywxecjdzew6hylgvsesrxh6hy".to_string());
 //! ```
+use frame_support::inherent::Vec;
 
 pub mod bech32;
 pub mod wit_prog;
+
+type String = Vec<u8>;
 
 /// Error types for Bech32 encoding / decoding
 #[derive(PartialEq, Debug)]
