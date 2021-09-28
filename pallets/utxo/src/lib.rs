@@ -117,7 +117,7 @@ pub mod pallet {
 
     pub trait WeightInfo {
         fn spend(u: u32) -> Weight;
-        fn tokens_create(u: u32) -> Weight;
+        fn token_create(u: u32) -> Weight;
     }
 
     /// Transaction input
@@ -677,7 +677,7 @@ pub mod pallet {
         Ok(().into())
     }
 
-    pub fn tokens_create<T: Config>(
+    pub fn token_create<T: Config>(
         caller: &T::AccountId,
         public: H256,
         input_for_fee: TransactionInput,
@@ -741,8 +741,8 @@ pub mod pallet {
             Ok(().into())
         }
 
-        #[pallet::weight(T::WeightInfo::tokens_create(768_usize.saturating_add(token_name.len()) as u32))]
-        pub fn tokens_create(
+        #[pallet::weight(T::WeightInfo::token_create(768_usize.saturating_add(token_name.len()) as u32))]
+        pub fn token_create(
             origin: OriginFor<T>,
             public: H256,
             input_for_fee: TransactionInput,
@@ -751,7 +751,7 @@ pub mod pallet {
             supply: Value,
         ) -> DispatchResultWithPostInfo {
             let caller = &ensure_signed(origin)?;
-            tokens_create::<T>(
+            token_create::<T>(
                 caller,
                 public,
                 input_for_fee,

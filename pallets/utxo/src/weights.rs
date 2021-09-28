@@ -41,7 +41,7 @@ impl<T: frame_system::Config> crate::WeightInfo for WeightInfo<T> {
             .saturating_add(T::DbWeight::get().writes(3 as Weight))
     }
 
-    fn tokens_create(u: u32) -> Weight {
+    fn token_create(u: u32) -> Weight {
         // Under construction
         (u as Weight).saturating_add((100 * 1_000 * 100_000_000 as Weight))
     }
