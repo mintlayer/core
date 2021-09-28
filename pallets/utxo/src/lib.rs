@@ -41,6 +41,7 @@ pub mod pallet {
     use codec::{Decode, Encode};
     use core::convert::TryInto;
     use core::marker::PhantomData;
+    use frame_support::weights::PostDispatchInfo;
     use frame_support::{
         dispatch::{DispatchResultWithPostInfo, Vec},
         pallet_prelude::*,
@@ -62,6 +63,7 @@ pub mod pallet {
     use sp_runtime::traits::{
         AtLeast32Bit, Zero, /*, StaticLookup , AtLeast32BitUnsigned, Member, One */
     };
+    use sp_runtime::DispatchErrorWithPostInfo;
 
     pub type Value = u128;
     pub type String = Vec<u8>;
@@ -343,7 +345,7 @@ pub mod pallet {
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     #[pallet::metadata(T::AccountId = "AccountId")]
     pub enum Event<T: Config> {
-        TokenCreated(u32, T::AccountId),
+        TokenCreated(u64, T::AccountId),
         TransactionSuccess(TransactionFor<T>),
     }
 
@@ -683,7 +685,7 @@ pub mod pallet {
         token_name: String,
         token_ticker: String,
         supply: Value,
-    ) -> DispatchResultWithPostInfo {
+    ) -> Result<u64, DispatchErrorWithPostInfo<PostDispatchInfo>> {
         ensure!(token_name.len() <= 25, Error::<T>::Unapproved);
         ensure!(token_ticker.len() <= 5, Error::<T>::Unapproved);
         ensure!(!supply.is_zero(), Error::<T>::MinBalanceZero);
@@ -725,7 +727,7 @@ pub mod pallet {
 
         // Success
         spend::<T>(caller, &tx)?;
-        Ok(().into())
+        Ok(token_id)
     }
 
     #[pallet::call]
@@ -750,7 +752,7 @@ pub mod pallet {
             supply: Value,
         ) -> DispatchResultWithPostInfo {
             let caller = &ensure_signed(origin)?;
-            token_create::<T>(
+            let token_id = token_create::<T>(
                 caller,
                 public,
                 input_for_fee,
@@ -758,7 +760,7 @@ pub mod pallet {
                 token_ticker,
                 supply,
             )?;
-            Self::deposit_event(Event::<T>::TokenCreated(1u32, caller.clone()));
+            Self::deposit_event(Event::<T>::TokenCreated(token_id, caller.clone()));
             Ok(().into())
         }
     }
