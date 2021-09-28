@@ -19,6 +19,7 @@ use crate::{
     mock::*, Destination, RewardTotal, Transaction, TransactionInput, TransactionOutput, UtxoStore,
     Value,
 };
+use chainscript::{opcodes::all as opc, Builder};
 use codec::Encode;
 use frame_support::{
     assert_err, assert_noop, assert_ok,
@@ -49,7 +50,6 @@ fn pubkey_commitment_hash() {
 
 #[test]
 fn test_script_preimage() {
-    use chainscript::{opcodes::all as opc, Builder};
     execute_with_alice(|alice_pub_key| {
         // Create a transaction that can be redeemed by revealing a preimage of a hash.
         let password: &[u8] = "Hello!".as_bytes();
@@ -335,5 +335,38 @@ fn test_script() {
         let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx.encode()).unwrap();
         tx.inputs[0].witness = alice_sig.0.to_vec();
         assert_ok!(Utxo::spend(Origin::signed(0), tx.clone()));
+    })
+}
+
+#[test]
+fn attack_double_spend_by_tweaking_input() {
+    execute_with_alice(|alice_pub_key| {
+        // Prepare and send a transaction with a 50-token output
+        let drop_script = Builder::new().push_opcode(opc::OP_DROP).into_script();
+        let drop_script_hash = BlakeTwo256::hash(drop_script.as_ref());
+        let mut tx0 = Transaction {
+            inputs: vec![tx_input_gen_no_signature()],
+            outputs: vec![TransactionOutput::new_script_hash(50, drop_script_hash)],
+        };
+        let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx0.encode()).unwrap();
+        tx0.inputs[0].witness = alice_sig.0.to_vec();
+        assert_ok!(Utxo::spend(Origin::signed(0), tx0.clone()));
+
+        // Create a transaction that spends the same input 10 times by slightly modifying the
+        // redeem script.
+        let inputs: Vec<_> = (0..10)
+            .map(|i| {
+                let witness = Builder::new().push_int(1).push_int(i as i64).into_script();
+                TransactionInput::new_script(tx0.outpoint(0), drop_script.clone(), witness)
+            })
+            .collect();
+        let tx1 = Transaction {
+            inputs: inputs,
+            outputs: vec![TransactionOutput::new_pubkey(500, H256::from(alice_pub_key))],
+        };
+        assert_err!(
+            Utxo::spend(Origin::signed(0), tx1),
+            "each input should be used only once"
+        );
     })
 }

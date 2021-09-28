@@ -388,7 +388,8 @@ pub mod pallet {
         //https://github.com/substrate-developer-hub/utxo-workshop/blob/workshop/runtime/src/utxo.rs
         //input_map.len() > transaction.inputs.len() //THIS IS WRONG
         {
-            let input_map: BTreeMap<_, ()> = tx.inputs.iter().map(|input| (input, ())).collect();
+            let input_map: BTreeMap<_, ()> =
+                tx.inputs.iter().map(|input| (input.outpoint, ())).collect();
             //we want map size and input size to be equal to ensure each is used only once
             ensure!(
                 input_map.len() == tx.inputs.len(),
