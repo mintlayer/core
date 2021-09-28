@@ -689,8 +689,6 @@ pub mod pallet {
         // Take a free TokenID
         let token_id =
             <TokensHigherID<T>>::get().checked_add(1).ok_or("All tokens IDs has taken")?;
-        sp_runtime::print("TOKEN ID IS");
-        sp_runtime::print(&token_id);
 
         // Input with MLT FEE
         let fee = UtxoStore::<T>::get(input_for_fee.outpoint).ok_or(Error::<T>::Unapproved)?.value;
