@@ -74,8 +74,8 @@ fn test_script_preimage() {
             outputs: vec![TransactionOutput::new_script_hash(20, H256::zero())],
         };
 
-        assert_ok!(Utxo::spend(Origin::signed(0), tx1));
-        assert_ok!(Utxo::spend(Origin::signed(0), tx2));
+        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx1));
+        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx2));
     })
 }
 
@@ -98,7 +98,10 @@ fn test_unchecked_2nd_output() {
         // Now artificially insert utxo1 (that pays to a pubkey) to the output set.
         UtxoStore::<Test>::insert(utxo1_hash, Some(&tx1.outputs[1]));
         // When adding a transaction, the output should be reported as already present.
-        assert_err!(Utxo::spend(Origin::signed(0), tx1), "output already exists");
+        assert_err!(
+            Utxo::spend(Origin::signed(H256::zero()), tx1),
+            "output already exists"
+        );
     })
 }
 
@@ -117,7 +120,7 @@ fn test_simple_tx() {
 
         let init_utxo = genesis_utxo();
         assert!(UtxoStore::<Test>::contains_key(H256::from(init_utxo)));
-        assert_ok!(Utxo::spend(Origin::signed(0), tx));
+        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx));
         assert!(!UtxoStore::<Test>::contains_key(H256::from(init_utxo)));
         assert!(UtxoStore::<Test>::contains_key(new_utxo_hash));
         assert_eq!(50, UtxoStore::<Test>::get(new_utxo_hash).unwrap().value);
@@ -137,7 +140,10 @@ fn attack_with_sending_to_own_account() {
         let karl_sig = crypto::sr25519_sign(SR25519, &karl_pub_key, &tx.encode()).unwrap();
         tx.inputs[0].witness = karl_sig.0.to_vec();
 
-        assert_noop!(Utxo::spend(Origin::signed(0), tx), "missing inputs");
+        assert_noop!(
+            Utxo::spend(Origin::signed(H256::zero()), tx),
+            "missing inputs"
+        );
     });
 }
 
@@ -145,13 +151,13 @@ fn attack_with_sending_to_own_account() {
 fn attack_with_empty_transactions() {
     new_test_ext().execute_with(|| {
         assert_err!(
-            Utxo::spend(Origin::signed(0), Transaction::default()), // empty tx
+            Utxo::spend(Origin::signed(H256::zero()), Transaction::default()), // empty tx
             "no inputs"
         );
 
         assert_err!(
             Utxo::spend(
-                Origin::signed(0),
+                Origin::signed(H256::zero()),
                 Transaction {
                     inputs: vec![TransactionInput::default()], // an empty tx
                     outputs: vec![]
@@ -180,7 +186,7 @@ fn attack_by_double_counting_input() {
         tx.inputs[1].witness = alice_sig.0.to_vec();
 
         assert_err!(
-            Utxo::spend(Origin::signed(0), tx),
+            Utxo::spend(Origin::signed(H256::zero()), tx),
             "each input should be used only once"
         );
     });
@@ -199,7 +205,7 @@ fn attack_with_invalid_signature() {
         };
 
         assert_err!(
-            Utxo::spend(Origin::signed(0), tx),
+            Utxo::spend(Origin::signed(H256::zero()), tx),
             "signature must be valid"
         );
     });
@@ -218,7 +224,7 @@ fn attack_by_permanently_sinking_outputs() {
         tx.inputs[0].witness = alice_sig.0.to_vec();
 
         assert_noop!(
-            Utxo::spend(Origin::signed(0), tx),
+            Utxo::spend(Origin::signed(H256::zero()), tx),
             "output value must be nonzero"
         );
     });
@@ -239,7 +245,10 @@ fn attack_by_overflowing_value() {
         let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx.encode()).unwrap();
         tx.inputs[0].witness = alice_sig.0.to_vec();
 
-        assert_err!(Utxo::spend(Origin::signed(0), tx), "output value overflow");
+        assert_err!(
+            Utxo::spend(Origin::signed(H256::zero()), tx),
+            "output value overflow"
+        );
     });
 }
 
@@ -259,7 +268,7 @@ fn attack_by_overspending() {
         tx.inputs[0].witness = alice_sig.0.to_vec();
 
         assert_noop!(
-            Utxo::spend(Origin::signed(0), tx),
+            Utxo::spend(Origin::signed(H256::zero()), tx),
             "output value must not exceed input value"
         );
     })
@@ -283,7 +292,7 @@ fn tx_from_alice_to_karl() {
         let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx.encode()).unwrap();
         tx.inputs[0].witness = alice_sig.0.to_vec();
 
-        assert_ok!(Utxo::spend(Origin::signed(0), tx.clone()));
+        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx.clone()));
         let new_utxo_hash = tx.outpoint(1);
 
         // then send rest of the tokens to karl (proving that the first tx was successful)
@@ -295,7 +304,7 @@ fn tx_from_alice_to_karl() {
         let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx.encode()).unwrap();
         tx.inputs[0].witness = alice_sig.0.to_vec();
 
-        assert_ok!(Utxo::spend(Origin::signed(0), tx));
+        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx));
     });
 }
 
@@ -310,7 +319,7 @@ fn test_reward() {
 
         let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx.encode()).unwrap();
         tx.inputs[0].witness = alice_sig.0.to_vec();
-        assert_ok!(Utxo::spend(Origin::signed(0), tx.clone()));
+        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx.clone()));
 
         // if the previous spend succeeded, there should be one utxo
         // that has a value of 90 and a reward that has a value of 10
@@ -334,7 +343,18 @@ fn test_script() {
 
         let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx.encode()).unwrap();
         tx.inputs[0].witness = alice_sig.0.to_vec();
-        assert_ok!(Utxo::spend(Origin::signed(0), tx.clone()));
+        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx.clone()));
+    })
+}
+
+#[test]
+fn test_send_to_pubkey() {
+    execute_with_alice(|alice_pub_key| {
+        assert_ok!(Utxo::send_to_pubkey(
+            Origin::signed(H256::from(alice_pub_key)),
+            40,
+            H256::from(alice_pub_key)
+        ));
     })
 }
 

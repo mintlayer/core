@@ -41,6 +41,7 @@ pub mod pallet {
     #[cfg(feature = "std")]
     use serde::{Deserialize, Serialize};
 
+    use crate::pallet::crypto::sr25519_sign; // TODO: ???
     use crate::{validate_header, SignatureMethod, TXOutputHeader, TXOutputHeaderImpls, TokenType};
     use chainscript::Script;
     use codec::{Decode, Encode};
@@ -53,10 +54,14 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::*;
     use pp_api::ProgrammablePoolApi;
+    use sp_core::sr25519::Public;
     use sp_core::{
         sp_std::collections::btree_map::BTreeMap,
+        sp_std::{str, vec},
         sr25519::{Public as SR25Pub, Signature as SR25Sig},
-        H256, H512,
+        testing::SR25519, // TODO: ???
+        H256,
+        H512,
     };
 
     pub type Value = u128;
@@ -82,6 +87,7 @@ pub mod pallet {
 
     pub trait WeightInfo {
         fn spend(u: u32) -> Weight;
+        fn send_to_pubkey(u: u32) -> Weight;
     }
 
     /// Transaction input
@@ -563,6 +569,37 @@ pub mod pallet {
         Ok(().into())
     }
 
+    /// Pick the UTXOs of `caller` from UtxoStore that satify request `value`
+    ///
+    /// Return a list of UTXOs that satisfy the request
+    /// Return `None` if caller doesn't have enough UTXO
+    ///
+    // TODO: improve:
+    //     - do not return all UTXOs, only enough to satisfy request
+    pub fn pick_utxo<T: Config>(
+        caller: &T::AccountId,
+        _value: Value,
+    ) -> (Value, Vec<(Value, H256)>) {
+        let mut utxos: Vec<(Value, H256)> = Vec::new();
+        let mut total = 0;
+
+        for (hash, utxo) in UtxoStore::<T>::iter() {
+            let utxo = utxo.unwrap();
+
+            match utxo.destination {
+                Destination::Pubkey(pubkey) => {
+                    if caller.encode() == pubkey.encode() {
+                        utxos.push((utxo.value, hash));
+                        total += utxo.value;
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        (total, utxos)
+    }
+
     #[pallet::call]
     impl<T: Config> Pallet<T> {
         #[pallet::weight(T::WeightInfo::spend(tx.inputs.len().saturating_add(tx.outputs.len()) as u32))]
@@ -573,6 +610,42 @@ pub mod pallet {
             spend::<T>(&ensure_signed(origin)?, &tx)?;
             Self::deposit_event(Event::<T>::TransactionSuccess(tx));
             Ok(().into())
+        }
+
+        #[pallet::weight(T::WeightInfo::send_to_pubkey(10_000))]
+        pub fn send_to_pubkey(
+            origin: OriginFor<T>,
+            value: Value,
+            destination: H256,
+        ) -> DispatchResultWithPostInfo {
+            let signer = ensure_signed(origin)?;
+            let (total, utxos) = pick_utxo::<T>(&signer, value);
+
+            ensure!(utxos.len() > 0, "Caller doesn't have enough UTXOs");
+            ensure!(total >= value, "Caller doesn't have enough UTXOs");
+
+            let mut inputs: Vec<TransactionInput> = Vec::new();
+            for utxo in utxos.iter() {
+                inputs.push(TransactionInput::new_empty(utxo.1));
+            }
+
+            let pubkey_raw: [u8; 32] = signer.encode().try_into().unwrap();
+            let pubkey: Public = Public::from_raw(pubkey_raw);
+
+            let mut tx = Transaction {
+                inputs,
+                outputs: vec![
+                    TransactionOutput::new_pubkey(value, destination),
+                    TransactionOutput::new_pubkey(total - value, H256::from(pubkey_raw)),
+                ],
+            };
+
+            let sig = crypto::sr25519_sign(SR25519, &pubkey, &tx.encode()).unwrap();
+            for i in 0..tx.inputs.len() {
+                tx.inputs[i].witness = sig.0.to_vec();
+            }
+
+            spend::<T>(&signer, &tx)
         }
     }
 
