@@ -23,6 +23,11 @@ log = "0.4.8"
 serde = '1.0.119'
 variant_count = '1.1'
 
+[dependencies.bech32]
+default-features = false
+path = '../../libs/bech32'
+version = '0.1.0'
+
 [dependencies.chainscript]
 default-features = false
 path = '../../libs/chainscript'

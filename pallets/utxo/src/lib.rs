@@ -87,6 +87,7 @@ pub mod pallet {
     pub trait WeightInfo {
         fn spend(u: u32) -> Weight;
         fn send_to_pubkey(u: u32) -> Weight;
+        fn send_to_address(u: u32) -> Weight;
     }
 
     /// Transaction input
@@ -633,6 +634,7 @@ pub mod pallet {
             Ok(().into())
         }
 
+        // TODO: fix weight
         #[pallet::weight(T::WeightInfo::send_to_pubkey(10_000))]
         pub fn send_to_pubkey(
             origin: OriginFor<T>,
@@ -658,6 +660,60 @@ pub mod pallet {
                 outputs: vec![
                     TransactionOutput::new_pubkey(value, destination),
                     TransactionOutput::new_pubkey(total - value, H256::from(pubkey_raw)),
+                ],
+            };
+
+            let sig = crypto::sr25519_sign(SR25519, &pubkey, &tx.encode()).unwrap();
+            for i in 0..tx.inputs.len() {
+                tx.inputs[i].witness = sig.0.to_vec();
+            }
+
+            spend::<T>(&signer, &tx)
+        }
+
+        // TODO: fix weight
+        #[pallet::weight(T::WeightInfo::send_to_address(10_000))]
+        pub fn send_to_address(
+            origin: OriginFor<T>,
+            value: Value,
+            address: Vec<u8>,
+        ) -> DispatchResultWithPostInfo {
+            use chainscript::{Builder, Script};
+
+            let signer = ensure_signed(origin)?;
+            let (total, utxos) = pick_utxo::<T>(&signer, value);
+
+            ensure!(utxos.len() > 0, "Caller doesn't have enough UTXOs");
+            ensure!(total >= value, "Caller doesn't have enough UTXOs");
+
+            let mut inputs: Vec<TransactionInput> = Vec::new();
+            for utxo in utxos.iter() {
+                inputs.push(TransactionInput::new_empty(utxo.1));
+            }
+
+            let pubkey_raw: [u8; 32] = signer.encode().try_into().unwrap();
+            let pubkey: Public = Public::from_raw(pubkey_raw);
+            let outputs: Vec<TransactionOutput<T::AccountId>> = Vec::new();
+
+            let wit_prog = match bech32::wit_prog::WitnessProgram::from_address(
+                vec!['b' as u8, 'c' as u8],
+                address,
+            ) {
+                Ok(v) => v,
+                Err(e) => {
+                    log::error!("Failed to decode bech32 address: {:?}", e);
+                    return Err("Invalid bech32 address".into());
+                }
+            };
+
+            // NOTE: we don't have segwit support yet so use P2PKH
+            let script = Script::new_p2pkh(&wit_prog.program);
+
+            let mut tx = Transaction {
+                inputs,
+                outputs: vec![
+                    TransactionOutput::new_pubkey(total - value, H256::from(pubkey_raw)),
+                    TransactionOutput::new_pubkey_hash(value, script),
                 ],
             };
 

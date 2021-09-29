@@ -430,3 +430,17 @@ fn test_pubkey_hash() {
         assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx2));
     })
 }
+
+#[test]
+fn test_send_to_address() {
+    execute_with_alice(|alice_pub_key| {
+        // `addr` is bech32-encoded hash160(alice_pub_key)
+        let addr = "bc1q334w76r3npsmxftldpzgf3lvxcne00uld0gp32";
+
+        assert_ok!(Utxo::send_to_address(
+            Origin::signed(H256::from(alice_pub_key)),
+            40,
+            addr.as_bytes().to_vec(),
+        ));
+    })
+}
