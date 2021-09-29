@@ -21,20 +21,6 @@
 
 // Bech32 { hrp: "bech32", data: [0, 1, 2] }->"bech321qpz4nc4pe"
 
-//! Encode and decode the Bech32 format, with checksums
-//!
-//! # Examples
-//! ```rust
-//! use bech32::bech32::Bech32;
-//!
-//! let b = Bech32 {
-//!     hrp: "bech32".to_string(),
-//!     data: vec![0x00, 0x01, 0x02]
-//! };
-//! let encode = b.to_string().unwrap();
-//! assert_eq!(encode, "bech321qpz4nc4pe".to_string());
-//! ```
-
 use super::CodingError;
 use crate::String;
 use frame_support::dispatch::Vec;
