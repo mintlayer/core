@@ -41,7 +41,6 @@ pub mod pallet {
     #[cfg(feature = "std")]
     use serde::{Deserialize, Serialize};
 
-    use crate::pallet::crypto::sr25519_sign; // TODO: ???
     use crate::{validate_header, SignatureMethod, TXOutputHeader, TXOutputHeaderImpls, TokenType};
     use chainscript::Script;
     use codec::{Decode, Encode};
@@ -166,6 +165,8 @@ pub mod pallet {
         CallPP(AccountId, Vec<u8>),
         /// Pay to script hash
         ScriptHash(H256),
+        /// Pay to pubkey hash
+        PubkeyHash(Vec<u8>),
     }
 
     impl<AccountId> Destination<AccountId> {
@@ -231,6 +232,15 @@ pub mod pallet {
                 value,
                 header: 0,
                 destination: Destination::ScriptHash(hash),
+            }
+        }
+
+        /// Create a new output to given pubkey hash
+        pub fn new_pubkey_hash(value: Value, script: Script) -> Self {
+            Self {
+                value,
+                header: 0,
+                destination: Destination::PubkeyHash(script.into_bytes()),
             }
         }
     }
@@ -467,6 +477,13 @@ pub mod pallet {
                             "script verification failed"
                         );
                     }
+                    Destination::PubkeyHash(script) => {
+                        use crate::script::verify;
+                        ensure!(
+                            verify(&simple_tx, input.witness.clone(), script).is_ok(),
+                            "pubkeyhash verification failed"
+                        );
+                    }
                 }
                 total_input =
                     total_input.checked_add(input_utxo.value).ok_or("input value overflow")?;
@@ -485,7 +502,9 @@ pub mod pallet {
             ensure!(res.is_ok(), "header error. Please check the logs.");
 
             match output.destination {
-                Destination::Pubkey(_) | Destination::ScriptHash(_) => {
+                Destination::Pubkey(_)
+                | Destination::ScriptHash(_)
+                | Destination::PubkeyHash(_) => {
                     ensure!(output.value > 0, "output value must be nonzero");
                     let hash = tx.outpoint(output_index);
                     ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
@@ -542,7 +561,9 @@ pub mod pallet {
 
         for (index, output) in tx.enumerate_outputs()? {
             match &output.destination {
-                Destination::Pubkey(_) | Destination::ScriptHash(_) => {
+                Destination::Pubkey(_)
+                | Destination::ScriptHash(_)
+                | Destination::PubkeyHash(_) => {
                     let hash = tx.outpoint(index);
                     log::debug!("inserting to UtxoStore {:?} as key {:?}", output, hash);
                     <UtxoStore<T>>::insert(hash, Some(output));
