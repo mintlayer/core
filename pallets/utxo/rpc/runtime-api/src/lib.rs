@@ -13,11 +13,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// Author(s): A. Altonen
+// Author(s): A. Altonen, Anton Sinitsyn
 #![cfg_attr(not(feature = "std"), no_std)]
+
+use frame_support::inherent::Vec;
 
 sp_api::decl_runtime_apis! {
     pub trait UtxoApi {
         fn send() -> u32;
+        // What means Vec<(u64, Vec<u8>)> ?
+        // At the moment we have some problems with use serde in RPC, we can serialize and deserialize
+        // only simple types. This approach allow us to return Vec<(TokenId, TokenName)> instead of
+        // pallet_utxo_tokens::TokenListData
+        fn tokens_list() -> Vec<(u64, Vec<u8>)>;
     }
 }

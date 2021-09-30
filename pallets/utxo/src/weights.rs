@@ -41,6 +41,13 @@ impl<T: frame_system::Config> crate::WeightInfo for WeightInfo<T> {
             .saturating_add(T::DbWeight::get().writes(3 as Weight))
     }
 
+    fn token_create(u: u32) -> Weight {
+        // Under construction
+        (u as Weight).saturating_add((100 as Weight))
+            .saturating_add(T::DbWeight::get().reads(3 as Weight))
+            .saturating_add(T::DbWeight::get().writes(3 as Weight))
+    }
+        
     fn send_to_address(s: u32) -> Weight {
         (348_270_000 as Weight)
             // Standard Error: 2_000
