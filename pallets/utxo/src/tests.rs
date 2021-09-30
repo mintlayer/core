@@ -348,17 +348,6 @@ fn test_script() {
 }
 
 #[test]
-fn test_send_to_pubkey() {
-    execute_with_alice(|alice_pub_key| {
-        assert_ok!(Utxo::send_to_pubkey(
-            Origin::signed(H256::from(alice_pub_key)),
-            40,
-            H256::from(alice_pub_key)
-        ));
-    })
-}
-
-#[test]
 fn attack_double_spend_by_tweaking_input() {
     execute_with_alice(|alice_pub_key| {
         // Prepare and send a transaction with a 50-token output
@@ -433,10 +422,30 @@ fn test_pubkey_hash() {
 
 #[test]
 fn test_send_to_address() {
-    execute_with_alice(|alice_pub_key| {
-        // `addr` is bech32-encoded hash160(alice_pub_key)
-        let addr = "bc1q334w76r3npsmxftldpzgf3lvxcne00uld0gp32";
+    let (mut test_ext, alice_pub_key, _karl_pub_key) = new_test_ext_and_keys();
+    test_ext.execute_with(|| {
+        // `addr` is bech32-encoded hash160(karl_pub_key)
+        let addr = "bc1q7pyaw92rh34mj6flsh7acccd7ayn4wf787ws4m";
 
+        assert_err!(
+            Utxo::send_to_address(
+                Origin::signed(H256::from(alice_pub_key)),
+                0,
+                addr.as_bytes().to_vec(),
+            ),
+            "Value transferred must be larger than zero",
+        );
+
+        assert_err!(
+            Utxo::send_to_address(
+                Origin::signed(H256::from(alice_pub_key)),
+                10_000_000,
+                addr.as_bytes().to_vec(),
+            ),
+            "Caller doesn't have enough UTXOs",
+        );
+
+        // send UTXO to karl's address
         assert_ok!(Utxo::send_to_address(
             Origin::signed(H256::from(alice_pub_key)),
             40,
