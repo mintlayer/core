@@ -24,6 +24,11 @@ serde = '1.0.119'
 pallet-utxo-tokens = { path = "./tokens" }
 variant_count = '1.1'
 
+[dependencies.bech32]
+default-features = false
+path = '../../libs/bech32'
+version = '0.1.0'
+
 [dependencies.chainscript]
 default-features = false
 path = '../../libs/chainscript'
