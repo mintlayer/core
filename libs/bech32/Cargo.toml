@@ -1,0 +1,29 @@
+[package]
+name = "bech32"
+version = "0.1.0"
+authors = ["Clark Moody", "RBB S.r.l"]
+description = "Encodes and decodes Bitcoin Segregated Witness addresses in Bech32"
+keywords = ["bitcoin", "base32", "encoding"]
+categories = ["encoding"]
+license = "MIT"
+edition = "2018"
+
+[dependencies.sp-std]
+default-features = false
+git = "https://github.com/paritytech/substrate.git"
+version = "4.0.0-dev"
+branch = "master"
+
+[dependencies.frame-support]
+default-features = false
+git = "https://github.com/paritytech/substrate.git"
+version = "4.0.0-dev"
+branch = "master"
+
+[features]
+default = ['std']
+testcontext = []
+std = [
+	"sp-std/std",
+	"frame-support/std",
+]

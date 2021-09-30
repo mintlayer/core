@@ -53,9 +53,12 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::*;
     use pp_api::ProgrammablePoolApi;
+    use sp_core::sr25519::Public;
     use sp_core::{
         sp_std::collections::btree_map::BTreeMap,
+        sp_std::{str, vec},
         sr25519::{Public as SR25Pub, Signature as SR25Sig},
+        testing::SR25519,
         H256, H512,
     };
 
@@ -82,6 +85,7 @@ pub mod pallet {
 
     pub trait WeightInfo {
         fn spend(u: u32) -> Weight;
+        fn send_to_address(u: u32) -> Weight;
     }
 
     /// Transaction input
@@ -160,6 +164,8 @@ pub mod pallet {
         CallPP(AccountId, Vec<u8>),
         /// Pay to script hash
         ScriptHash(H256),
+        /// Pay to pubkey hash
+        PubkeyHash(Vec<u8>),
     }
 
     impl<AccountId> Destination<AccountId> {
@@ -225,6 +231,15 @@ pub mod pallet {
                 value,
                 header: 0,
                 destination: Destination::ScriptHash(hash),
+            }
+        }
+
+        /// Create a new output to given pubkey hash
+        pub fn new_pubkey_hash(value: Value, script: Script) -> Self {
+            Self {
+                value,
+                header: 0,
+                destination: Destination::PubkeyHash(script.into_bytes()),
             }
         }
     }
@@ -461,6 +476,13 @@ pub mod pallet {
                             "script verification failed"
                         );
                     }
+                    Destination::PubkeyHash(script) => {
+                        use crate::script::verify;
+                        ensure!(
+                            verify(&simple_tx, input.witness.clone(), script).is_ok(),
+                            "pubkeyhash verification failed"
+                        );
+                    }
                 }
                 total_input =
                     total_input.checked_add(input_utxo.value).ok_or("input value overflow")?;
@@ -479,7 +501,9 @@ pub mod pallet {
             ensure!(res.is_ok(), "header error. Please check the logs.");
 
             match output.destination {
-                Destination::Pubkey(_) | Destination::ScriptHash(_) => {
+                Destination::Pubkey(_)
+                | Destination::ScriptHash(_)
+                | Destination::PubkeyHash(_) => {
                     ensure!(output.value > 0, "output value must be nonzero");
                     let hash = tx.outpoint(output_index);
                     ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
@@ -536,7 +560,9 @@ pub mod pallet {
 
         for (index, output) in tx.enumerate_outputs()? {
             match &output.destination {
-                Destination::Pubkey(_) | Destination::ScriptHash(_) => {
+                Destination::Pubkey(_)
+                | Destination::ScriptHash(_)
+                | Destination::PubkeyHash(_) => {
                     let hash = tx.outpoint(index);
                     log::debug!("inserting to UtxoStore {:?} as key {:?}", output, hash);
                     <UtxoStore<T>>::insert(hash, Some(output));
@@ -563,6 +589,40 @@ pub mod pallet {
         Ok(().into())
     }
 
+    /// Pick the UTXOs of `caller` from UtxoStore that satify request `value`
+    ///
+    /// Return a list of UTXOs that satisfy the request
+    /// Return empty vector if caller doesn't have enough UTXO
+    ///
+    // NOTE: limitation here is that this is only able to pick `Destination::Pubkey`
+    // UTXOs because the ownership of those can be easily determined.
+    // TODO: keep track of "our" UTXO separately?
+    pub fn pick_utxo<T: Config>(caller: &T::AccountId, mut value: Value) -> (Value, Vec<H256>) {
+        let mut utxos: Vec<H256> = Vec::new();
+        let mut total = 0;
+
+        for (hash, utxo) in UtxoStore::<T>::iter() {
+            let utxo = utxo.unwrap();
+
+            match utxo.destination {
+                Destination::Pubkey(pubkey) => {
+                    if caller.encode() == pubkey.encode() {
+                        utxos.push(hash);
+                        total += utxo.value;
+
+                        if utxo.value >= value {
+                            break;
+                        }
+                        value -= utxo.value;
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        (total, utxos)
+    }
+
     #[pallet::call]
     impl<T: Config> Pallet<T> {
         #[pallet::weight(T::WeightInfo::spend(tx.inputs.len().saturating_add(tx.outputs.len()) as u32))]
@@ -573,6 +633,66 @@ pub mod pallet {
             spend::<T>(&ensure_signed(origin)?, &tx)?;
             Self::deposit_event(Event::<T>::TransactionSuccess(tx));
             Ok(().into())
+        }
+
+        #[pallet::weight(T::WeightInfo::send_to_address(16_u32.saturating_add(address.len() as u32)))]
+        pub fn send_to_address(
+            origin: OriginFor<T>,
+            value: Value,
+            address: Vec<u8>,
+        ) -> DispatchResultWithPostInfo {
+            use chainscript::Script;
+
+            ensure!(value > 0, "Value transferred must be larger than zero");
+            ensure!(address.len() >= 42, "Invalid Bech32 address");
+
+            let signer = ensure_signed(origin)?;
+            let (total, utxos) = pick_utxo::<T>(&signer, value);
+
+            ensure!(total >= value, "Caller doesn't have enough UTXOs");
+
+            let mut inputs: Vec<TransactionInput> = Vec::new();
+            for utxo in utxos.iter() {
+                inputs.push(TransactionInput::new_empty(*utxo));
+            }
+
+            let pubkey_raw: [u8; 32] = match signer.encode().try_into() {
+                Ok(v) => v,
+                Err(e) => {
+                    log::error!("Failed to get caller's public key: {:?}", e);
+                    return Err("Failed to get caller's public key".into());
+                }
+            };
+
+            let pubkey: Public = Public::from_raw(pubkey_raw);
+            let wit_prog = match bech32::wit_prog::WitnessProgram::from_address(
+                address[..2].to_vec(),
+                address,
+            ) {
+                Ok(v) => v,
+                Err(e) => {
+                    log::error!("Failed to decode Bech32 address: {:?}", e);
+                    return Err("Invalid Bech32 address".into());
+                }
+            };
+
+            // NOTE: we don't have segwit support yet so use P2PKH
+            let script = Script::new_p2pkh(&wit_prog.program);
+
+            let mut tx = Transaction {
+                inputs,
+                outputs: vec![
+                    TransactionOutput::new_pubkey(total - value, H256::from(pubkey_raw)),
+                    TransactionOutput::new_pubkey_hash(value, script),
+                ],
+            };
+
+            let sig = crypto::sr25519_sign(SR25519, &pubkey, &tx.encode()).unwrap();
+            for i in 0..tx.inputs.len() {
+                tx.inputs[i].witness = sig.0.to_vec();
+            }
+
+            spend::<T>(&signer, &tx)
         }
     }
 
