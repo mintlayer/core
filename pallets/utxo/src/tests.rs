@@ -516,3 +516,37 @@ fn test_send_to_address() {
         ));
     })
 }
+
+#[test]
+fn nft_test() {
+    execute_with_alice(|alice_pub_key| {
+        let token_id = 100;
+        let empty = b"0000000000000000000000000000000000000000000000000000000000000000";
+        let data = b"0101010101010101010101010101010101010101010101010101010101010101";
+        // let data_token = ERC1948.new();
+        // dataToken.mint(accounts[0], firstTokenId);
+
+        // const ERC1948 = artifacts.require('./ERC1948.sol');
+        //
+        // contract('ERC1948', (accounts) => {
+        // const firstTokenId = 100;
+        // const empty = '0x0000000000000000000000000000000000000000000000000000000000000000';
+        // const data = '0x0101010101010101010101010101010101010101010101010101010101010101';
+        // let dataToken;
+        //
+        // beforeEach(async () => {
+        // dataToken = await ERC1948.new();
+        // await dataToken.mint(accounts[0], firstTokenId);
+        // });
+        //
+        // it('should allow to write and read', async () => {
+        // let rsp = await dataToken.readData(firstTokenId);
+        // assert.equal(rsp, empty);
+        // await dataToken.writeData(firstTokenId, data);
+        // rsp = await dataToken.readData(firstTokenId);
+        // assert.equal(rsp, data);
+        // });
+        //
+        // });
+    });
+}

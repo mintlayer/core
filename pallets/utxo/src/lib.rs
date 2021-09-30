@@ -17,7 +17,6 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
-pub use header::*;
 pub use pallet::*;
 
 #[cfg(test)]
@@ -29,14 +28,28 @@ mod tests;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 
-mod header;
 mod script;
 pub mod weights;
 
+// Pure MLT without any tokens
+const MLT_ID: u64 = 0;
+pub const SR25519: sp_runtime::KeyTypeId = sp_runtime::KeyTypeId(*b"sr25");
+
+pub type TokenId = u64;
+pub type NftId = u64;
+pub type Value = u128;
+pub type String = Vec<u8>;
+
+pub struct Mlt(Value);
+impl Mlt {
+    pub fn to_munit(&self) -> Value {
+        self.0 * 1_000 * 100_000_000
+    }
+}
+
 #[frame_support::pallet]
 pub mod pallet {
-    use crate::TXOutputHeader;
-    use crate::{OutputHeaderData, OutputHeaderHelper, TokenID};
+    use crate::{Mlt, NftId, String, TokenId, Value, MLT_ID, SR25519};
     use chainscript::Script;
     use codec::{Decode, Encode};
     use core::convert::TryInto;
@@ -55,28 +68,16 @@ pub mod pallet {
     use pp_api::ProgrammablePoolApi;
     #[cfg(feature = "std")]
     use serde::{Deserialize, Serialize};
-    use sp_core::sr25519::Public;
     use sp_core::{
         sp_std::collections::btree_map::BTreeMap,
         sp_std::{str, vec},
         sr25519::{Public as SR25Pub, Signature as SR25Sig},
-        testing::SR25519,
         H256, H512,
     };
     use sp_runtime::traits::{
         AtLeast32Bit, Zero, /*, StaticLookup , AtLeast32BitUnsigned, Member, One */
     };
     use sp_runtime::DispatchErrorWithPostInfo;
-
-    pub type Value = u128;
-    pub type String = Vec<u8>;
-
-    pub struct Mlt(Value);
-    impl Mlt {
-        pub fn to_munit(&self) -> Value {
-            self.0 * 1_000 * 100_000_000
-        }
-    }
 
     #[pallet::error]
     pub enum Error<T> {
@@ -230,12 +231,42 @@ pub mod pallet {
         }
     }
 
+    #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+    #[derive(Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, RuntimeDebug, Hash)]
+    pub enum TxHeaderAndExtraData {
+        NormalTx {
+            token_id: TokenId,
+        },
+        ConfidentialTx, /* not implemented yet */
+        NFT {
+            id: NftId,
+            data: [u8; 32],
+            creator: SR25Pub,
+        },
+    }
+
+    impl TxHeaderAndExtraData {
+        pub fn token_id(&self) -> Option<TokenId> {
+            match self {
+                Self::NormalTx { token_id } => Some(*token_id),
+                _ => None,
+            }
+        }
+        pub fn nft_id(&self) -> Option<TokenId> {
+            match self {
+                Self::NFT { id, .. } => Some(*id),
+                _ => None,
+            }
+        }
+    }
+
     /// Output of a transaction
     #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
     #[derive(Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, RuntimeDebug, Hash)]
+    #[repr(C)]
     pub struct TransactionOutput<AccountId> {
+        pub(crate) header: TxHeaderAndExtraData,
         pub(crate) value: Value,
-        pub(crate) header: TXOutputHeader,
         pub(crate) destination: Destination<AccountId>,
     }
 
@@ -246,8 +277,8 @@ pub mod pallet {
         /// functions are available in TXOutputHeaderImpls to update the header.
         pub fn new_pubkey(value: Value, pub_key: H256) -> Self {
             Self {
+                header: TxHeaderAndExtraData::NormalTx { token_id: MLT_ID },
                 value,
-                header: 0,
                 destination: Destination::Pubkey(pub_key),
             }
         }
@@ -255,8 +286,8 @@ pub mod pallet {
         /// Create a new output to create a smart contract.
         pub fn new_create_pp(value: Value, code: Vec<u8>, data: Vec<u8>) -> Self {
             Self {
+                header: TxHeaderAndExtraData::NormalTx { token_id: MLT_ID },
                 value,
-                header: 0,
                 destination: Destination::CreatePP(code, data),
             }
         }
@@ -264,19 +295,16 @@ pub mod pallet {
         /// Create a new output to call a smart contract routine.
         pub fn new_call_pp(value: Value, dest_account: AccountId, input: Vec<u8>) -> Self {
             Self {
+                header: TxHeaderAndExtraData::NormalTx { token_id: MLT_ID },
                 value,
-                header: 0,
                 destination: Destination::CallPP(dest_account, input),
             }
         }
 
-        pub fn new_token(token_id: TokenID, value: Value, pub_key: H256) -> Self {
-            let mut header = OutputHeaderData::new(0);
-            header.set_token_id(token_id);
-            let header = header.as_u128();
+        pub fn new_token(token_id: TokenId, value: Value, pub_key: H256) -> Self {
             Self {
                 value,
-                header,
+                header: TxHeaderAndExtraData::NormalTx { token_id },
                 destination: Destination::Pubkey(pub_key),
             }
         }
@@ -284,8 +312,8 @@ pub mod pallet {
         /// Create a new output to given script hash.
         pub fn new_script_hash(value: Value, hash: H256) -> Self {
             Self {
+                header: TxHeaderAndExtraData::NormalTx { token_id: MLT_ID },
                 value,
-                header: 0,
                 destination: Destination::ScriptHash(hash),
             }
         }
@@ -293,21 +321,10 @@ pub mod pallet {
         /// Create a new output to given pubkey hash
         pub fn new_pubkey_hash(value: Value, script: Script) -> Self {
             Self {
+                header: TxHeaderAndExtraData::NormalTx { token_id: MLT_ID },
                 value,
-                header: 0,
                 destination: Destination::PubkeyHash(script.into_bytes()),
             }
-        }
-    }
-
-    impl<AccountId> TransactionOutput<AccountId> {
-        fn validate_header(&self) -> Result<(), &'static str> {
-            // Check signature and token id
-            self.header
-                .as_tx_output_header()
-                .validate()
-                .then(|| ())
-                .ok_or("Incorrect header")
         }
     }
 
@@ -352,7 +369,7 @@ pub mod pallet {
 
     #[pallet::storage]
     #[pallet::getter(fn tokens_higher_id)]
-    pub(super) type TokensHigherID<T> = StorageValue<_, TokenID, ValueQuery>;
+    pub(super) type TokensHigherID<T> = StorageValue<_, TokenId, ValueQuery>;
 
     #[pallet::storage]
     #[pallet::getter(fn reward_total)]
@@ -478,31 +495,41 @@ pub mod pallet {
             );
         }
 
-        let full_inputs: Vec<(crate::TokenID, TransactionOutputFor<T>)> = tx
+        let full_inputs: Vec<(TokenId, TransactionOutputFor<T>)> = tx
             .inputs
             .iter()
             .filter_map(|input| <UtxoStore<T>>::get(&input.outpoint))
-            .map(|output| (OutputHeaderData::new(output.header).token_id(), output))
+            .filter_map(|output| {
+                if let TxHeaderAndExtraData::NormalTx { token_id } = &output.header {
+                    Some((*token_id, output))
+                } else {
+                    None
+                }
+            })
             .collect();
 
-        let input_vec: Vec<(crate::TokenID, Value)> =
+        let input_vec: Vec<(TokenId, Value)> =
             full_inputs.iter().map(|output| (output.0, output.1.value)).collect();
 
-        let out_vec: Vec<(crate::TokenID, Value)> = tx
+        let out_vec: Vec<(TokenId, Value)> = tx
             .outputs
             .iter()
-            .map(|output| {
-                (
-                    OutputHeaderData::new(output.header).token_id(),
-                    output.value,
-                )
+            .filter_map(|output| {
+                if let TxHeaderAndExtraData::NormalTx { token_id } = &output.header {
+                    Some((*token_id, output.value))
+                } else {
+                    None
+                }
             })
             .collect();
 
         // Check for token creation
         let tokens_list = <TokenList<T>>::get();
         for output in tx.outputs.iter() {
-            let tid = OutputHeaderData::new(output.header).token_id();
+            let tid = match output.header {
+                TxHeaderAndExtraData::NormalTx { token_id } => token_id,
+                _ => continue,
+            };
             // If we have input and output for the same token it's not a problem
             if full_inputs.iter().find(|&x| (x.0 == tid) && (x.1 != *output)).is_some() {
                 continue;
@@ -579,13 +606,6 @@ pub mod pallet {
 
         // Check that outputs are valid
         for (output_index, output) in tx.enumerate_outputs()? {
-            // Check the header is valid
-            let res = output.validate_header();
-            if let Err(e) = res {
-                log::error!("Header error: {}", e);
-            }
-            ensure!(res.is_ok(), "header error. Please check the logs.");
-
             match output.destination {
                 Destination::Pubkey(_)
                 | Destination::ScriptHash(_)
@@ -607,8 +627,8 @@ pub mod pallet {
         // if no race condition, check the math
         if missing_utxos.is_empty() {
             // We have to check sum of input tokens is less or equal to output tokens.
-            let mut inputs_sum: BTreeMap<TokenID, Value> = BTreeMap::new();
-            let mut outputs_sum: BTreeMap<TokenID, Value> = BTreeMap::new();
+            let mut inputs_sum: BTreeMap<TokenId, Value> = BTreeMap::new();
+            let mut outputs_sum: BTreeMap<TokenId, Value> = BTreeMap::new();
 
             for x in input_vec {
                 let value =
@@ -642,14 +662,14 @@ pub mod pallet {
             }
 
             // Reward at the moment only in MLT
-            reward = if inputs_sum.contains_key(&(crate::TokenType::MLT as TokenID))
-                && outputs_sum.contains_key(&(crate::TokenType::MLT as TokenID))
+            reward = if inputs_sum.contains_key(&(MLT_ID as TokenId))
+                && outputs_sum.contains_key(&(MLT_ID as TokenId))
             {
-                inputs_sum[&(crate::TokenType::MLT as TokenID)]
-                    .checked_sub(outputs_sum[&(crate::TokenType::MLT as TokenID)])
+                inputs_sum[&(MLT_ID as TokenId)]
+                    .checked_sub(outputs_sum[&(MLT_ID as TokenId)])
                     .ok_or("reward underflow")?
             } else {
-                *inputs_sum.get(&(crate::TokenType::MLT as TokenID)).ok_or("fee doesn't exist")?
+                *inputs_sum.get(&(MLT_ID as TokenId)).ok_or("fee doesn't exist")?
             }
         }
 
@@ -864,7 +884,7 @@ pub mod pallet {
                 }
             };
 
-            let pubkey: Public = Public::from_raw(pubkey_raw);
+            let pubkey: SR25Pub = SR25Pub::from_raw(pubkey_raw);
             let wit_prog = match bech32::wit_prog::WitnessProgram::from_address(
                 address[..2].to_vec(),
                 address,
