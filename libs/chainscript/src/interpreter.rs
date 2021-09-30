@@ -205,6 +205,7 @@ pub fn run_pushdata<'a, Ctx: Context>(ctx: &Ctx, script: &'a Script) -> crate::R
                 }
             }
         }
+        ensure!(stack.len() <= Ctx::MAX_STACK_ELEMENTS, Error::StackSize);
     }
 
     Ok(stack)
@@ -333,6 +334,7 @@ pub fn run_script<'a, Ctx: Context>(
             },
         }
 
+        ensure!((stack.len() + alt_stack.len()) <= Ctx::MAX_STACK_ELEMENTS, Error::StackSize);
         cur_instr_num = cur_instr_num.saturating_add(1);
     }
 
@@ -820,6 +822,20 @@ mod test {
             prop_assert!(stack0.is_ok());
             prop_assert_eq!(&stack0, &stack1);
             prop_assert_eq!(stack0.unwrap().0, data);
+        }
+
+        #[test]
+        fn prop_stack_limit(use_alt in gen_vec(prop::bool::ANY, 499)) {
+            let mut builder = Builder::new().push_int(0).push_int(0).push_int(0);
+            for alt in use_alt {
+                builder = builder.push_opcode(opcodes::all::OP_2DUP);
+                if alt {
+                    builder = builder.push_opcode(opcodes::all::OP_TOALTSTACK);
+                }
+            }
+            let script = builder.into_script();
+            let result = run_script(&TestContext::default(), &script, vec![].into());
+            prop_assert_eq!(result, Err(Error::StackSize));
         }
     }
 }
