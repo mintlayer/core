@@ -50,6 +50,8 @@ pub enum Error {
     PushSize,
     /// Non-push operation present in context where only data push opcodes are allowed.
     PushOnly,
+    /// Maximum stack size exceeded.
+    StackSize,
     /// Maximum script size exceeded.
     ScriptSize,
     /// Incorrect number of public keys for multisig
