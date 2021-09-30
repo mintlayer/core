@@ -56,6 +56,7 @@ mod error;
 mod interpreter;
 pub mod opcodes;
 pub mod script;
+pub mod sighash;
 
 #[cfg(feature = "testcontext")]
 pub use context::testcontext::TestContext;
