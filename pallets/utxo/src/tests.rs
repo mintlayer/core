@@ -378,7 +378,7 @@ fn test_tokens() {
         };
         let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &first_tx.encode()).unwrap();
         first_tx.inputs[0].witness = alice_sig.0.to_vec();
-        assert_ok!(Utxo::spend(Origin::signed(0), first_tx.clone()));
+        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), first_tx.clone()));
         // Store a new TokenInstance to the Storage
         <TokenList<Test>>::mutate(|x| {
             if x.iter().find(|&x| x.id == token_id).is_none() {
@@ -406,10 +406,10 @@ fn test_tokens() {
         for input in tx.inputs.iter_mut() {
             input.witness = sig_script.0.to_vec();
         }
-        assert_ok!(Utxo::spend(Origin::signed(0), tx.clone()));
+        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx.clone()));
     });
 }
-    
+
 #[test]
 fn attack_double_spend_by_tweaking_input() {
     execute_with_alice(|alice_pub_key| {
