@@ -59,6 +59,11 @@ To run the test cases, just run command `cargo test`.
       "difficulty": "Difficulty",
       "timestamp": "Moment"
    },
+   "Pubkey": {
+      "_enum": {
+         "Schnorr": "Public"
+      }
+   },
    "Public": "H256",
    "String": "Vec<u8>",
    "TokenID": "u64",

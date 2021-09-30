@@ -37,20 +37,18 @@ mod authorship;
 mod header;
 mod rewards;
 mod script;
-pub mod staking;
 pub mod weights;
 
 #[frame_support::pallet]
 pub mod pallet {
-    use crate::TXOutputHeader;
-    use crate::{OutputHeaderData, OutputHeaderHelper, TokenID};
+    use crate::sign::{self, Scheme};
+    use crate::{OutputHeaderData, OutputHeaderHelper, TXOutputHeader, TokenID, TokenType};
     use bech32;
     use crate::{rewards::reward_block_author};
     use crate::staking;
     use crate::staking::StakingHelper;
     use chainscript::Script;
     use codec::{Decode, Encode};
-    use core::convert::TryInto;
     use core::marker::PhantomData;
     use frame_support::weights::PostDispatchInfo;
     use frame_support::{
@@ -67,11 +65,10 @@ pub mod pallet {
     use pp_api::ProgrammablePoolApi;
     #[cfg(feature = "std")]
     use serde::{Deserialize, Serialize};
-    use sp_core::sr25519::Public;
     use sp_core::{
         sp_std::collections::btree_map::BTreeMap,
-        sp_std::{str, vec},
-        sr25519::Signature as SR25Sig,
+        sp_std::{convert::TryInto, str, vec},
+        sr25519,
         testing::SR25519,
         H256, H512,
     };
@@ -304,11 +301,12 @@ pub mod pallet {
         /// token type for both the value and fee is MLT,
         /// and the signature method is BLS.
         /// functions are available in TXOutputHeaderImpls to update the header.
-        pub fn new_pubkey(value: Value, pub_key: H256) -> Self {
+        pub fn new_pubkey(value: Value, pubkey: H256) -> Self {
+            let pubkey = sp_core::sr25519::Public::from_h256(pubkey);
             Self {
                 value,
                 header: 0,
-                destination: Destination::Pubkey(pub_key),
+                destination: Destination::Pubkey(pubkey.into()),
             }
         }
 
@@ -347,13 +345,14 @@ pub mod pallet {
         }
 
         pub fn new_token(token_id: TokenID, value: Value, pub_key: H256) -> Self {
+            let pub_key = sp_core::sr25519::Public::from_h256(pub_key);
             let mut header = OutputHeaderData::new(0);
             header.set_token_id(token_id);
             let header = header.as_u128();
             Self {
                 value,
                 header,
-                destination: Destination::Pubkey(pub_key),
+                destination: Destination::Pubkey(pub_key.into()),
             }
         }
 
@@ -388,29 +387,35 @@ pub mod pallet {
     }
 
     #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-    #[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, Hash, Default)]
+    #[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, Default)]
     pub struct Transaction<AccountId> {
         pub(crate) inputs: Vec<TransactionInput>,
         pub(crate) outputs: Vec<TransactionOutput<AccountId>>,
-    }
-
-    impl<AccountId> Transaction<AccountId> {
-        /// Iterator over transaction outputs together with output indices
-        pub fn enumerate_outputs(
-            &self,
-        ) -> Result<
-            impl Iterator<Item = (u64, &TransactionOutput<AccountId>)> + ExactSizeIterator,
-            &'static str,
-        > {
-            ensure!((self.outputs.len() as u32) < u32::MAX, "too many outputs");
-            Ok(self.outputs.iter().enumerate().map(|(ix, out)| (ix as u64, out)))
-        }
     }
 
     impl<AccountId: Encode> Transaction<AccountId> {
         /// Get hash of output at given index.
         pub fn outpoint(&self, index: u64) -> H256 {
             BlakeTwo256::hash_of(&(self, index)).into()
+        }
+
+        // A convenience method to sign a transaction. Only Schnorr supported for now.
+        pub fn sign(
+            mut self,
+            utxos: &[TransactionOutput<AccountId>],
+            index: usize,
+            pk: &sr25519::Public,
+        ) -> Option<Self> {
+            let msg = crate::sign::TransactionSigMsg::construct(
+                Default::default(),
+                &self,
+                utxos,
+                index as u64,
+                u32::MAX,
+            );
+            self.inputs[index].witness =
+                crypto::sr25519_sign(SR25519, pk, &msg.encode())?.0.to_vec();
+            Some(self)
         }
     }
 
@@ -570,9 +575,11 @@ pub mod pallet {
         tx: &TransactionFor<T>,
     ) -> Result<ValidTransaction, &'static str> {
         //ensure rather than assert to avoid panic
-        //both inputs and outputs should contain at least 1 utxo
+        //both inputs and outputs should contain at least 1 and at most u32::MAX - 1 entries
         ensure!(!tx.inputs.is_empty(), "no inputs");
         ensure!(!tx.outputs.is_empty(), "no outputs");
+        ensure!(tx.inputs.len() < (u32::MAX as usize), "too many inputs");
+        ensure!(tx.outputs.len() < (u32::MAX as usize), "too many outputs");
 
         //ensure each input is used only a single time
         //maps each input into btree
@@ -602,6 +609,39 @@ pub mod pallet {
                 "each output should be used once"
             );
         }
+
+        // In order to avoid race condition in network we maintain a list of required utxos for a tx
+        // Example of race condition:
+        // Assume both alice and bob have 10 coins each and bob owes charlie 20 coins
+        // In order to pay charlie alice must first send 10 coins to bob which creates a new utxo
+        // If bob uses the new utxo to try and send the coins to charlie before charlie receives the alice to bob 10 coins utxo
+        // then the tx from bob to charlie is invalid. By maintaining a list of required utxos we can ensure the tx can happen as and
+        // when the utxo is available. We use max longevity at the moment. That should be fixed.
+
+        // Resolve the transaction inputs by looking up UTXOs being spent by them.
+        //
+        // This will cointain one of the following:
+        // * Ok(utxos): a vector of UTXOs each input spends.
+        // * Err(missing): a vector of outputs missing from the store
+        let input_utxos = {
+            let mut missing = Vec::new();
+            let mut resolved: Vec<TransactionOutputFor<T>> = Vec::new();
+
+            for input in &tx.inputs {
+                if let Some(input_utxo) = <UtxoStore<T>>::get(&input.outpoint) {
+                    let lock_commitment = input_utxo.destination.lock_commitment();
+                    ensure!(
+                        input.lock_hash() == *lock_commitment,
+                        "Lock hash does not match"
+                    );
+                    resolved.push(input_utxo);
+                } else {
+                    missing.push(input.outpoint.clone().as_fixed_bytes().to_vec());
+                }
+            }
+
+            missing.is_empty().then(|| resolved).ok_or(missing)
+        };
 
         let full_inputs: Vec<(crate::TokenID, TransactionOutputFor<T>)> = tx
             .inputs
@@ -639,71 +679,12 @@ pub mod pallet {
                 );
             }
         }
-        let simple_tx = get_simple_transaction(tx);
 
-        // In order to avoid race condition in network we maintain a list of required utxos for a tx
-        // Example of race condition:
-        // Assume both alice and bob have 10 coins each and bob owes charlie 20 coins
-        // In order to pay charlie alice must first send 10 coins to bob which creates a new utxo
-        // If bob uses the new utxo to try and send the coins to charlie before charlie receives the alice to bob 10 coins utxo
-        // then the tx from bob to charlie is invalid. By maintaining a list of required utxos we can ensure the tx can happen as and
-        // when the utxo is available. We use max longevity at the moment. That should be fixed.
-
-        let mut missing_utxos = Vec::new();
         let mut new_utxos = Vec::new();
         let mut reward = 0;
 
-        // Check that inputs are valid
-        for input in tx.inputs.iter() {
-            if let Some(input_utxo) = <UtxoStore<T>>::get(&input.outpoint) {
-                let lock_commitment = input_utxo.destination.lock_commitment();
-                ensure!(
-                    input.lock_hash() == *lock_commitment,
-                    "Lock hash does not match"
-                );
-
-                match input_utxo.destination {
-                    Destination::Pubkey(pubkey) => {
-                        let sig = (&input.witness[..])
-                            .try_into()
-                            .map_err(|_| "signature length incorrect")?;
-                        ensure!(
-                            crypto::sr25519_verify(
-                                &SR25Sig::from_raw(sig),
-                                &simple_tx,
-                                &Public::from_h256(pubkey)
-                            ),
-                            "signature must be valid"
-                        );
-                    }
-                    Destination::Stake { .. } => {
-                        log::info!("TODO validate stake");
-                    }
-                    Destination::StakeExtra(_) => {
-                        log::info!("TODO validate stake extra");
-
-                    }
-                    Destination::CreatePP(_, _) => {
-                        log::info!("TODO validate spending of OP_CREATE");
-                    }
-                    Destination::CallPP(_, _) => {
-                        log::info!("TODO validate spending of OP_CALL");
-                    }
-                    Destination::ScriptHash(_hash) => {
-                        use crate::script::verify;
-                        ensure!(
-                            verify(&simple_tx, input.witness.clone(), input.lock.clone()).is_ok(),
-                            "script verification failed"
-                        );
-                    }
-                }
-            } else {
-                missing_utxos.push(input.outpoint.clone().as_fixed_bytes().to_vec());
-            }
-        }
-
         // Check that outputs are valid
-        for (output_index, output) in tx.enumerate_outputs()? {
+        for (output_index, output) in tx.outputs.iter().enumerate() {
             // Check the header is valid
             let res = output.validate_header();
             if let Err(e) = res {
@@ -714,7 +695,7 @@ pub mod pallet {
             match &output.destination {
                 Destination::Pubkey(_) | Destination::ScriptHash(_) => {
                     ensure!(output.value > 0, "output value must be nonzero");
-                    let hash = tx.outpoint(output_index);
+                    let hash = tx.outpoint(output_index as u64);
                     ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
                     new_utxos.push(hash.as_fixed_bytes().to_vec());
                 }
@@ -739,8 +720,8 @@ pub mod pallet {
             }
         }
 
-        // if no race condition, check the math
-        if missing_utxos.is_empty() {
+        // if all spent UTXOs are available, check the math and signatures
+        if let Ok(input_utxos) = &input_utxos {
             // We have to check sum of input tokens is less or equal to output tokens.
             let mut inputs_sum: BTreeMap<TokenID, Value> = BTreeMap::new();
             let mut outputs_sum: BTreeMap<TokenID, Value> = BTreeMap::new();
@@ -776,21 +757,52 @@ pub mod pallet {
                 }
             }
 
+            for (index, (input, input_utxo)) in tx.inputs.iter().zip(input_utxos).enumerate() {
+                match &input_utxo.destination {
+                    Destination::Pubkey(pubkey) => {
+                        let msg = sign::TransactionSigMsg::construct(
+                            sign::SigHash::default(),
+                            &tx,
+                            &input_utxos,
+                            index as u64,
+                            u32::MAX,
+                        );
+                        let ok = pubkey
+                            .parse_sig(&input.witness[..])
+                            .ok_or("bad signature format")?
+                            .verify(&msg);
+                        ensure!(ok, "signature must be valid");
+                    }
+                    Destination::CreatePP(_, _) => {
+                        log::info!("TODO validate spending of OP_CREATE");
+                    }
+                    Destination::CallPP(_, _) => {
+                        log::info!("TODO validate spending of OP_CALL");
+                    }
+                    Destination::ScriptHash(_hash) => {
+                        let witness = input.witness.clone();
+                        let lock = input.lock.clone();
+                        crate::script::verify(&tx, &input_utxos, index as u64, witness, lock)
+                            .map_err(|_| "script verification failed")?;
+                    }
+                }
+            }
+
             // Reward at the moment only in MLT
-            reward = if inputs_sum.contains_key(&(crate::TokenType::MLT as TokenID))
-                && outputs_sum.contains_key(&(crate::TokenType::MLT as TokenID))
+            reward = if inputs_sum.contains_key(&(TokenType::MLT as TokenID))
+                && outputs_sum.contains_key(&(TokenType::MLT as TokenID))
             {
-                inputs_sum[&(crate::TokenType::MLT as TokenID)]
-                    .checked_sub(outputs_sum[&(crate::TokenType::MLT as TokenID)])
+                inputs_sum[&(TokenType::MLT as TokenID)]
+                    .checked_sub(outputs_sum[&(TokenType::MLT as TokenID)])
                     .ok_or("reward underflow")?
             } else {
-                *inputs_sum.get(&(crate::TokenType::MLT as TokenID)).ok_or("fee doesn't exist")?
+                *inputs_sum.get(&(TokenType::MLT as TokenID)).ok_or("fee doesn't exist")?
             }
         }
 
         Ok(ValidTransaction {
             priority: reward as u64,
-            requires: missing_utxos,
+            requires: input_utxos.map_or_else(|x| x, |_| Vec::new()),
             provides: new_utxos,
             longevity: TransactionLongevity::MAX,
             propagate: true,
@@ -816,10 +828,10 @@ pub mod pallet {
             <UtxoStore<T>>::remove(input.outpoint);
         }
 
-        for (index, output) in tx.enumerate_outputs()? {
+        for (index, output) in tx.outputs.iter().enumerate() {
             match &output.destination {
                 Destination::Pubkey(_) | Destination::ScriptHash(_) => {
-                    let hash = tx.outpoint(index);
+                    let hash = tx.outpoint(index as u64);
                     log::debug!("inserting to UtxoStore {:?} as key {:?}", output, hash);
                     <UtxoStore<T>>::insert(hash, Some(output));
                 }
@@ -929,8 +941,12 @@ pub mod pallet {
     // NOTE: limitation here is that this is only able to pick `Destination::Pubkey`
     // UTXOs because the ownership of those can be easily determined.
     // TODO: keep track of "our" UTXO separately?
-    pub fn pick_utxo<T: Config>(caller: &T::AccountId, mut value: Value) -> (Value, Vec<H256>) {
-        let mut utxos: Vec<H256> = Vec::new();
+    pub fn pick_utxo<T: Config>(
+        caller: &T::AccountId,
+        value: Value,
+    ) -> (Value, Vec<H256>, Vec<TransactionOutputFor<T>>) {
+        let mut utxos = Vec::new();
+        let mut hashes = Vec::new();
         let mut total = 0;
 
         for (hash, utxo) in UtxoStore::<T>::iter() {
@@ -939,20 +955,20 @@ pub mod pallet {
             match utxo.destination {
                 Destination::Pubkey(pubkey) => {
                     if caller.encode() == pubkey.encode() {
-                        utxos.push(hash);
                         total += utxo.value;
+                        hashes.push(hash);
+                        utxos.push(utxo);
 
-                        if utxo.value >= value {
+                        if total >= value {
                             break;
                         }
-                        value -= utxo.value;
                     }
                 }
                 _ => {}
             }
         }
 
-        (total, utxos)
+        (total, hashes, utxos)
     }
 
     #[pallet::call]
@@ -1045,10 +1061,10 @@ pub mod pallet {
                 ],
             };
 
-            let sig = crypto::sr25519_sign(SR25519, &Public::from_raw(pubkey_raw), &tx.encode())
-                .ok_or(DispatchError::Other("Failed to sign the transaction"))?;
             for i in 0..tx.inputs.len() {
-                tx.inputs[i].witness = sig.0.to_vec();
+                tx = tx
+                    .sign(&utxos, i, &sr25519::Public(pubkey_raw))
+                    .ok_or(DispatchError::Other("Failed to sign the transaction"))?;
             }
 
             spend::<T>(&signer, &tx)
