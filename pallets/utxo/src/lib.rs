@@ -86,7 +86,6 @@ pub mod pallet {
 
     pub trait WeightInfo {
         fn spend(u: u32) -> Weight;
-        fn send_to_pubkey(u: u32) -> Weight;
         fn send_to_address(u: u32) -> Weight;
     }
 
@@ -594,15 +593,13 @@ pub mod pallet {
     /// Pick the UTXOs of `caller` from UtxoStore that satify request `value`
     ///
     /// Return a list of UTXOs that satisfy the request
-    /// Return `None` if caller doesn't have enough UTXO
+    /// Return empty vector if caller doesn't have enough UTXO
     ///
-    // TODO: improve:
-    //     - do not return all UTXOs, only enough to satisfy request
-    pub fn pick_utxo<T: Config>(
-        caller: &T::AccountId,
-        _value: Value,
-    ) -> (Value, Vec<(Value, H256)>) {
-        let mut utxos: Vec<(Value, H256)> = Vec::new();
+    // NOTE: limitation here is that this is only able to pick `Destination::Pubkey`
+    // UTXOs because the ownership of those can be easily determined.
+    // TODO: keep track of "our" UTXO separately?
+    pub fn pick_utxo<T: Config>(caller: &T::AccountId, mut value: Value) -> (Value, Vec<H256>) {
+        let mut utxos: Vec<H256> = Vec::new();
         let mut total = 0;
 
         for (hash, utxo) in UtxoStore::<T>::iter() {
@@ -611,8 +608,13 @@ pub mod pallet {
             match utxo.destination {
                 Destination::Pubkey(pubkey) => {
                     if caller.encode() == pubkey.encode() {
-                        utxos.push((utxo.value, hash));
+                        utxos.push(hash);
                         total += utxo.value;
+
+                        if utxo.value >= value {
+                            break;
+                        }
+                        value -= utxo.value;
                     }
                 }
                 _ => {}
@@ -634,75 +636,44 @@ pub mod pallet {
             Ok(().into())
         }
 
-        // TODO: fix weight
-        #[pallet::weight(T::WeightInfo::send_to_pubkey(10_000))]
-        pub fn send_to_pubkey(
-            origin: OriginFor<T>,
-            value: Value,
-            destination: H256,
-        ) -> DispatchResultWithPostInfo {
-            let signer = ensure_signed(origin)?;
-            let (total, utxos) = pick_utxo::<T>(&signer, value);
-
-            ensure!(utxos.len() > 0, "Caller doesn't have enough UTXOs");
-            ensure!(total >= value, "Caller doesn't have enough UTXOs");
-
-            let mut inputs: Vec<TransactionInput> = Vec::new();
-            for utxo in utxos.iter() {
-                inputs.push(TransactionInput::new_empty(utxo.1));
-            }
-
-            let pubkey_raw: [u8; 32] = signer.encode().try_into().unwrap();
-            let pubkey: Public = Public::from_raw(pubkey_raw);
-
-            let mut tx = Transaction {
-                inputs,
-                outputs: vec![
-                    TransactionOutput::new_pubkey(value, destination),
-                    TransactionOutput::new_pubkey(total - value, H256::from(pubkey_raw)),
-                ],
-            };
-
-            let sig = crypto::sr25519_sign(SR25519, &pubkey, &tx.encode()).unwrap();
-            for i in 0..tx.inputs.len() {
-                tx.inputs[i].witness = sig.0.to_vec();
-            }
-
-            spend::<T>(&signer, &tx)
-        }
-
-        // TODO: fix weight
-        #[pallet::weight(T::WeightInfo::send_to_address(10_000))]
+        #[pallet::weight(T::WeightInfo::send_to_address(16_u32.saturating_add(address.len() as u32)))]
         pub fn send_to_address(
             origin: OriginFor<T>,
             value: Value,
             address: Vec<u8>,
         ) -> DispatchResultWithPostInfo {
-            use chainscript::{Builder, Script};
+            use chainscript::Script;
+
+            ensure!(value > 0, "Value transferred must be larger than zero");
+            ensure!(address.len() >= 42, "Invalid Bech32 address");
 
             let signer = ensure_signed(origin)?;
             let (total, utxos) = pick_utxo::<T>(&signer, value);
 
-            ensure!(utxos.len() > 0, "Caller doesn't have enough UTXOs");
             ensure!(total >= value, "Caller doesn't have enough UTXOs");
 
             let mut inputs: Vec<TransactionInput> = Vec::new();
             for utxo in utxos.iter() {
-                inputs.push(TransactionInput::new_empty(utxo.1));
+                inputs.push(TransactionInput::new_empty(*utxo));
             }
 
-            let pubkey_raw: [u8; 32] = signer.encode().try_into().unwrap();
-            let pubkey: Public = Public::from_raw(pubkey_raw);
-            let outputs: Vec<TransactionOutput<T::AccountId>> = Vec::new();
+            let pubkey_raw: [u8; 32] = match signer.encode().try_into() {
+                Ok(v) => v,
+                Err(e) => {
+                    log::error!("Failed to get caller's public key: {:?}", e);
+                    return Err("Failed to get caller's public key".into());
+                }
+            };
 
+            let pubkey: Public = Public::from_raw(pubkey_raw);
             let wit_prog = match bech32::wit_prog::WitnessProgram::from_address(
-                vec!['b' as u8, 'c' as u8],
+                address[..2].to_vec(),
                 address,
             ) {
                 Ok(v) => v,
                 Err(e) => {
-                    log::error!("Failed to decode bech32 address: {:?}", e);
-                    return Err("Invalid bech32 address".into());
+                    log::error!("Failed to decode Bech32 address: {:?}", e);
+                    return Err("Invalid Bech32 address".into());
                 }
             };
 
