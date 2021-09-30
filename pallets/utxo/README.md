@@ -13,9 +13,10 @@ To run the test cases, just run command `cargo test`.
   "Value": "u128",
   "Destination": {
     "_enum": {
-      "Pubkey": "Public",
+      "Pubkey": "Pubkey",
       "CreatePP": "DestinationCreatePP",
-      "CallPP": "DestinationCallPP"
+      "CallPP": "DestinationCallPP",
+      "ScriptHash": "H256"
     }
   },
   "DestinationCreatePP": {
@@ -50,6 +51,11 @@ To run the test cases, just run command `cargo test`.
     "difficulty": "Difficulty",
     "timestamp": "Moment"
   },
+  "Pubkey": {
+    "_enum": {
+      "Schnorr": "Public"
+    }
+  },
   "Public": "H256"
 }
 ```
@@ -71,6 +77,14 @@ Choose `utxo` for _submit the following extrinsic_ dropdown. Input the ff. param
     * witness (signature): `0x7860d0e15cb0dbc98c713857b334aa0fbe1c11cb7daeca09ec4b87928c9dbb34e78aea9cb5818b601c2088751477c0d3b90cd28fffc50c51a39791b8f5d3da83`
     * value: `50`
     * destination: Pubkey: `0x8eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a48`
+3. Let's spend 50 of Alice's utxo to Bob. Go to **Developer** > **Extrinsics**.
+   Choose `utxo` for _submit the following extrinsic_ dropdown.
+   Input the following parameters (and then submit transaction):
+    * outpoint: `0xfa1d0b34f8950f771881cd7a1601cc8817376ed5b18c6d528cc1ccac863482cc`
+    * lock: `0x` (empty byte string)
+    * witness (signature): `0x3c2f4d9264285ce26317e3aaec119db3efe46cbc7e6304d6015fced79d0d342dd9308e9fa07cbc00731513bcfc410c062c2b46083e6d1dae4ba29a95250c2f83`
+    * value: `50`
+    * destination: Pubkey: Schnorr: `0x8eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a48`
 4. Wait for the upper right corner to change from 
 ```
 utxo.spend
