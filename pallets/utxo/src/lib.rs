@@ -35,15 +35,13 @@ pub mod weights;
 
 #[frame_support::pallet]
 pub mod pallet {
-    use core::convert::TryInto;
-    use core::marker::PhantomData;
-    use hex_literal::hex;
-    #[cfg(feature = "std")]
-    use serde::{Deserialize, Serialize};
-
-    use crate::{validate_header, SignatureMethod, TXOutputHeader, TXOutputHeaderImpls, TokenType};
+    use crate::TXOutputHeader;
+    use crate::{OutputHeaderData, OutputHeaderHelper, TokenID};
     use chainscript::Script;
     use codec::{Decode, Encode};
+    use core::convert::TryInto;
+    use core::marker::PhantomData;
+    use frame_support::weights::PostDispatchInfo;
     use frame_support::{
         dispatch::{DispatchResultWithPostInfo, Vec},
         pallet_prelude::*,
@@ -52,7 +50,11 @@ pub mod pallet {
         traits::IsSubType,
     };
     use frame_system::pallet_prelude::*;
+    use hex_literal::hex;
+    use pallet_utxo_tokens::TokenListData;
     use pp_api::ProgrammablePoolApi;
+    #[cfg(feature = "std")]
+    use serde::{Deserialize, Serialize};
     use sp_core::sr25519::Public;
     use sp_core::{
         sp_std::collections::btree_map::BTreeMap,
@@ -61,8 +63,48 @@ pub mod pallet {
         testing::SR25519,
         H256, H512,
     };
+    use sp_runtime::traits::{
+        AtLeast32Bit, Zero, /*, StaticLookup , AtLeast32BitUnsigned, Member, One */
+    };
+    use sp_runtime::DispatchErrorWithPostInfo;
 
     pub type Value = u128;
+    pub type String = Vec<u8>;
+
+    pub struct Mlt(Value);
+    impl Mlt {
+        pub fn to_munit(&self) -> Value {
+            self.0 * 1_000 * 100_000_000
+        }
+    }
+
+    #[pallet::error]
+    pub enum Error<T> {
+        /// Account balance must be greater than or equal to the transfer amount.
+        BalanceLow,
+        /// Balance should be non-zero.
+        BalanceZero,
+        /// The signing account has no permission to do the operation.
+        NoPermission,
+        /// The given asset ID is unknown.
+        Unknown,
+        /// The origin account is frozen.
+        Frozen,
+        /// The asset ID is already taken.
+        InUse,
+        /// Invalid witness data given.
+        BadWitness,
+        /// Minimum balance should be non-zero.
+        MinBalanceZero,
+        /// No provider reference exists to allow a non-zero balance of a non-self-sufficient asset.
+        NoProvider,
+        /// Invalid metadata given.
+        BadMetadata,
+        /// No approval exists that would allow the transfer.
+        Unapproved,
+        /// The source account would not survive the transfer and it needs to stay alive.
+        WouldDie,
+    }
 
     #[pallet::pallet]
     #[pallet::generate_store(pub(super) trait Store)]
@@ -72,6 +114,8 @@ pub mod pallet {
     #[pallet::config]
     pub trait Config: frame_system::Config {
         type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
+
+        type AssetId: Parameter + AtLeast32Bit + Default + Copy;
 
         /// The overarching call type.
         type Call: Dispatchable + From<Call<Self>> + IsSubType<Call<Self>> + Clone;
@@ -85,6 +129,7 @@ pub mod pallet {
 
     pub trait WeightInfo {
         fn spend(u: u32) -> Weight;
+        fn token_create(u: u32) -> Weight;
         fn send_to_address(u: u32) -> Weight;
     }
 
@@ -225,6 +270,17 @@ pub mod pallet {
             }
         }
 
+        pub fn new_token(token_id: TokenID, value: Value, pub_key: H256) -> Self {
+            let mut header = OutputHeaderData::new(0);
+            header.set_token_id(token_id);
+            let header = header.as_u128();
+            Self {
+                value,
+                header,
+                destination: Destination::Pubkey(pub_key),
+            }
+        }
+
         /// Create a new output to given script hash.
         pub fn new_script_hash(value: Value, hash: H256) -> Self {
             Self {
@@ -244,25 +300,14 @@ pub mod pallet {
         }
     }
 
-    impl<AccountId> TXOutputHeaderImpls for TransactionOutput<AccountId> {
-        fn set_token_type(&mut self, value_token_type: TokenType) {
-            TokenType::insert(&mut self.header, value_token_type);
-        }
-
-        fn set_signature_method(&mut self, signature_method: SignatureMethod) {
-            SignatureMethod::insert(&mut self.header, signature_method);
-        }
-
-        fn get_token_type(&self) -> Result<TokenType, &'static str> {
-            TokenType::extract(self.header)
-        }
-
-        fn get_signature_method(&self) -> Result<SignatureMethod, &'static str> {
-            SignatureMethod::extract(self.header)
-        }
-
+    impl<AccountId> TransactionOutput<AccountId> {
         fn validate_header(&self) -> Result<(), &'static str> {
-            validate_header(self.header)
+            // Check signature and token id
+            self.header
+                .as_tx_output_header()
+                .validate()
+                .then(|| ())
+                .ok_or("Incorrect header")
         }
     }
 
@@ -302,6 +347,14 @@ pub mod pallet {
     pub type TransactionFor<T: Config> = Transaction<T::AccountId>;
 
     #[pallet::storage]
+    #[pallet::getter(fn token_list)]
+    pub(super) type TokenList<T> = StorageValue<_, TokenListData, ValueQuery>;
+
+    #[pallet::storage]
+    #[pallet::getter(fn tokens_higher_id)]
+    pub(super) type TokensHigherID<T> = StorageValue<_, TokenID, ValueQuery>;
+
+    #[pallet::storage]
     #[pallet::getter(fn reward_total)]
     pub(super) type RewardTotal<T> = StorageValue<_, Value, ValueQuery>;
 
@@ -312,7 +365,9 @@ pub mod pallet {
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
+    #[pallet::metadata(T::AccountId = "AccountId")]
     pub enum Event<T: Config> {
+        TokenCreated(u64, T::AccountId),
         TransactionSuccess(TransactionFor<T>),
     }
 
@@ -331,7 +386,6 @@ pub mod pallet {
         for input in trx.inputs.iter_mut() {
             input.witness = Vec::new();
         }
-
         trx.encode()
     }
 
@@ -424,8 +478,42 @@ pub mod pallet {
             );
         }
 
-        let mut total_input: Value = 0;
-        let mut total_output: Value = 0;
+        let full_inputs: Vec<(crate::TokenID, TransactionOutputFor<T>)> = tx
+            .inputs
+            .iter()
+            .filter_map(|input| <UtxoStore<T>>::get(&input.outpoint))
+            .map(|output| (OutputHeaderData::new(output.header).token_id(), output))
+            .collect();
+
+        let input_vec: Vec<(crate::TokenID, Value)> =
+            full_inputs.iter().map(|output| (output.0, output.1.value)).collect();
+
+        let out_vec: Vec<(crate::TokenID, Value)> = tx
+            .outputs
+            .iter()
+            .map(|output| {
+                (
+                    OutputHeaderData::new(output.header).token_id(),
+                    output.value,
+                )
+            })
+            .collect();
+
+        // Check for token creation
+        let tokens_list = <TokenList<T>>::get();
+        for output in tx.outputs.iter() {
+            let tid = OutputHeaderData::new(output.header).token_id();
+            // If we have input and output for the same token it's not a problem
+            if full_inputs.iter().find(|&x| (x.0 == tid) && (x.1 != *output)).is_some() {
+                continue;
+            } else {
+                // But when we don't have an input for token but token id exist in TokenList
+                ensure!(
+                    tokens_list.iter().find(|&x| x.id == tid).is_none(),
+                    "no inputs for the token id"
+                );
+            }
+        }
         let simple_tx = get_simple_transaction(tx);
 
         // In order to avoid race condition in network we maintain a list of required utxos for a tx
@@ -484,8 +572,6 @@ pub mod pallet {
                         );
                     }
                 }
-                total_input =
-                    total_input.checked_add(input_utxo.value).ok_or("input value overflow")?;
             } else {
                 missing_utxos.push(input.outpoint.clone().as_fixed_bytes().to_vec());
             }
@@ -516,18 +602,55 @@ pub mod pallet {
                     log::info!("TODO validate OP_CALL");
                 }
             }
-
-            // checked add bug in example cod where it uses checked_sub
-            total_output = total_output.checked_add(output.value).ok_or("output value overflow")?;
         }
 
         // if no race condition, check the math
         if missing_utxos.is_empty() {
-            ensure!(
-                total_input >= total_output,
-                "output value must not exceed input value"
-            );
-            reward = total_input.checked_sub(total_output).ok_or("reward underflow")?;
+            // We have to check sum of input tokens is less or equal to output tokens.
+            let mut inputs_sum: BTreeMap<TokenID, Value> = BTreeMap::new();
+            let mut outputs_sum: BTreeMap<TokenID, Value> = BTreeMap::new();
+
+            for x in input_vec {
+                let value =
+                    x.1.checked_add(*inputs_sum.get(&x.0).unwrap_or(&0))
+                        .ok_or("input value overflow")?;
+                inputs_sum.insert(x.0, value);
+            }
+            for x in out_vec {
+                let value =
+                    x.1.checked_add(*outputs_sum.get(&x.0).unwrap_or(&0))
+                        .ok_or("output value overflow")?;
+                outputs_sum.insert(x.0, value);
+            }
+
+            let mut new_token_exist = false;
+            for output_token in &outputs_sum {
+                match inputs_sum.get(&output_token.0) {
+                    Some(input_value) => ensure!(
+                        input_value >= &output_token.1,
+                        "output value must not exceed input value"
+                    ),
+                    None => {
+                        // If the transaction has one an output with a new token ID
+                        if new_token_exist {
+                            frame_support::fail!("input for the token not found")
+                        } else {
+                            new_token_exist = true;
+                        }
+                    }
+                }
+            }
+
+            // Reward at the moment only in MLT
+            reward = if inputs_sum.contains_key(&(crate::TokenType::MLT as TokenID))
+                && outputs_sum.contains_key(&(crate::TokenType::MLT as TokenID))
+            {
+                inputs_sum[&(crate::TokenType::MLT as TokenID)]
+                    .checked_sub(outputs_sum[&(crate::TokenType::MLT as TokenID)])
+                    .ok_or("reward underflow")?
+            } else {
+                *inputs_sum.get(&(crate::TokenType::MLT as TokenID)).ok_or("fee doesn't exist")?
+            }
         }
 
         Ok(ValidTransaction {
@@ -589,6 +712,61 @@ pub mod pallet {
         Ok(().into())
     }
 
+    pub fn token_create<T: Config>(
+        caller: &T::AccountId,
+        public: H256,
+        input_for_fee: TransactionInput,
+        token_name: String,
+        token_ticker: String,
+        supply: Value,
+    ) -> Result<u64, DispatchErrorWithPostInfo<PostDispatchInfo>> {
+        ensure!(token_name.len() <= 25, Error::<T>::Unapproved);
+        ensure!(token_ticker.len() <= 5, Error::<T>::Unapproved);
+        ensure!(!supply.is_zero(), Error::<T>::MinBalanceZero);
+
+        // Take a free TokenID
+        let token_id =
+            <TokensHigherID<T>>::get().checked_add(1).ok_or("All tokens IDs has taken")?;
+
+        // Input with MLT FEE
+        let fee = UtxoStore::<T>::get(input_for_fee.outpoint).ok_or(Error::<T>::Unapproved)?.value;
+        ensure!(fee >= Mlt(100).to_munit(), Error::<T>::Unapproved);
+
+        // Save in UTXO
+        let instance = crate::TokenInstance::new(token_id, token_name, token_ticker, supply);
+        let mut tx = Transaction {
+            inputs: crate::vec![
+                // Fee an input equal 100 MLT
+                input_for_fee,
+            ],
+            outputs: crate::vec![
+                // Output a new tokens
+                TransactionOutput::new_token(token_id, supply, public),
+            ],
+        };
+
+        // We shall make an output to return odd funds
+        if fee > Mlt(100).to_munit() {
+            tx.outputs.push(TransactionOutput::new_pubkey(
+                fee - Mlt(100).to_munit(),
+                public,
+            ));
+        }
+
+        // Save in Store
+        <TokenList<T>>::mutate(|x| {
+            if x.iter().find(|&x| x.id == token_id).is_none() {
+                x.push(instance.clone())
+            } else {
+                panic!("the token has already existed with the same id")
+            }
+        });
+
+        // Success
+        spend::<T>(caller, &tx)?;
+        Ok(token_id)
+    }
+
     /// Pick the UTXOs of `caller` from UtxoStore that satify request `value`
     ///
     /// Return a list of UTXOs that satisfy the request
@@ -632,6 +810,28 @@ pub mod pallet {
         ) -> DispatchResultWithPostInfo {
             spend::<T>(&ensure_signed(origin)?, &tx)?;
             Self::deposit_event(Event::<T>::TransactionSuccess(tx));
+            Ok(().into())
+        }
+
+        #[pallet::weight(T::WeightInfo::token_create(768_usize.saturating_add(token_name.len()) as u32))]
+        pub fn token_create(
+            origin: OriginFor<T>,
+            public: H256,
+            input_for_fee: TransactionInput,
+            token_name: String,
+            token_ticker: String,
+            supply: Value,
+        ) -> DispatchResultWithPostInfo {
+            let caller = &ensure_signed(origin)?;
+            let token_id = token_create::<T>(
+                caller,
+                public,
+                input_for_fee,
+                token_name,
+                token_ticker,
+                supply,
+            )?;
+            Self::deposit_event(Event::<T>::TokenCreated(token_id, caller.clone()));
             Ok(().into())
         }
 
@@ -722,9 +922,15 @@ pub mod pallet {
     }
 }
 
-impl<T: Config> Pallet<T> {
+use pallet_utxo_tokens::{TokenInstance, TokenListData};
+
+impl<T: Config> crate::Pallet<T> {
     pub fn send() -> u32 {
         1337
+    }
+
+    pub fn tokens_list() -> TokenListData {
+        <TokenList<T>>::get()
     }
 }
 

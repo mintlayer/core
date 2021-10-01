@@ -16,8 +16,8 @@
 // Author(s): C. Yap
 
 use crate::{
-    mock::*, Destination, RewardTotal, Transaction, TransactionInput, TransactionOutput, UtxoStore,
-    Value,
+    mock::*, Destination, RewardTotal, TokenList, Transaction, TransactionInput, TransactionOutput,
+    UtxoStore, Value,
 };
 use chainscript::{opcodes::all as opc, Builder};
 use codec::Encode;
@@ -26,6 +26,7 @@ use frame_support::{
     sp_io::crypto,
     sp_runtime::traits::{BlakeTwo256, Hash},
 };
+use pallet_utxo_tokens::TokenInstance;
 use sp_core::{sp_std::vec, sr25519::Public, testing::SR25519, H256, H512};
 
 fn tx_input_gen_no_signature() -> TransactionInput {
@@ -348,6 +349,68 @@ fn test_script() {
 }
 
 #[test]
+fn test_tokens() {
+    use crate::TokensHigherID;
+
+    let (mut test_ext, alice_pub_key, karl_pub_key) = new_test_ext_and_keys();
+    test_ext.execute_with(|| {
+        // Let's create a new test token
+        let token_id = <TokensHigherID<Test>>::get()
+            .checked_add(1)
+            .ok_or("All tokens IDs has taken")
+            .unwrap();
+        // Let's make a tx for a new token:
+        // * We need at least one input for the fee and one output for a new token.
+        // * TokenID for a new token has to be unique.
+        let instance =
+            TokenInstance::new(token_id, b"New token test".to_vec(), b"NTT".to_vec(), 1000);
+        let mut first_tx = Transaction {
+            inputs: vec![
+                // 100 MLT
+                tx_input_gen_no_signature(),
+            ],
+            outputs: vec![
+                // 100 a new tokens
+                TransactionOutput::new_token(token_id, instance.supply, H256::from(alice_pub_key)),
+                // 20 MLT to be paid as a fee, 80 MLT returning
+                TransactionOutput::new_pubkey(80, H256::from(alice_pub_key)),
+            ],
+        };
+        let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &first_tx.encode()).unwrap();
+        first_tx.inputs[0].witness = alice_sig.0.to_vec();
+        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), first_tx.clone()));
+        // Store a new TokenInstance to the Storage
+        <TokenList<Test>>::mutate(|x| {
+            if x.iter().find(|&x| x.id == token_id).is_none() {
+                x.push(instance.clone())
+            } else {
+                panic!("the token has already existed with the same id")
+            }
+        });
+        dbg!(&<TokenList<Test>>::get());
+
+        // alice sends 1000 tokens to karl and the rest back to herself 10 tokens
+        let utxo_hash_mlt = BlakeTwo256::hash_of(&(&first_tx, 0 as u64));
+        let utxo_hash_token = BlakeTwo256::hash_of(&(&first_tx, 1 as u64));
+
+        let mut tx = Transaction {
+            inputs: vec![
+                TransactionInput::new_empty(utxo_hash_mlt),
+                TransactionInput::new_empty(utxo_hash_token),
+            ],
+            outputs: vec![TransactionOutput::new_token(token_id, 10, H256::from(karl_pub_key))],
+        };
+
+        let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx.encode()).unwrap();
+        let sig_script = H512::from(alice_sig.clone());
+        for input in tx.inputs.iter_mut() {
+            input.witness = sig_script.0.to_vec();
+        }
+        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx.clone()));
+    });
+}
+
+#[test]
 fn attack_double_spend_by_tweaking_input() {
     execute_with_alice(|alice_pub_key| {
         // Prepare and send a transaction with a 50-token output
@@ -377,7 +440,7 @@ fn attack_double_spend_by_tweaking_input() {
             Utxo::spend(Origin::signed(H256::zero()), tx1),
             "each input should be used only once"
         );
-    })
+    });
 }
 
 #[test]

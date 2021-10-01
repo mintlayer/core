@@ -6,12 +6,13 @@ edition = "2018"
 
 [dependencies]
 pallet-utxo-rpc-runtime-api = { path = "./runtime-api" }
+pallet-utxo-tokens = {path = "../tokens"}
 jsonrpc-core = "18.0.0"
 jsonrpc-core-client = "18.0.0"
 jsonrpc-derive = "18.0.0"
 
 [dependencies.serde]
-version = "1.0.104"
+version = "1.0.119"
 features = ["derive"]
 
 [dependencies.sp-blockchain]
