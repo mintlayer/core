@@ -548,7 +548,12 @@ fn nft_test() {
                     H256::from(alice_pub_key),
                 )],
             };
-            let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx.encode()).unwrap();
+            let alice_sig = crypto::sr25519_sign(
+                SR25519,
+                &sp_core::sr25519::Public::from_raw(alice_pub_key),
+                &tx.encode(),
+            )
+            .unwrap();
             tx.inputs[0].witness = alice_sig.0.to_vec();
             assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx.clone()));
         }
