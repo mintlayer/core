@@ -31,7 +31,7 @@ use frame_support::{
     traits::GenesisBuild,
 };
 use sp_core::{
-    sp_std::{marker::PhantomData, vec, collections::btree_map::BTreeMap, time::Duration, cell::RefCell},
+    sp_std::{marker::PhantomData, vec, collections::btree_map::BTreeMap, cell::RefCell},
     sr25519::Public,
     testing::SR25519,
     H256,
@@ -75,7 +75,7 @@ pub fn genesis_utxo() -> [u8; 32] {
 pub struct MockPool<T>(PhantomData<T>);
 
 impl<T: SysConfig> ProgrammablePoolApi for MockPool<T> {
-    type AccountId = H256;
+    type AccountId = AccountId;
 
     fn create(
         _origin: &Self::AccountId,
@@ -118,8 +118,8 @@ pub fn next_block() {
 
 impl <T:pallet_utxo::Config> StakingHelper<AccountId> for MockStaking<T>
 {
-    fn get_account_id(pub_key: &H256) -> Option<AccountId> {
-        Some(pub_key.clone())
+    fn get_account_id(pub_key: &H256) -> AccountId {
+        pub_key.clone()
     }
 
     fn stake(stash_account: &AccountId, controller_account: &AccountId, _rotate_keys: &mut Vec<u8>) -> DispatchResultWithPostInfo {
@@ -222,7 +222,7 @@ impl SysConfig for Test {
     type BlockNumber = BlockNumber;
     type Hash = H256;
     type Hashing = BlakeTwo256;
-    type AccountId = H256;
+    type AccountId = AccountId;
     type Lookup = IdentityLookup<Self::AccountId>;
     type Header = Header;
     type Event = Event;
@@ -334,18 +334,23 @@ pub fn multiple_keys_test_ext()  -> (TestExternalities, Vec<(Public,H256)>) {
     let greg_pub_key = create_pub_key(&keystore, GREG_PHRASE);
     let tom_pub_key = create_pub_key(&keystore, TOM_PHRASE);
 
-    let alice_genesis = TransactionOutput::new_pubkey(100, H256::from(alice_pub_key));
-    let karl_genesis = TransactionOutput::new_pubkey(110, H256::from(karl_pub_key));
-    let greg_genesis = TransactionOutput::new_pubkey(120, H256::from(greg_pub_key));
-    let tom_genesis = TransactionOutput::new_pubkey(130, H256::from(tom_pub_key));
+    let alice_hash = H256::from(alice_pub_key);
+    let karl_hash = H256::from(karl_pub_key);
+    let greg_hash = H256::from(greg_pub_key);
+    let tom_hash = H256::from(tom_pub_key);
+
+    let alice_genesis = TransactionOutput::new_pubkey(100, alice_hash.clone());
+    let karl_genesis = TransactionOutput::new_pubkey(110, karl_hash.clone());
+    let greg_genesis = TransactionOutput::new_pubkey(120, greg_hash.clone());
+    let tom_genesis = TransactionOutput::new_pubkey(130, tom_hash.clone());
 
     let mut t = frame_system::GenesisConfig::default().build_storage::<Test>().unwrap();
 
     pallet_utxo::GenesisConfig::<Test> {
         genesis_utxos: vec![alice_genesis.clone(), karl_genesis.clone(), greg_genesis.clone(), tom_genesis.clone()],
         locked_utxos: vec![
-            // account 3 (tom) is a stash account and account 0 (alice) is the controller.
-            TransactionOutput::new_stake(10,3,0,vec![3,1])
+            // tom is a stash account and alice is the controller.
+            TransactionOutput::new_stake(10,tom_hash,alice_hash,vec![3,1])
         ],
         extra_mlt_coins: 1_000,
         initial_reward_amount: 1,
@@ -359,9 +364,9 @@ pub fn multiple_keys_test_ext()  -> (TestExternalities, Vec<(Public,H256)>) {
 
     MOCK_STAKING.with(|stake_info| {
         let mut stake_info = stake_info.borrow_mut();
-        stake_info.lock_map.insert(0,None);
-        stake_info.lock_stash_map.insert(0, 3);
-        stake_info.stash_map.insert(3,0);
+        stake_info.lock_map.insert(alice_hash,None);
+        stake_info.lock_stash_map.insert(alice_hash, tom_hash);
+        stake_info.stash_map.insert(tom_hash,alice_hash);
     });
 
     AUTHORITIES.with(|auths| {

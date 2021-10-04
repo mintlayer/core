@@ -15,14 +15,13 @@
 //
 // Author(s): C. Yap
 
-use crate::{mock::*, Destination, RewardTotal, Transaction, TransactionInput, TransactionOutput, UtxoStore, Value, LockedUtxos, Error, StakingCount, TransactionOutputFor, StartingPeriod, period_elapsed, BlockAuthorRewardAmount, MLTCoinsAvailable};
+use crate::{mock::*, Transaction, TransactionInput, TransactionOutput, UtxoStore, LockedUtxos, Error, StakingCount, StartingPeriod, period_elapsed, BlockAuthorRewardAmount, MLTCoinsAvailable};
 use codec::Encode;
 use frame_support::{
-    assert_err, assert_noop, assert_ok,
+    assert_err, assert_ok,
     sp_io::crypto,
-    sp_runtime::traits::{BlakeTwo256, Hash},
 };
-use sp_core::{sp_std::{ collections::btree_map::BTreeMap, vec}, sr25519::Public, testing::SR25519, H256, H512};
+use sp_core::{sp_std::vec, testing::SR25519, H256};
 use crate::rewards::update_reward_amount;
 
 #[test]
@@ -30,6 +29,8 @@ fn simple_staking() {
     let (mut test_ext, keys_and_hashes) = multiple_keys_test_ext();
     test_ext.execute_with(|| {
         let (karl_pub_key, karl_genesis) = keys_and_hashes[1];
+        let (alice_pub_key, _) = keys_and_hashes[0];
+        let (greg_pub_key, _) = keys_and_hashes[2];
 
         let mut tx = Transaction {
             inputs: vec![
@@ -38,7 +39,7 @@ fn simple_staking() {
             outputs: vec![
                 // KARL (index 1) wants to be a validator. He will use GREG (index 2) as the stash account.
                 // minimum value to stake is 10,
-                TransactionOutput::new_stake(10, 2,1,vec![2,1]),
+                TransactionOutput::new_stake(10, H256::from(greg_pub_key),H256::from(karl_pub_key),vec![2,1]),
                 TransactionOutput::new_pubkey(90,H256::from(karl_pub_key))
             ]
         };
@@ -47,11 +48,11 @@ fn simple_staking() {
         let locked_utxo_hash = tx.outpoint(0);
         let new_utxo_hash = tx.outpoint(1);
 
-        assert_ok!(Utxo::spend(Origin::signed(1), tx));
+        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx));
         assert!(UtxoStore::<Test>::contains_key(new_utxo_hash));
         assert!(LockedUtxos::<Test>::contains_key(locked_utxo_hash));
-        assert!(StakingCount::<Test>::contains_key(0));
-        assert!(StakingCount::<Test>::contains_key(1));
+        assert!(StakingCount::<Test>::contains_key(H256::from(alice_pub_key)));
+        assert!(StakingCount::<Test>::contains_key(H256::from(karl_pub_key)));
     })
 }
 
@@ -60,6 +61,7 @@ fn less_than_minimum_stake() {
     let (mut test_ext, keys_and_hashes) = multiple_keys_test_ext();
     test_ext.execute_with(|| {
         let (karl_pub_key, karl_genesis) = keys_and_hashes[1];
+        let (greg_pub_key, _) = keys_and_hashes[2];
         let mut tx = Transaction {
             inputs: vec![
                 TransactionInput::new_empty(karl_genesis)
@@ -67,7 +69,7 @@ fn less_than_minimum_stake() {
             outputs: vec![
                 // KARL (index 1) wants to be a validator. He will use GREG (index 2) as the stash account.
                 // minimum value to stake is 10, but KARL only staked 5.
-                TransactionOutput::new_stake(5, 2,1,vec![2,1]),
+                TransactionOutput::new_stake(5, H256::from(greg_pub_key),H256::from(karl_pub_key),vec![2,1]),
                 TransactionOutput::new_pubkey(90,H256::from(karl_pub_key))
             ]
         };
@@ -75,7 +77,7 @@ fn less_than_minimum_stake() {
         tx.inputs[0].witness = karl_sig.0.to_vec();
 
 
-        assert_err!(Utxo::spend(Origin::signed(1), tx), "output value must be equal or more than the set minimum stake");
+        assert_err!(Utxo::spend(Origin::signed(H256::zero()), tx), "output value must be equal or more than the set minimum stake");
 
     })
 }
@@ -86,20 +88,21 @@ fn staker_staking_again() {
     let (mut test_ext, keys_and_hashes) = multiple_keys_test_ext();
     test_ext.execute_with(|| {
         let (alice_pub_key, alice_genesis) = keys_and_hashes[0];
+        let (greg_pub_key, _) = keys_and_hashes[2];
         let mut tx = Transaction {
             inputs: vec![
                 TransactionInput::new_empty(alice_genesis)
             ],
             outputs: vec![
                 // ALICE (index 0) wants to stake again. He will use GREG (index 2) as the stash account.
-                TransactionOutput::new_stake(10, 2,0,vec![2,0]),
+                TransactionOutput::new_stake(10, H256::from(greg_pub_key),H256::from(alice_pub_key),vec![2,0]),
                 TransactionOutput::new_pubkey(90,H256::from(alice_pub_key))
             ]
         };
         let alice_sig = crypto::sr25519_sign(SR25519,&alice_pub_key, &tx.encode()).unwrap();
         tx.inputs[0].witness = alice_sig.0.to_vec();
 
-        assert_err!(Utxo::spend(Origin::signed(0), tx), Error::<Test>::StakingAlreadyExists);
+        assert_err!(Utxo::spend(Origin::signed(H256::zero()), tx), Error::<Test>::StakingAlreadyExists);
     })
 }
 
@@ -108,20 +111,21 @@ fn stash_account_is_staking() {
     let (mut test_ext, keys_and_hashes) = multiple_keys_test_ext();
     test_ext.execute_with(|| {
         let (tom_pub_key, tom_genesis) = keys_and_hashes[3];
+        let(greg_pub_key, _) = keys_and_hashes[2];
         let mut tx = Transaction {
             inputs: vec![
                 TransactionInput::new_empty(tom_genesis)
             ],
             outputs: vec![
                 // TOM (index 3) wants to stake. But he's a stash account already!
-                TransactionOutput::new_stake(10, 2,3,vec![2,3]),
+                TransactionOutput::new_stake(10, H256::from(greg_pub_key),H256::from(tom_pub_key),vec![2,3]),
                 TransactionOutput::new_pubkey(90,H256::from(tom_pub_key))
             ]
         };
         let tom_sig = crypto::sr25519_sign(SR25519,&tom_pub_key, &tx.encode()).unwrap();
         tx.inputs[0].witness = tom_sig.0.to_vec();
 
-        assert_err!(Utxo::spend(Origin::signed(3), tx), "CANNOT STAKE. CONTROLLER ACCOUNT IS ACTUALLY A STASH ACCOUNT");
+        assert_err!(Utxo::spend(Origin::signed(H256::zero()), tx), "CANNOT STAKE. CONTROLLER ACCOUNT IS ACTUALLY A STASH ACCOUNT");
     })
 }
 
@@ -146,10 +150,10 @@ fn simple_staking_extra() {
         let new_utxo_hash = tx.outpoint(1);
 
 
-        assert_ok!(Utxo::spend(Origin::signed(0), tx));
+        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx));
         assert!(UtxoStore::<Test>::contains_key(new_utxo_hash));
         assert!(LockedUtxos::<Test>::contains_key(locked_utxo_hash));
-        assert_eq!(StakingCount::<Test>::get(0),2);
+        assert_eq!(StakingCount::<Test>::get(H256::from(alice_pub_key)),2);
     })
 }
 
@@ -171,7 +175,7 @@ fn non_validator_staking_extra() {
         let greg_sig = crypto::sr25519_sign(SR25519,&greg_pub_key, &tx.encode()).unwrap();
         tx.inputs[0].witness = greg_sig.0.to_vec();
 
-        assert_err!(Utxo::spend(Origin::signed(2), tx), Error::<Test>::NoStakingRecordFound);
+        assert_err!(Utxo::spend(Origin::signed(H256::zero()), tx), Error::<Test>::NoStakingRecordFound);
     })
 }
 
@@ -188,7 +192,7 @@ fn pausing_and_withdrawing() {
         // ALICE (index 0) wants to stop validating.
         let (alice_pub_key, alice_genesis) = keys_and_hashes[0];
 
-        assert_ok!(Utxo::unlock_stake(Origin::signed(0),H256::from(alice_pub_key)));
+        assert_ok!(Utxo::unlock_stake(Origin::signed(H256::zero()),H256::from(alice_pub_key)));
         next_block();
 
         let mut tx = Transaction {
@@ -210,7 +214,7 @@ fn pausing_and_withdrawing() {
         next_block();
         next_block();
         next_block();
-        assert_ok!(Utxo::spend(Origin::signed(0),tx));
+        assert_ok!(Utxo::spend(Origin::signed(H256::zero()),tx));
     })
 }
 
@@ -220,8 +224,8 @@ fn non_validator_pausing(){
     test_ext.execute_with(|| {
         let (karl_pub_key, _) = keys_and_hashes[1];
         assert_err!(
-            Utxo::unlock_stake(Origin::signed(1),H256::from(karl_pub_key)),
-            Error::<Test>::NoStakingRecordFound
+            Utxo::unlock_stake(Origin::signed(H256::zero()),H256::from(karl_pub_key)),
+            "CANNOT PAUSE. CONTROLLER ACCOUNT DOES NOT EXIST"
         );
     })
 }
@@ -251,7 +255,7 @@ fn non_validator_withdrawing() {
         let karl_sig = crypto::sr25519_sign(SR25519,&karl_pub_key, &tx.encode()).unwrap();
         tx.inputs[0].witness = karl_sig.0.to_vec();
 
-        assert_err!(Utxo::spend(Origin::signed(1),tx), "controller_pub_key not found in the list of authorities");
+        assert_err!(Utxo::spend(Origin::signed(H256::zero()),tx), "controller_pub_key not a validator");
     })
 }
 
@@ -268,7 +272,7 @@ fn withdrawing_before_expected_period() {
         // ALICE (index 0) wants to stop validating.
         let (alice_pub_key, alice_genesis) = keys_and_hashes[0];
 
-        assert_ok!(Utxo::unlock_stake(Origin::signed(0),H256::from(alice_pub_key)));
+        assert_ok!(Utxo::unlock_stake(Origin::signed(H256::zero()),H256::from(alice_pub_key)));
 
         let mut tx = Transaction {
             inputs: vec![
@@ -284,7 +288,7 @@ fn withdrawing_before_expected_period() {
         tx.inputs[0].witness = alice_sig.0.to_vec();
 
         // ALICE is not waiting for the withdrawal period.
-        assert_err!(Utxo::spend(Origin::signed(0),tx), Error::<Test>::InvalidOperation);
+        assert_err!(Utxo::spend(Origin::signed(H256::zero()),tx), Error::<Test>::InvalidOperation);
     })
 }
 

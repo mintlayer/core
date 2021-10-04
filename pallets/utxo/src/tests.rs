@@ -352,7 +352,7 @@ fn test_script() {
 fn test_tokens() {
     use crate::TokensHigherID;
 
-    let (mut test_ext, alice_pub_key, karl_pub_key) = new_test_ext_and_keys();
+    let (mut test_ext, alice_pub_key, karl_pub_key) = alice_test_ext_and_keys();
     test_ext.execute_with(|| {
         // Let's create a new test token
         let token_id = <TokensHigherID<Test>>::get()
@@ -422,7 +422,7 @@ fn attack_double_spend_by_tweaking_input() {
         };
         let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx0.encode()).unwrap();
         tx0.inputs[0].witness = alice_sig.0.to_vec();
-        assert_ok!(Utxo::spend(Origin::signed(0), tx0.clone()));
+        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx0.clone()));
 
         // Create a transaction that spends the same input 10 times by slightly modifying the
         // redeem script.
@@ -437,7 +437,7 @@ fn attack_double_spend_by_tweaking_input() {
             outputs: vec![TransactionOutput::new_pubkey(500, H256::from(alice_pub_key))],
         };
         assert_err!(
-            Utxo::spend(Origin::signed(0), tx1),
+            Utxo::spend(Origin::signed(H256::zero()), tx1),
             "each input should be used only once"
         );
     });
@@ -485,7 +485,7 @@ fn test_pubkey_hash() {
 
 #[test]
 fn test_send_to_address() {
-    let (mut test_ext, alice_pub_key, _karl_pub_key) = new_test_ext_and_keys();
+    let (mut test_ext, alice_pub_key, _karl_pub_key) = alice_test_ext_and_keys();
     test_ext.execute_with(|| {
         // `addr` is bech32-encoded hash160(karl_pub_key)
         let addr = "bc1q7pyaw92rh34mj6flsh7acccd7ayn4wf787ws4m";
