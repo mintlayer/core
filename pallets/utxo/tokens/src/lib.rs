@@ -24,7 +24,7 @@ pub enum TokenInstance {
         id: H256,
         data_hash: [u8; 32],
         data_url: Vec<u8>,
-        creator_pubkey: Public,
+        creator_pubkey: [u8; 32],
     },
 }
 
@@ -58,7 +58,7 @@ impl TokenInstance {
             id,
             data_hash,
             data_url,
-            creator_pubkey,
+            creator_pubkey: creator_pubkey.0,
         }
     }
 

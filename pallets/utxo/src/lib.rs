@@ -33,20 +33,9 @@ pub mod weights;
 
 pub const SR25519: sp_runtime::KeyTypeId = sp_runtime::KeyTypeId(*b"sr25");
 
-pub type TokenId = H256;
-pub type Value = u128;
-pub type String = Vec<u8>;
-
-pub struct Mlt(Value);
-impl Mlt {
-    pub fn to_munit(&self) -> Value {
-        self.0 * 1_000 * 100_000_000
-    }
-}
-
 #[frame_support::pallet]
 pub mod pallet {
-    use crate::{Mlt, String, TokenId, Value, SR25519};
+    use crate::SR25519;
     use chainscript::Script;
     use codec::{Decode, Encode};
     use core::convert::TryInto;
@@ -75,6 +64,17 @@ pub mod pallet {
         AtLeast32Bit, Zero, /*, StaticLookup , AtLeast32BitUnsigned, Member, One */
     };
     use sp_runtime::DispatchErrorWithPostInfo;
+
+    pub type TokenId = H256;
+    pub type Value = u128;
+    pub type String = Vec<u8>;
+
+    pub struct Mlt(Value);
+    impl Mlt {
+        pub fn to_munit(&self) -> Value {
+            self.0 * 1_000 * 100_000_000
+        }
+    }
 
     #[pallet::error]
     pub enum Error<T> {
@@ -1063,6 +1063,14 @@ pub mod pallet {
 
 use pallet_utxo_tokens::{TokenInstance, TokenListData};
 
+use frame_support::pallet_prelude::DispatchResultWithPostInfo;
+use sp_core::{
+    crypto::UncheckedFrom,
+    {H256, H512},
+};
+use sp_runtime::sp_std::vec;
+use utxo_api::UtxoApi;
+
 impl<T: Config> crate::Pallet<T> {
     pub fn send() -> u32 {
         1337
@@ -1072,7 +1080,12 @@ impl<T: Config> crate::Pallet<T> {
         <TokenList<T>>::get()
     }
 
-    pub fn nft_read(id: H256) -> Option<(/* Data url */ Vec<u8>, /* Data hash */ [u8; 32])> {
+    pub fn nft_read(
+        id: H256,
+    ) -> Option<(
+        /* Data url */ frame_support::inherent::Vec<u8>,
+        /* Data hash */ [u8; 32],
+    )> {
         match Nft::<T>::get(id)? {
             TokenInstance::Nft {
                 data_hash,
@@ -1083,14 +1096,6 @@ impl<T: Config> crate::Pallet<T> {
         }
     }
 }
-
-use frame_support::pallet_prelude::DispatchResultWithPostInfo;
-use sp_core::{
-    crypto::UncheckedFrom,
-    {H256, H512},
-};
-use sp_runtime::sp_std::vec;
-use utxo_api::UtxoApi;
 
 impl<T: Config> UtxoApi for Pallet<T>
 where
