@@ -434,7 +434,7 @@ fn attack_double_spend_by_tweaking_input() {
             outputs: vec![TransactionOutput::new_pubkey(500, H256::from(alice_pub_key))],
         };
         assert_err!(
-            Utxo::spend(Origin::signed(H256::zero()), tx1),
+            Utxo::spend(Origin::signed(0), tx1),
             "each input should be used only once"
         );
     });

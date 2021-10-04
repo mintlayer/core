@@ -46,8 +46,7 @@ pub mod pallet {
     use crate::sign::{self, Scheme};
     use crate::{OutputHeaderData, OutputHeaderHelper, TXOutputHeader, TokenID, TokenType};
     use crate::{rewards::reward_block_author};
-    use crate::staking;
-    use crate::staking::StakingHelper;
+    use crate::staking::{self, StakingHelper};
     use bech32;
     use chainscript::Script;
     use codec::{Decode, Encode};
