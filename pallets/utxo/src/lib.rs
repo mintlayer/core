@@ -37,6 +37,7 @@ mod authorship;
 mod header;
 mod rewards;
 mod script;
+mod sign;
 pub mod weights;
 
 #[frame_support::pallet]
