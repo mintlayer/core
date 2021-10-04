@@ -27,7 +27,7 @@ variant_count = '1.1'
 [dependencies.bech32]
 default-features = false
 path = '../../libs/bech32'
-version = '0.1.0'
+version = '0.8.1'
 
 [dependencies.chainscript]
 default-features = false

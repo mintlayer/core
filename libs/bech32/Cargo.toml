@@ -1,12 +1,13 @@
 [package]
 name = "bech32"
-version = "0.1.0"
-authors = ["Clark Moody", "RBB S.r.l"]
-description = "Encodes and decodes Bitcoin Segregated Witness addresses in Bech32"
-keywords = ["bitcoin", "base32", "encoding"]
+version = "0.8.1"
+authors = ["Clark Moody"]
+repository = "https://github.com/rust-bitcoin/rust-bech32"
+description = "Encodes and decodes the Bech32 format"
+readme = "README.md"
+keywords = ["base32", "encoding", "bech32"]
 categories = ["encoding"]
 license = "MIT"
-edition = "2018"
 
 [dependencies.sp-std]
 default-features = false

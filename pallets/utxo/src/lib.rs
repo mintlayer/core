@@ -841,8 +841,9 @@ pub mod pallet {
             value: Value,
             address: Vec<u8>,
         ) -> DispatchResultWithPostInfo {
+            Ok(().into())
+            /*
             use chainscript::Script;
-
             ensure!(value > 0, "Value transferred must be larger than zero");
             ensure!(address.len() >= 42, "Invalid Bech32 address");
 
@@ -893,6 +894,7 @@ pub mod pallet {
             }
 
             spend::<T>(&signer, &tx)
+                */
         }
     }
 
