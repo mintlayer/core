@@ -1097,6 +1097,9 @@ pub mod pallet {
             spend::<T>(&signer, &tx)
         }
 
+        /// unlock the stake, if use wants to stop validating and wants to withdraw the locked utxos.
+        /// To withdraw, note that you need to check with the outside staking (a.k.a. pallet-staking)
+        /// the period of time (or era, as it is called) to when a withdrawal can be done.
         #[pallet::weight(T::WeightInfo::unlock_stake(1 as u32))]
         pub fn unlock_stake(
             origin: OriginFor<T>,
@@ -1114,7 +1117,9 @@ pub mod pallet {
     pub struct GenesisConfig<T: Config> {
         pub genesis_utxos: Vec<TransactionOutputFor<T>>,
         pub locked_utxos: Vec<TransactionOutputFor<T>>,
+        /// number of coins available for rewarding, esp. to block authors/producers.
         pub extra_mlt_coins:Value,
+        /// the amount to reward block authors/producers.
         pub initial_reward_amount:Value,
         pub _marker: PhantomData<T>,
     }
@@ -1146,7 +1151,6 @@ pub mod pallet {
                 if let Destination::Stake { stash_account:_, controller_account, rotate_keys:_ } =  &u.destination {
                     <StakingCount<T>>::insert(controller_account.clone(),1);
                 }
-                log::debug!("inserting {:?} to LockedUtxos:",u);
                 LockedUtxos::<T>::insert(BlakeTwo256::hash_of(&u), Some(u));
             });
         }
