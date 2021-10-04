@@ -573,10 +573,16 @@ impl_runtime_apis! {
         }
 
         // What means Vec<(u64, Vec<u8>)> ? Have a look at utxo/rpc/runtime-api/src/lib.rs
-        fn tokens_list() -> Vec<(u64, Vec<u8>)> {
+        fn tokens_list() -> Vec<(H256, Vec<u8>)> {
+            use pallet_utxo_tokens::TokenInstance;
             let list = Utxo::tokens_list();
-            list.into_iter().map(|x| (x.id, x.name)).collect()
+            list.into_iter().filter_map(|x|if let TokenInstance::Normal{id, name, ..} = x { Some((id,  name)) } else {None} ).collect()
         }
+
+        fn nft_read(id: H256) -> Option<(Vec<u8>, [u8; 32])> {
+            Utxo::nft_read(id)
+        }
+
     }
 
     impl pallet_contracts_rpc_runtime_api::ContractsApi<

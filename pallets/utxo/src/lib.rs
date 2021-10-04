@@ -388,12 +388,12 @@ pub mod pallet {
 
     #[pallet::storage]
     #[pallet::getter(fn token_list)]
+    // todo: Soon it will turn into StorageMap
     pub(super) type TokenList<T> = StorageValue<_, TokenListData, ValueQuery>;
 
     #[pallet::storage]
     #[pallet::getter(fn owner_nft)]
-    pub(super) type OwnerNft<T> =
-        StorageMap<_, Identity, TokenId, /* PKH */ Option<H256>, ValueQuery>;
+    pub(super) type Nft<T> = StorageMap<_, Identity, TokenId, Option<TokenInstance>, ValueQuery>;
 
     #[pallet::storage]
     #[pallet::getter(fn reward_total)]
@@ -838,6 +838,7 @@ pub mod pallet {
     ) -> Result<TokenId, DispatchErrorWithPostInfo<PostDispatchInfo>> {
         let (fee, inputs_hashes) = pick_utxo::<T>(caller, Mlt(100).to_munit());
         ensure!(fee >= Mlt(100).to_munit(), Error::<T>::Unapproved);
+        ensure!(data_url.len() <= 50, Error::<T>::Unapproved);
 
         let instance = TokenInstance::new_nft(
             BlakeTwo256::hash_of(&data_hash),
@@ -853,7 +854,7 @@ pub mod pallet {
             .collect();
 
         ensure!(
-            !OwnerNft::<T>::contains_key(instance.id()),
+            !Nft::<T>::contains_key(instance.id()),
             Error::<T>::NftCollectionExists
         );
 
@@ -878,6 +879,7 @@ pub mod pallet {
         spend::<T>(caller, &tx)?;
 
         // Save in Store
+        Nft::<T>::insert(instance.id(), Some(instance.clone()));
         <TokenList<T>>::mutate(|x| {
             if x.iter().find(|&x| x.id() == instance.id()).is_none() {
                 x.push(instance.clone())
@@ -1068,6 +1070,17 @@ impl<T: Config> crate::Pallet<T> {
 
     pub fn tokens_list() -> TokenListData {
         <TokenList<T>>::get()
+    }
+
+    pub fn nft_read(id: H256) -> Option<(/* Data url */ Vec<u8>, /* Data hash */ [u8; 32])> {
+        match Nft::<T>::get(id)? {
+            TokenInstance::Nft {
+                data_hash,
+                data_url,
+                ..
+            } => Some((data_url, data_hash)),
+            _ => None,
+        }
     }
 }
 

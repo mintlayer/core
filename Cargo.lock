@@ -4165,6 +4165,7 @@ dependencies = [
  "serde",
  "sp-api",
  "sp-blockchain",
+ "sp-core",
  "sp-runtime",
 ]
 
@@ -4178,6 +4179,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sp-api",
+ "sp-core",
  "sp-runtime",
 ]
 
