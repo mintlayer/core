@@ -350,20 +350,20 @@ fn test_script() {
 
 #[test]
 fn test_tokens() {
-    use crate::TokensHigherID;
-
     let (mut test_ext, alice_pub_key, karl_pub_key) = new_test_ext_and_keys();
     test_ext.execute_with(|| {
         // Let's create a new test token
-        let token_id = <TokensHigherID<Test>>::get()
-            .checked_add(1)
-            .ok_or("All tokens IDs has taken")
-            .unwrap();
+        let token_id = BlakeTwo256::hash_of(&b"TEST");
+        let supply = 1000;
         // Let's make a tx for a new token:
         // * We need at least one input for the fee and one output for a new token.
         // * TokenID for a new token has to be unique.
-        let instance =
-            TokenInstance::new(token_id, b"New token test".to_vec(), b"NTT".to_vec(), 1000);
+        let instance = TokenInstance::new_normal(
+            token_id,
+            b"New token test".to_vec(),
+            b"NTT".to_vec(),
+            supply,
+        );
         let mut first_tx = Transaction {
             inputs: vec![
                 // 100 MLT
@@ -371,7 +371,7 @@ fn test_tokens() {
             ],
             outputs: vec![
                 // 100 a new tokens
-                TransactionOutput::new_token(token_id, instance.supply, H256::from(alice_pub_key)),
+                TransactionOutput::new_token(token_id, supply, H256::from(alice_pub_key)),
                 // 20 MLT to be paid as a fee, 80 MLT returning
                 TransactionOutput::new_pubkey(80, H256::from(alice_pub_key)),
             ],
@@ -381,7 +381,7 @@ fn test_tokens() {
         assert_ok!(Utxo::spend(Origin::signed(H256::zero()), first_tx.clone()));
         // Store a new TokenInstance to the Storage
         <TokenList<Test>>::mutate(|x| {
-            if x.iter().find(|&x| x.id == token_id).is_none() {
+            if x.iter().find(|&x| x.id() == &token_id).is_none() {
                 x.push(instance.clone())
             } else {
                 panic!("the token has already existed with the same id")
@@ -520,33 +520,44 @@ fn test_send_to_address() {
 #[test]
 fn nft_test() {
     execute_with_alice(|alice_pub_key| {
-        let token_id = 100;
-        let empty = b"0000000000000000000000000000000000000000000000000000000000000000";
-        let data = b"0101010101010101010101010101010101010101010101010101010101010101";
-        // let data_token = ERC1948.new();
-        // dataToken.mint(accounts[0], firstTokenId);
+        // Let's create a new test nft
+        let nft_id = BlakeTwo256::hash_of(&b"TEST");
+        let instance = TokenInstance::new_nft(
+            nft_id,
+            *b"01010101010101010101010101010101",
+            b"http://facebook.com".to_vec(),
+            alice_pub_key,
+        );
 
-        // const ERC1948 = artifacts.require('./ERC1948.sol');
-        //
-        // contract('ERC1948', (accounts) => {
-        // const firstTokenId = 100;
-        // const empty = '0x0000000000000000000000000000000000000000000000000000000000000000';
-        // const data = '0x0101010101010101010101010101010101010101010101010101010101010101';
-        // let dataToken;
-        //
-        // beforeEach(async () => {
-        // dataToken = await ERC1948.new();
-        // await dataToken.mint(accounts[0], firstTokenId);
-        // });
-        //
-        // it('should allow to write and read', async () => {
+        if let TokenInstance::Nft {
+            id,
+            data_hash,
+            data_url,
+            creator_pubkey: alice_pub_key,
+        } = instance
+        {
+            let mut tx = Transaction {
+                inputs: vec![
+                    // 100 MLT
+                    tx_input_gen_no_signature(),
+                ],
+                outputs: vec![TransactionOutput::new_nft(
+                    id,
+                    data_hash,
+                    data_url,
+                    H256::from(alice_pub_key),
+                )],
+            };
+            let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx.encode()).unwrap();
+            tx.inputs[0].witness = alice_sig.0.to_vec();
+            assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx.clone()));
+        }
+
+        // it should allow to write and read ?
         // let rsp = await dataToken.readData(firstTokenId);
         // assert.equal(rsp, empty);
         // await dataToken.writeData(firstTokenId, data);
         // rsp = await dataToken.readData(firstTokenId);
         // assert.equal(rsp, data);
-        // });
-        //
-        // });
     });
 }

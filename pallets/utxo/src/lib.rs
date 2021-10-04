@@ -31,12 +31,9 @@ mod benchmarking;
 mod script;
 pub mod weights;
 
-// Pure MLT without any tokens
-const MLT_ID: u64 = 0;
 pub const SR25519: sp_runtime::KeyTypeId = sp_runtime::KeyTypeId(*b"sr25");
 
-pub type TokenId = u64;
-pub type NftId = u64;
+pub type TokenId = H256;
 pub type Value = u128;
 pub type String = Vec<u8>;
 
@@ -49,7 +46,7 @@ impl Mlt {
 
 #[frame_support::pallet]
 pub mod pallet {
-    use crate::{Mlt, NftId, String, TokenId, Value, MLT_ID, SR25519};
+    use crate::{Mlt, String, TokenId, Value, SR25519};
     use chainscript::Script;
     use codec::{Decode, Encode};
     use core::convert::TryInto;
@@ -64,7 +61,7 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::*;
     use hex_literal::hex;
-    use pallet_utxo_tokens::TokenListData;
+    use pallet_utxo_tokens::{TokenInstance, TokenListData};
     use pp_api::ProgrammablePoolApi;
     #[cfg(feature = "std")]
     use serde::{Deserialize, Serialize};
@@ -105,6 +102,8 @@ pub mod pallet {
         Unapproved,
         /// The source account would not survive the transfer and it needs to stay alive.
         WouldDie,
+        // Thrown when there is an attempt to mint a duplicate collection.
+        NftCollectionExists,
     }
 
     #[pallet::pallet]
@@ -235,27 +234,38 @@ pub mod pallet {
     #[derive(Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, RuntimeDebug, Hash)]
     pub enum TxHeaderAndExtraData {
         NormalTx {
-            token_id: TokenId,
+            // Normal token ID
+            id: TokenId,
         },
         ConfidentialTx, /* not implemented yet */
-        NFT {
-            id: NftId,
-            data: [u8; 32],
-            creator: SR25Pub,
+        Nft {
+            id: TokenId,
+            data_hash: [u8; 32],
+            data_url: String,
+            creator_pkh: H256,
         },
     }
 
     impl TxHeaderAndExtraData {
-        pub fn token_id(&self) -> Option<TokenId> {
+        pub fn id(&self) -> Option<TokenId> {
             match self {
-                Self::NormalTx { token_id } => Some(*token_id),
+                Self::NormalTx { id } => Some(*id),
+                Self::Nft { id, .. } => Some(*id),
                 _ => None,
             }
         }
-        pub fn nft_id(&self) -> Option<TokenId> {
+
+        pub fn is_normal(&self) -> bool {
             match self {
-                Self::NFT { id, .. } => Some(*id),
-                _ => None,
+                Self::NormalTx { .. } => true,
+                _ => false,
+            }
+        }
+
+        pub fn is_nft(&self) -> bool {
+            match self {
+                Self::Nft { .. } => true,
+                _ => true,
             }
         }
     }
@@ -277,7 +287,7 @@ pub mod pallet {
         /// functions are available in TXOutputHeaderImpls to update the header.
         pub fn new_pubkey(value: Value, pub_key: H256) -> Self {
             Self {
-                header: TxHeaderAndExtraData::NormalTx { token_id: MLT_ID },
+                header: TxHeaderAndExtraData::NormalTx { id: H256::zero() },
                 value,
                 destination: Destination::Pubkey(pub_key),
             }
@@ -286,7 +296,7 @@ pub mod pallet {
         /// Create a new output to create a smart contract.
         pub fn new_create_pp(value: Value, code: Vec<u8>, data: Vec<u8>) -> Self {
             Self {
-                header: TxHeaderAndExtraData::NormalTx { token_id: MLT_ID },
+                header: TxHeaderAndExtraData::NormalTx { id: H256::zero() },
                 value,
                 destination: Destination::CreatePP(code, data),
             }
@@ -295,24 +305,37 @@ pub mod pallet {
         /// Create a new output to call a smart contract routine.
         pub fn new_call_pp(value: Value, dest_account: AccountId, input: Vec<u8>) -> Self {
             Self {
-                header: TxHeaderAndExtraData::NormalTx { token_id: MLT_ID },
+                header: TxHeaderAndExtraData::NormalTx { id: H256::zero() },
                 value,
                 destination: Destination::CallPP(dest_account, input),
             }
         }
 
-        pub fn new_token(token_id: TokenId, value: Value, pub_key: H256) -> Self {
+        pub fn new_token(id: TokenId, value: Value, pub_key: H256) -> Self {
             Self {
                 value,
-                header: TxHeaderAndExtraData::NormalTx { token_id },
+                header: TxHeaderAndExtraData::NormalTx { id },
                 destination: Destination::Pubkey(pub_key),
+            }
+        }
+
+        pub fn new_nft(id: TokenId, data_hash: [u8; 32], data_url: String, creator: H256) -> Self {
+            Self {
+                value: 0,
+                header: TxHeaderAndExtraData::Nft {
+                    id,
+                    data_hash,
+                    creator_pkh: creator.clone(),
+                    data_url,
+                },
+                destination: Destination::Pubkey(creator),
             }
         }
 
         /// Create a new output to given script hash.
         pub fn new_script_hash(value: Value, hash: H256) -> Self {
             Self {
-                header: TxHeaderAndExtraData::NormalTx { token_id: MLT_ID },
+                header: TxHeaderAndExtraData::NormalTx { id: H256::zero() },
                 value,
                 destination: Destination::ScriptHash(hash),
             }
@@ -321,7 +344,7 @@ pub mod pallet {
         /// Create a new output to given pubkey hash
         pub fn new_pubkey_hash(value: Value, script: Script) -> Self {
             Self {
-                header: TxHeaderAndExtraData::NormalTx { token_id: MLT_ID },
+                header: TxHeaderAndExtraData::NormalTx { id: H256::zero() },
                 value,
                 destination: Destination::PubkeyHash(script.into_bytes()),
             }
@@ -368,8 +391,9 @@ pub mod pallet {
     pub(super) type TokenList<T> = StorageValue<_, TokenListData, ValueQuery>;
 
     #[pallet::storage]
-    #[pallet::getter(fn tokens_higher_id)]
-    pub(super) type TokensHigherID<T> = StorageValue<_, TokenId, ValueQuery>;
+    #[pallet::getter(fn owner_nft)]
+    pub(super) type OwnerNft<T> =
+        StorageMap<_, Identity, TokenId, /* PKH */ Option<H256>, ValueQuery>;
 
     #[pallet::storage]
     #[pallet::getter(fn reward_total)]
@@ -384,7 +408,8 @@ pub mod pallet {
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     #[pallet::metadata(T::AccountId = "AccountId")]
     pub enum Event<T: Config> {
-        TokenCreated(u64, T::AccountId),
+        TokenCreated(H256, T::AccountId),
+        Minted(H256, T::AccountId, String),
         TransactionSuccess(TransactionFor<T>),
     }
 
@@ -426,7 +451,6 @@ pub mod pallet {
 
         for authority in auths {
             // TODO: where do we get the header info?
-            // TODO: are the rewards always of MLT token type?
             let utxo = TransactionOutput::new_pubkey(share_value, *authority);
 
             let hash = {
@@ -500,8 +524,8 @@ pub mod pallet {
             .iter()
             .filter_map(|input| <UtxoStore<T>>::get(&input.outpoint))
             .filter_map(|output| {
-                if let TxHeaderAndExtraData::NormalTx { token_id } = &output.header {
-                    Some((*token_id, output))
+                if let TxHeaderAndExtraData::NormalTx { id } = &output.header {
+                    Some((*id, output))
                 } else {
                     None
                 }
@@ -515,8 +539,8 @@ pub mod pallet {
             .outputs
             .iter()
             .filter_map(|output| {
-                if let TxHeaderAndExtraData::NormalTx { token_id } = &output.header {
-                    Some((*token_id, output.value))
+                if let TxHeaderAndExtraData::NormalTx { id } = &output.header {
+                    Some((*id, output.value))
                 } else {
                     None
                 }
@@ -527,7 +551,7 @@ pub mod pallet {
         let tokens_list = <TokenList<T>>::get();
         for output in tx.outputs.iter() {
             let tid = match output.header {
-                TxHeaderAndExtraData::NormalTx { token_id } => token_id,
+                TxHeaderAndExtraData::NormalTx { id } => id,
                 _ => continue,
             };
             // If we have input and output for the same token it's not a problem
@@ -536,7 +560,13 @@ pub mod pallet {
             } else {
                 // But when we don't have an input for token but token id exist in TokenList
                 ensure!(
-                    tokens_list.iter().find(|&x| x.id == tid).is_none(),
+                    tokens_list
+                        .iter()
+                        .find(|&x| match x {
+                            crate::TokenInstance::Normal { id, .. }
+                            | crate::TokenInstance::Nft { id, .. } => id,
+                        } == &tid)
+                        .is_none(),
                     "no inputs for the token id"
                 );
             }
@@ -610,7 +640,9 @@ pub mod pallet {
                 Destination::Pubkey(_)
                 | Destination::ScriptHash(_)
                 | Destination::PubkeyHash(_) => {
-                    ensure!(output.value > 0, "output value must be nonzero");
+                    if output.header.is_normal() {
+                        ensure!(output.value > 0, "output value must be nonzero");
+                    }
                     let hash = tx.outpoint(output_index);
                     ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
                     new_utxos.push(hash.as_fixed_bytes().to_vec());
@@ -662,14 +694,14 @@ pub mod pallet {
             }
 
             // Reward at the moment only in MLT
-            reward = if inputs_sum.contains_key(&(MLT_ID as TokenId))
-                && outputs_sum.contains_key(&(MLT_ID as TokenId))
+            reward = if inputs_sum.contains_key(&(H256::zero() as TokenId))
+                && outputs_sum.contains_key(&(H256::zero() as TokenId))
             {
-                inputs_sum[&(MLT_ID as TokenId)]
-                    .checked_sub(outputs_sum[&(MLT_ID as TokenId)])
+                inputs_sum[&(H256::default() as TokenId)]
+                    .checked_sub(outputs_sum[&(H256::zero() as TokenId)])
                     .ok_or("reward underflow")?
             } else {
-                *inputs_sum.get(&(MLT_ID as TokenId)).ok_or("fee doesn't exist")?
+                *inputs_sum.get(&(H256::zero() as TokenId)).ok_or("fee doesn't exist")?
             }
         }
 
@@ -739,21 +771,23 @@ pub mod pallet {
         token_name: String,
         token_ticker: String,
         supply: Value,
-    ) -> Result<u64, DispatchErrorWithPostInfo<PostDispatchInfo>> {
+    ) -> Result<H256, DispatchErrorWithPostInfo<PostDispatchInfo>> {
         ensure!(token_name.len() <= 25, Error::<T>::Unapproved);
         ensure!(token_ticker.len() <= 5, Error::<T>::Unapproved);
         ensure!(!supply.is_zero(), Error::<T>::MinBalanceZero);
-
-        // Take a free TokenID
-        let token_id =
-            <TokensHigherID<T>>::get().checked_add(1).ok_or("All tokens IDs has taken")?;
 
         // Input with MLT FEE
         let fee = UtxoStore::<T>::get(input_for_fee.outpoint).ok_or(Error::<T>::Unapproved)?.value;
         ensure!(fee >= Mlt(100).to_munit(), Error::<T>::Unapproved);
 
         // Save in UTXO
-        let instance = crate::TokenInstance::new(token_id, token_name, token_ticker, supply);
+        let instance = crate::TokenInstance::new_normal(
+            BlakeTwo256::hash_of(&(&token_name, &token_ticker)),
+            token_name,
+            token_ticker,
+            supply,
+        );
+
         let mut tx = Transaction {
             inputs: crate::vec![
                 // Fee an input equal 100 MLT
@@ -761,7 +795,7 @@ pub mod pallet {
             ],
             outputs: crate::vec![
                 // Output a new tokens
-                TransactionOutput::new_token(token_id, supply, public),
+                TransactionOutput::new_token(*instance.id(), supply, public),
             ],
         };
 
@@ -773,21 +807,88 @@ pub mod pallet {
             ));
         }
 
+        let sig = crypto::sr25519_sign(
+            SR25519,
+            &sp_core::sr25519::Public::from_h256(public),
+            &tx.encode(),
+        )
+        .unwrap();
+        for i in 0..tx.inputs.len() {
+            tx.inputs[i].witness = sig.0.to_vec();
+        }
+        // Success
+        spend::<T>(caller, &tx)?;
+
         // Save in Store
         <TokenList<T>>::mutate(|x| {
-            if x.iter().find(|&x| x.id == token_id).is_none() {
+            if x.iter().find(|&x| x.id() == instance.id()).is_none() {
                 x.push(instance.clone())
             } else {
                 panic!("the token has already existed with the same id")
             }
         });
-
-        // Success
-        spend::<T>(caller, &tx)?;
-        Ok(token_id)
+        Ok(*instance.id())
     }
 
-    /// Pick the UTXOs of `caller` from UtxoStore that satify request `value`
+    fn mint<T: Config>(
+        caller: &T::AccountId,
+        creator_pubkey: sp_core::sr25519::Public,
+        data_url: String,
+        data_hash: [u8; 32],
+    ) -> Result<TokenId, DispatchErrorWithPostInfo<PostDispatchInfo>> {
+        let (fee, inputs_hashes) = pick_utxo::<T>(caller, Mlt(100).to_munit());
+        ensure!(fee >= Mlt(100).to_munit(), Error::<T>::Unapproved);
+
+        let instance = TokenInstance::new_nft(
+            BlakeTwo256::hash_of(&data_hash),
+            data_hash,
+            data_url.clone(),
+            creator_pubkey,
+        );
+
+        let inputs_for_fee = inputs_hashes
+            .iter()
+            .filter_map(|x| <UtxoStore<T>>::get(&x))
+            .map(|output| TransactionInput::new_empty(BlakeTwo256::hash_of(&(&output, 0 as u64))))
+            .collect();
+
+        ensure!(
+            !OwnerNft::<T>::contains_key(instance.id()),
+            Error::<T>::NftCollectionExists
+        );
+
+        let mut tx = Transaction {
+            inputs: inputs_for_fee,
+            outputs: crate::vec![
+                // Output a new tokens
+                TransactionOutput::new_nft(
+                    *instance.id(),
+                    data_hash,
+                    data_url,
+                    H256::from(creator_pubkey)
+                ),
+            ],
+        };
+
+        let sig = crypto::sr25519_sign(SR25519, &creator_pubkey, &tx.encode()).unwrap();
+        for i in 0..tx.inputs.len() {
+            tx.inputs[i].witness = sig.0.to_vec();
+        }
+        // Success
+        spend::<T>(caller, &tx)?;
+
+        // Save in Store
+        <TokenList<T>>::mutate(|x| {
+            if x.iter().find(|&x| x.id() == instance.id()).is_none() {
+                x.push(instance.clone())
+            } else {
+                panic!("the token has already existed with the same id")
+            }
+        });
+        Ok(*instance.id())
+    }
+
+    /// Pick the UTXOs of `caller` from UtxoStore that satisfy request `value`
     ///
     /// Return a list of UTXOs that satisfy the request
     /// Return empty vector if caller doesn't have enough UTXO
@@ -800,21 +901,21 @@ pub mod pallet {
         let mut total = 0;
 
         for (hash, utxo) in UtxoStore::<T>::iter() {
-            let utxo = utxo.unwrap();
+            if let Some(utxo) = utxo {
+                match utxo.destination {
+                    Destination::Pubkey(pubkey) => {
+                        if caller.encode() == pubkey.encode() {
+                            utxos.push(hash);
+                            total += utxo.value;
 
-            match utxo.destination {
-                Destination::Pubkey(pubkey) => {
-                    if caller.encode() == pubkey.encode() {
-                        utxos.push(hash);
-                        total += utxo.value;
-
-                        if utxo.value >= value {
-                            break;
+                            if utxo.value >= value {
+                                break;
+                            }
+                            value -= utxo.value;
                         }
-                        value -= utxo.value;
                     }
+                    _ => {}
                 }
-                _ => {}
             }
         }
 
@@ -852,6 +953,22 @@ pub mod pallet {
                 supply,
             )?;
             Self::deposit_event(Event::<T>::TokenCreated(token_id, caller.clone()));
+            Ok(().into())
+        }
+
+        /// Create a new NFT from the provided NFT info and identify the specified
+        /// account as its owner. The ID of the new NFT will be equal to the hash of the info
+        /// that defines it, as calculated by the runtime system's hashing algorithm.
+        #[pallet::weight(10_000)]
+        pub fn mint(
+            origin: OriginFor<T>,
+            creator_pubkey: sp_core::sr25519::Public,
+            data_url: String,
+            data_hash: [u8; 32],
+        ) -> DispatchResultWithPostInfo {
+            let caller = &ensure_signed(origin)?;
+            let nft_id = mint::<T>(caller, creator_pubkey, data_url.clone(), data_hash)?;
+            Self::deposit_event(Event::<T>::Minted(nft_id, caller.clone(), data_url));
             Ok(().into())
         }
 

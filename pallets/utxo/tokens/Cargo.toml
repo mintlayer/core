@@ -23,3 +23,9 @@ package = "parity-scale-codec"
 version = "2.0.0"
 default-features = false
 features = ["derive"]
+
+[dependencies.sp-core]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+version = '4.0.0-dev'
+branch = "master"
