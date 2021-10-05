@@ -50,7 +50,7 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::*;
     use hex_literal::hex;
-    use pallet_utxo_tokens::{TokenInstance, TokenListData};
+    use pallet_utxo_tokens::TokenInstance;
     use pp_api::ProgrammablePoolApi;
     #[cfg(feature = "std")]
     use serde::{Deserialize, Serialize};
@@ -388,11 +388,8 @@ pub mod pallet {
     #[pallet::storage]
     #[pallet::getter(fn token_list)]
     // todo: Soon it will turn into StorageMap
-    pub(super) type TokenList<T> = StorageValue<_, TokenListData, ValueQuery>;
-
-    #[pallet::storage]
-    #[pallet::getter(fn owner_nft)]
-    pub(super) type Nft<T> = StorageMap<_, Identity, TokenId, Option<TokenInstance>, ValueQuery>;
+    pub(super) type TokenList<T> =
+        StorageMap<_, Identity, TokenId, Option<TokenInstance>, ValueQuery>;
 
     #[pallet::storage]
     #[pallet::getter(fn reward_total)]
@@ -547,7 +544,6 @@ pub mod pallet {
             .collect();
 
         // Check for token creation
-        let tokens_list = <TokenList<T>>::get();
         for output in tx.outputs.iter() {
             let tid = match output.header {
                 TxHeaderAndExtraData::NormalTx { id } => id,
@@ -559,13 +555,7 @@ pub mod pallet {
             } else {
                 // But when we don't have an input for token but token id exist in TokenList
                 ensure!(
-                    tokens_list
-                        .iter()
-                        .find(|&x| match x {
-                            crate::TokenInstance::Normal { id, .. }
-                            | crate::TokenInstance::Nft { id, .. } => id,
-                        } == &tid)
-                        .is_none(),
+                    !<TokenList<T>>::contains_key(tid),
                     "no inputs for the token id"
                 );
             }
@@ -786,6 +776,12 @@ pub mod pallet {
             token_ticker,
             supply,
         );
+        let token_id = *instance.id();
+
+        ensure!(
+            !<TokenList<T>>::contains_key(instance.id()),
+            Error::<T>::InUse
+        );
 
         let mut tx = Transaction {
             inputs: crate::vec![
@@ -819,14 +815,8 @@ pub mod pallet {
         spend::<T>(caller, &tx)?;
 
         // Save in Store
-        <TokenList<T>>::mutate(|x| {
-            if x.iter().find(|&x| x.id() == instance.id()).is_none() {
-                x.push(instance.clone())
-            } else {
-                panic!("the token has already existed with the same id")
-            }
-        });
-        Ok(*instance.id())
+        <TokenList<T>>::insert(token_id, Some(instance));
+        Ok(token_id)
     }
 
     fn mint<T: Config>(
@@ -853,7 +843,7 @@ pub mod pallet {
             .collect();
 
         ensure!(
-            !Nft::<T>::contains_key(instance.id()),
+            !TokenList::<T>::contains_key(instance.id()),
             Error::<T>::NftCollectionExists
         );
 
@@ -879,14 +869,7 @@ pub mod pallet {
         spend::<T>(caller, &tx)?;
 
         // Save in Store
-        Nft::<T>::insert(instance.id(), Some(instance.clone()));
-        <TokenList<T>>::mutate(|x| {
-            if x.iter().find(|&x| x.id() == instance.id()).is_none() {
-                x.push(instance.clone())
-            } else {
-                panic!("the token has already existed with the same id")
-            }
-        });
+        TokenList::<T>::insert(instance.id(), Some(instance.clone()));
         Ok(*instance.id())
     }
 
@@ -1079,11 +1062,14 @@ impl<T: Config> crate::Pallet<T> {
     }
 
     pub fn tokens_list() -> TokenListData {
-        <TokenList<T>>::get()
+        <TokenList<T>>::iter()
+            .enumerate()
+            .filter_map(|(_, instance)| instance.1)
+            .collect()
     }
 
     pub fn nft_read(id: H256) -> Option<(/* Data url */ Vec<u8>, /* Data hash */ Vec<u8>)> {
-        match Nft::<T>::get(id)? {
+        match TokenList::<T>::get(id)? {
             TokenInstance::Nft { data, data_url, .. } => Some((data_url, data.to_vec())),
             _ => None,
         }

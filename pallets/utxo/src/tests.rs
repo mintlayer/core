@@ -380,14 +380,8 @@ fn test_tokens() {
         first_tx.inputs[0].witness = alice_sig.0.to_vec();
         assert_ok!(Utxo::spend(Origin::signed(H256::zero()), first_tx.clone()));
         // Store a new TokenInstance to the Storage
-        <TokenList<Test>>::mutate(|x| {
-            if x.iter().find(|&x| x.id() == &token_id).is_none() {
-                x.push(instance.clone())
-            } else {
-                panic!("the token has already existed with the same id")
-            }
-        });
-        dbg!(&<TokenList<Test>>::get());
+        <TokenList<Test>>::insert(token_id, Some(instance.clone()));
+        dbg!(&<TokenList<Test>>::get(token_id));
 
         // alice sends 1000 tokens to karl and the rest back to herself 10 tokens
         let utxo_hash_mlt = BlakeTwo256::hash_of(&(&first_tx, 0 as u64));
