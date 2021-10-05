@@ -811,7 +811,7 @@ pub mod pallet {
             &sp_core::sr25519::Public::from_h256(public),
             &tx.encode(),
         )
-        .unwrap();
+        .ok_or(DispatchError::Token(sp_runtime::TokenError::CannotCreate))?;
         for i in 0..tx.inputs.len() {
             tx.inputs[i].witness = sig.0.to_vec();
         }
@@ -870,7 +870,8 @@ pub mod pallet {
             ],
         };
 
-        let sig = crypto::sr25519_sign(SR25519, &creator_pubkey, &tx.encode()).unwrap();
+        let sig = crypto::sr25519_sign(SR25519, &creator_pubkey, &tx.encode())
+            .ok_or(DispatchError::Token(sp_runtime::TokenError::CannotCreate))?;
         for i in 0..tx.inputs.len() {
             tx.inputs[i].witness = sig.0.to_vec();
         }
@@ -1025,7 +1026,8 @@ pub mod pallet {
                 ],
             };
 
-            let sig = crypto::sr25519_sign(SR25519, &pubkey, &tx.encode()).unwrap();
+            let sig = crypto::sr25519_sign(SR25519, &pubkey, &tx.encode())
+                .ok_or(DispatchError::Token(sp_runtime::TokenError::CannotCreate))?;
             for i in 0..tx.inputs.len() {
                 tx.inputs[i].witness = sig.0.to_vec();
             }
