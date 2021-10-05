@@ -444,46 +444,6 @@ fn attack_double_spend_by_tweaking_input() {
 }
 
 #[test]
-fn test_pubkey_hash() {
-    use chainscript::{Builder, Script};
-    execute_with_alice(|alice_pub_key| {
-        // `pubkey_hash` is hash160(alice_pub_key)
-        let pubkey_hash = [
-            0x8c, 0x6a, 0xef, 0x68, 0x71, 0x98, 0x61, 0xb3, 0x25, 0x7f, 0x68, 0x44, 0x84, 0xc7,
-            0xec, 0x36, 0x27, 0x97, 0xbf, 0x9f,
-        ];
-
-        let script = Script::new_p2pkh(&pubkey_hash);
-        let mut tx1 = Transaction {
-            inputs: vec![tx_input_gen_no_signature()],
-            outputs: vec![TransactionOutput::new_pubkey_hash(40, script)],
-        };
-        let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx1.encode()).unwrap();
-        tx1.inputs[0].witness = alice_sig.0.to_vec();
-
-        let mut tx2 = Transaction {
-            inputs: vec![TransactionInput::new_script(
-                tx1.outpoint(0),
-                Builder::new().into_script(),
-                Builder::new().into_script(),
-            )],
-            outputs: vec![TransactionOutput::new_pubkey(20, H256::zero())],
-        };
-
-        let sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx2.encode()).unwrap();
-        let witness_script = Builder::new()
-            .push_slice(&sig.encode())
-            .push_slice(&alice_pub_key)
-            .into_script();
-
-        tx2.inputs[0].witness = witness_script.into_bytes();
-
-        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx1));
-        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx2));
-    })
-}
-
-#[test]
 fn test_send_to_address() {
     let (mut test_ext, alice_pub_key, _karl_pub_key) = new_test_ext_and_keys();
     test_ext.execute_with(|| {
