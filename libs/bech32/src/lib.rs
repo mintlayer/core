@@ -196,8 +196,7 @@ impl<'a> Bech32Writer<'a> {
         let plm: u32 = self.chk ^ self.variant.constant();
 
         for p in 0..6 {
-            self.formatter
-                .write_char(u5(((plm >> (5 * (5 - p))) & 0x1f) as u8).to_char())?;
+            self.formatter.write_char(u5(((plm >> (5 * (5 - p))) & 0x1f) as u8).to_char())?;
         }
 
         Ok(())
@@ -215,8 +214,7 @@ impl<'a> WriteBase32 for Bech32Writer<'a> {
 
 impl<'a> Drop for Bech32Writer<'a> {
     fn drop(&mut self) {
-        self.inner_finalize()
-            .expect("Unhandled error writing the checksum on drop.")
+        self.inner_finalize().expect("Unhandled error writing the checksum on drop.")
     }
 }
 
@@ -363,19 +361,19 @@ enum Case {
 /// * **MixedCase**: If the HRP contains both uppercase and lowercase characters.
 /// * **InvalidChar**: If the HRP contains any non-ASCII characters (outside 33..=126).
 /// * **InvalidLength**: If the HRP is outside 1..83 characters long.
-fn check_hrp(hrp: &str) -> Result<Case, Error> {
+fn check_hrp(hrp: &[u8]) -> Result<Case, Error> {
     if hrp.is_empty() || hrp.len() > 83 {
         return Err(Error::InvalidLength);
     }
 
     let mut has_lower: bool = false;
     let mut has_upper: bool = false;
-    for b in hrp.bytes() {
+    for b in hrp.iter() {
+        let b = *b;
         // Valid subset of ASCII
         if b < 33 || b > 126 {
             return Err(Error::InvalidChar(b as char));
         }
-
         if b >= b'a' && b <= b'z' {
             has_lower = true;
         } else if b >= b'A' && b <= b'Z' {
@@ -408,7 +406,7 @@ pub fn encode_to_fmt<T: AsRef<[u5]>>(
     data: T,
     variant: Variant,
 ) -> Result<fmt::Result, Error> {
-    let hrp_lower = match check_hrp(&hrp)? {
+    let hrp_lower = match check_hrp(&hrp.as_bytes())? {
         Case::Upper => Cow::Owned(hrp.to_lowercase()),
         Case::Lower | Case::None => Cow::Borrowed(hrp),
     };
@@ -469,42 +467,43 @@ pub fn encode<T: AsRef<[u5]>>(hrp: &str, data: T, variant: Variant) -> Result<St
 /// Decode a bech32 string into the raw HRP and the data bytes.
 ///
 /// Returns the HRP in lowercase..
-pub fn decode(s: &str) -> Result<(String, Vec<u5>, Variant), Error> {
+pub fn decode(s: &Vec<u8>) -> Result<(Vec<u8>, Vec<u5>, Variant), Error> {
     // Ensure overall length is within bounds
     if s.len() < 8 {
         return Err(Error::InvalidLength);
     }
 
     // Split at separator and check for two pieces
-    let (raw_hrp, raw_data) = match s.rfind(SEP) {
+    let (raw_hrp, raw_data) = match s.iter().rposition(|x| *x == (SEP as u8)) {
         None => return Err(Error::MissingSeparator),
-        Some(sep) => {
-            let (hrp, data) = s.split_at(sep);
-            (hrp, &data[1..])
-        }
+        Some(sep) => (&s[..sep], &s[sep + 1..]),
     };
     if raw_data.len() < 6 {
         return Err(Error::InvalidLength);
     }
 
+    // Make sure the address consists of ASCII characters,
+    // all invalid ASCII characters have the value -1 in
+    // CHARSET_REV (which covers the whole ASCII range)
+    // and will be filtered out later.
+    for c in s.iter() {
+        if !(*c as char).is_ascii() {
+            return Err(Error::InvalidChar(*c as char));
+        }
+    }
+
     let mut case = check_hrp(&raw_hrp)?;
     let hrp_lower = match case {
-        Case::Upper => raw_hrp.to_lowercase(),
+        Case::Upper => raw_hrp.iter().map(|x| (*x as char).to_ascii_lowercase() as u8).collect(),
         // already lowercase
-        Case::Lower | Case::None => String::from(raw_hrp),
+        Case::Lower | Case::None => raw_hrp.to_vec().clone(),
     };
 
     // Check data payload
     let mut data = raw_data
-        .chars()
+        .iter()
         .map(|c| {
-            // Only check if c is in the ASCII range, all invalid ASCII
-            // characters have the value -1 in CHARSET_REV (which covers
-            // the whole ASCII range) and will be filtered out later.
-            if !c.is_ascii() {
-                return Err(Error::InvalidChar(c));
-            }
-
+            let c = *c as char;
             if c.is_lowercase() {
                 match case {
                     Case::Upper => return Err(Error::MixedCase),
@@ -531,7 +530,7 @@ pub fn decode(s: &str) -> Result<(String, Vec<u5>, Variant), Error> {
         .collect::<Result<Vec<u5>, Error>>()?;
 
     // Ensure checksum
-    match verify_checksum(&hrp_lower.as_bytes(), &data) {
+    match verify_checksum(&hrp_lower, &data) {
         Some(variant) => {
             // Remove checksum from data payload
             let dbl: usize = data.len();
@@ -599,13 +598,7 @@ const CHARSET_REV: [i8; 128] = [
 ];
 
 /// Generator coefficients
-const GEN: [u32; 5] = [
-    0x3b6a_57b2,
-    0x2650_8e6d,
-    0x1ea1_19fa,
-    0x3d42_33dd,
-    0x2a14_62b3,
-];
+const GEN: [u32; 5] = [0x3b6a_57b2, 0x2650_8e6d, 0x1ea1_19fa, 0x3d42_33dd, 0x2a14_62b3];
 
 /// Error types for Bech32 encoding / decoding
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
@@ -712,9 +705,9 @@ mod tests {
 
     #[test]
     fn getters() {
-        let decoded = decode("BC1SW50QA3JX3S").unwrap();
+        let decoded = decode(&"BC1SW50QA3JX3S".as_bytes().to_vec()).unwrap();
         let data = [16, 14, 20, 15, 0].check_base32().unwrap();
-        assert_eq!(&decoded.0, "bc");
+        assert_eq!(decoded.0, "bc".as_bytes().to_vec());
         assert_eq!(decoded.1, data.as_slice());
     }
 
@@ -737,9 +730,10 @@ mod tests {
             "?1v759aa",
         );
         for s in strings {
-            match decode(s) {
+            match decode(&s.as_bytes().to_vec()) {
                 Ok((hrp, payload, variant)) => {
-                    let encoded = encode(&hrp, payload, variant).unwrap();
+                    let encoded =
+                        encode(&sp_std::str::from_utf8(&hrp).unwrap(), payload, variant).unwrap();
                     assert_eq!(s.to_lowercase(), encoded.to_lowercase());
                 }
                 Err(e) => panic!("Did not decode: {:?} Reason: {:?}", s, e),
@@ -749,55 +743,35 @@ mod tests {
 
     #[test]
     fn invalid_strings() {
-        let pairs: Vec<(&str, Error)> = vec!(
-            (" 1nwldj5",
-                Error::InvalidChar(' ')),
-            ("abc1\u{2192}axkwrx",
-                Error::InvalidChar('\u{2192}')),
+        let pairs: Vec<(&str, Error)> = vec![
+            (" 1nwldj5", Error::InvalidChar(' ')),
+            ("abc1\u{2192}axkwrx", Error::InvalidChar('â')),
             ("an84characterslonghumanreadablepartthatcontainsthenumber1andtheexcludedcharactersbio1569pvx",
                 Error::InvalidLength),
-            ("pzry9x0s0muk",
-                Error::MissingSeparator),
-            ("1pzry9x0s0muk",
-                Error::InvalidLength),
-            ("x1b4n0q5v",
-                Error::InvalidChar('b')),
-            ("ABC1DEFGOH",
-                Error::InvalidChar('O')),
-            ("li1dgmt3",
-                Error::InvalidLength),
-            ("de1lg7wt\u{ff}",
-                Error::InvalidChar('\u{ff}')),
-            ("\u{20}1xj0phk",
-                Error::InvalidChar('\u{20}')),
-            ("\u{7F}1g6xzxy",
-                Error::InvalidChar('\u{7F}')),
+            ("pzry9x0s0muk", Error::MissingSeparator),
+            ("1pzry9x0s0muk", Error::InvalidLength),
+            ("x1b4n0q5v", Error::InvalidChar('b')),
+            ("ABC1DEFGOH", Error::InvalidChar('O')),
+            ("li1dgmt3", Error::InvalidLength),
+            ("de1lg7wt\u{ff}", Error::InvalidChar('Ã')),
+            ("\u{20}1xj0phk", Error::InvalidChar('\u{20}')),
+            ("\u{7F}1g6xzxy", Error::InvalidChar('\u{7F}')),
             ("an84characterslonghumanreadablepartthatcontainsthetheexcludedcharactersbioandnumber11d6pts4",
                 Error::InvalidLength),
-            ("qyrz8wqd2c9m",
-                Error::MissingSeparator),
-            ("1qyrz8wqd2c9m",
-                Error::InvalidLength),
-            ("y1b0jsk6g",
-                Error::InvalidChar('b')),
-            ("lt1igcx5c0",
-                Error::InvalidChar('i')),
-            ("in1muywd",
-                Error::InvalidLength),
-            ("mm1crxm3i",
-                Error::InvalidChar('i')),
-            ("au1s5cgom",
-                Error::InvalidChar('o')),
-            ("M1VUXWEZ",
-                Error::InvalidChecksum),
-            ("16plkw9",
-                Error::InvalidLength),
-            ("1p2gdwpf",
-                Error::InvalidLength),
-        );
+            ("qyrz8wqd2c9m", Error::MissingSeparator),
+            ("1qyrz8wqd2c9m", Error::InvalidLength),
+            ("y1b0jsk6g", Error::InvalidChar('b')),
+            ("lt1igcx5c0", Error::InvalidChar('i')),
+            ("in1muywd", Error::InvalidLength),
+            ("mm1crxm3i", Error::InvalidChar('i')),
+            ("au1s5cgom", Error::InvalidChar('o')),
+            ("M1VUXWEZ", Error::InvalidChecksum),
+            ("16plkw9", Error::InvalidLength),
+            ("1p2gdwpf", Error::InvalidLength),
+        ];
         for p in pairs {
             let (s, expected_error) = p;
-            match decode(s) {
+            match decode(&s.as_bytes().to_vec()) {
                 Ok(_) => panic!("Should be invalid: {:?}", s),
                 Err(e) => assert_eq!(e, expected_error, "testing input '{}'", s),
             }
@@ -918,9 +892,8 @@ mod tests {
             }
         }
 
-        let expected_rev_charset = (0u8..128)
-            .map(|i| get_char_value(i as char))
-            .collect::<Vec<_>>();
+        let expected_rev_charset =
+            (0u8..128).map(|i| get_char_value(i as char)).collect::<Vec<_>>();
 
         assert_eq!(&(CHARSET_REV[..]), expected_rev_charset.as_slice());
     }
