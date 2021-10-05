@@ -28,6 +28,6 @@ sp_api::decl_runtime_apis! {
         // pallet_utxo_tokens::TokenListData
         fn tokens_list() -> Vec<(H256, Vec<u8>)>;
         // Getting NFT data
-        fn nft_read(id: H256) -> Option<(/* Data url */ Vec<u8>, /* Data hash */ [u8; 32])>;
+        fn nft_read(id: H256) -> Option<(/* Data url */ Vec<u8>, /* Data hash */ Vec<u8>)>;
     }
 }

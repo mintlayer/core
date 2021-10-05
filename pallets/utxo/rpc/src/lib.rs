@@ -38,7 +38,7 @@ pub trait UtxoApi<BlockHash> {
         &self,
         at: Option<BlockHash>,
         id: H256,
-    ) -> Result<Option<(/* Data url */ Vec<u8>, /* Data hash */ [u8; 32])>>;
+    ) -> Result<Option<(/* Data url */ Vec<u8>, /* Data hash */ Vec<u8>)>>;
 }
 
 /// A struct that implements the [`UtxoApi`].
@@ -106,7 +106,7 @@ where
         &self,
         at: Option<<Block as BlockT>::Hash>,
         id: H256,
-    ) -> Result<Option<(/* Data url */ Vec<u8>, /* Data hash */ [u8; 32])>> {
+    ) -> Result<Option<(/* Data url */ Vec<u8>, /* Data hash */ Vec<u8>)>> {
         let api = self.client.runtime_api();
         let at = BlockId::hash(at.unwrap_or_else(||
             // If the block hash is not supplied assume the best block.

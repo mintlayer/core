@@ -524,16 +524,17 @@ fn nft_test() {
         let nft_id = BlakeTwo256::hash_of(&b"TEST");
         let instance = TokenInstance::new_nft(
             nft_id,
-            *b"01010101010101010101010101010101",
+            (*b"01010101010101010101010101010101").to_vec(),
             b"http://facebook.com".to_vec(),
-            alice_pub_key,
+            alice_pub_key.to_vec(),
         );
 
         if let TokenInstance::Nft {
             id,
-            data_hash,
+            data,
             data_url,
-            creator_pubkey: alice_pub_key,
+            creator_pubkey,
+            ..
         } = instance
         {
             let mut tx = Transaction {
@@ -543,17 +544,12 @@ fn nft_test() {
                 ],
                 outputs: vec![TransactionOutput::new_nft(
                     id,
-                    data_hash,
+                    data.to_vec(),
                     data_url,
-                    H256::from(alice_pub_key),
+                    H256::from_slice(creator_pubkey.as_slice()),
                 )],
             };
-            let alice_sig = crypto::sr25519_sign(
-                SR25519,
-                &sp_core::sr25519::Public::from_raw(alice_pub_key),
-                &tx.encode(),
-            )
-            .unwrap();
+            let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx.encode()).unwrap();
             tx.inputs[0].witness = alice_sig.0.to_vec();
             assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx.clone()));
         }

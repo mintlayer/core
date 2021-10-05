@@ -579,7 +579,7 @@ impl_runtime_apis! {
             list.into_iter().filter_map(|x|if let TokenInstance::Normal{id, name, ..} = x { Some((id,  name)) } else {None} ).collect()
         }
 
-        fn nft_read(id: H256) -> Option<(Vec<u8>, [u8; 32])> {
+        fn nft_read(id: H256) -> Option<(Vec<u8>, Vec<u8>)> {
             Utxo::nft_read(id)
         }
 

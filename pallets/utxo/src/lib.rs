@@ -240,7 +240,7 @@ pub mod pallet {
         ConfidentialTx, /* not implemented yet */
         Nft {
             id: TokenId,
-            data_hash: [u8; 32],
+            data: Vec<u8>,
             data_url: String,
             creator_pkh: H256,
         },
@@ -273,7 +273,6 @@ pub mod pallet {
     /// Output of a transaction
     #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
     #[derive(Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, RuntimeDebug, Hash)]
-    #[repr(C)]
     pub struct TransactionOutput<AccountId> {
         pub(crate) header: TxHeaderAndExtraData,
         pub(crate) value: Value,
@@ -319,12 +318,12 @@ pub mod pallet {
             }
         }
 
-        pub fn new_nft(id: TokenId, data_hash: [u8; 32], data_url: String, creator: H256) -> Self {
+        pub fn new_nft(id: TokenId, data: Vec<u8>, data_url: String, creator: H256) -> Self {
             Self {
                 value: 0,
                 header: TxHeaderAndExtraData::Nft {
                     id,
-                    data_hash,
+                    data,
                     creator_pkh: creator.clone(),
                     data_url,
                 },
@@ -834,17 +833,17 @@ pub mod pallet {
         caller: &T::AccountId,
         creator_pubkey: sp_core::sr25519::Public,
         data_url: String,
-        data_hash: [u8; 32],
+        data: Vec<u8>,
     ) -> Result<TokenId, DispatchErrorWithPostInfo<PostDispatchInfo>> {
         let (fee, inputs_hashes) = pick_utxo::<T>(caller, Mlt(100).to_munit());
         ensure!(fee >= Mlt(100).to_munit(), Error::<T>::Unapproved);
         ensure!(data_url.len() <= 50, Error::<T>::Unapproved);
 
         let instance = TokenInstance::new_nft(
-            BlakeTwo256::hash_of(&data_hash),
-            data_hash,
+            BlakeTwo256::hash_of(&data),
+            data.clone(),
             data_url.clone(),
-            creator_pubkey,
+            creator_pubkey.to_vec(),
         );
 
         let inputs_for_fee = inputs_hashes
@@ -864,7 +863,7 @@ pub mod pallet {
                 // Output a new tokens
                 TransactionOutput::new_nft(
                     *instance.id(),
-                    data_hash,
+                    data,
                     data_url,
                     H256::from(creator_pubkey)
                 ),
@@ -966,10 +965,10 @@ pub mod pallet {
             origin: OriginFor<T>,
             creator_pubkey: sp_core::sr25519::Public,
             data_url: String,
-            data_hash: [u8; 32],
+            data: Vec<u8>,
         ) -> DispatchResultWithPostInfo {
             let caller = &ensure_signed(origin)?;
-            let nft_id = mint::<T>(caller, creator_pubkey, data_url.clone(), data_hash)?;
+            let nft_id = mint::<T>(caller, creator_pubkey, data_url.clone(), data)?;
             Self::deposit_event(Event::<T>::Minted(nft_id, caller.clone(), data_url));
             Ok(().into())
         }
@@ -1063,6 +1062,7 @@ pub mod pallet {
 
 use pallet_utxo_tokens::{TokenInstance, TokenListData};
 
+use frame_support::inherent::Vec;
 use frame_support::pallet_prelude::DispatchResultWithPostInfo;
 use sp_core::{
     crypto::UncheckedFrom,
@@ -1080,18 +1080,9 @@ impl<T: Config> crate::Pallet<T> {
         <TokenList<T>>::get()
     }
 
-    pub fn nft_read(
-        id: H256,
-    ) -> Option<(
-        /* Data url */ frame_support::inherent::Vec<u8>,
-        /* Data hash */ [u8; 32],
-    )> {
+    pub fn nft_read(id: H256) -> Option<(/* Data url */ Vec<u8>, /* Data hash */ Vec<u8>)> {
         match Nft::<T>::get(id)? {
-            TokenInstance::Nft {
-                data_hash,
-                data_url,
-                ..
-            } => Some((data_url, data_hash)),
+            TokenInstance::Nft { data, data_url, .. } => Some((data_url, data.to_vec())),
             _ => None,
         }
     }
