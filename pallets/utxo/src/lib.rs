@@ -261,8 +261,6 @@ pub mod pallet {
         CallPP(AccountId, Vec<u8>),
         /// Pay to script hash
         ScriptHash(H256),
-        /// Pay to pubkey hash
-        PubkeyHash(Vec<u8>),
         /// First attempt of staking.
         /// Must assign a controller, in order to bond and validate. see pallet-staking
         Stake{
@@ -697,13 +695,6 @@ pub mod pallet {
                             "script verification failed"
                         );
                     }
-                    Destination::PubkeyHash(script) => {
-                        use crate::script::verify;
-                        ensure!(
-                            verify(&simple_tx, input.witness.clone(), script).is_ok(),
-                            "pubkeyhash verification failed"
-                        );
-                    }
                 }
             } else {
                 missing_utxos.push(input.outpoint.clone().as_fixed_bytes().to_vec());
@@ -720,9 +711,7 @@ pub mod pallet {
             ensure!(res.is_ok(), "header error. Please check the logs.");
 
             match &output.destination {
-                Destination::Pubkey(_)
-                | Destination::ScriptHash(_)
-                | Destination::PubkeyHash(_) => {
+                Destination::Pubkey(_) | Destination::ScriptHash(_) => {
                     ensure!(output.value > 0, "output value must be nonzero");
                     let hash = tx.outpoint(output_index);
                     ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
@@ -828,9 +817,7 @@ pub mod pallet {
 
         for (index, output) in tx.enumerate_outputs()? {
             match &output.destination {
-                Destination::Pubkey(_)
-                | Destination::ScriptHash(_)
-                | Destination::PubkeyHash(_) => {
+                Destination::Pubkey(_) | Destination::ScriptHash(_) => {
                     let hash = tx.outpoint(index);
                     log::debug!("inserting to UtxoStore {:?} as key {:?}", output, hash);
                     <UtxoStore<T>>::insert(hash, Some(output));
