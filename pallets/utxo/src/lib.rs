@@ -47,6 +47,7 @@ pub mod pallet {
     use crate::{rewards::reward_block_author};
     use crate::staking;
     use crate::staking::StakingHelper;
+    use bech32::{self, FromBase32};
     use chainscript::Script;
     use codec::{Decode, Encode};
     use core::convert::TryInto;
@@ -994,11 +995,18 @@ pub mod pallet {
             value: Value,
             address: Vec<u8>,
         ) -> DispatchResultWithPostInfo {
-            Ok(().into())
-            /*
-            use chainscript::Script;
+            let (_, data, _) = bech32::decode(&address)
+                .or_else(|_| Err(DispatchError::Other("Failed to decode address")))?;
+
+            let mut tmp: &[u8] = &Vec::<u8>::from_base32(&data)
+                .or_else(|_| Err(DispatchError::Other("Base32 conversion failed")))?;
+
+            let dest: Destination<T::AccountId> = Destination::decode(&mut tmp).or_else(|_| {
+                Err(DispatchError::Other(
+                    "Failed to decode buffer into `Destination`",
+                ))
+            })?;
             ensure!(value > 0, "Value transferred must be larger than zero");
-            ensure!(address.len() >= 42, "Invalid Bech32 address");
 
             let signer = ensure_signed(origin)?;
             let (total, utxos) = pick_utxo::<T>(&signer, value);
@@ -1010,44 +1018,38 @@ pub mod pallet {
                 inputs.push(TransactionInput::new_empty(*utxo));
             }
 
-            let pubkey_raw: [u8; 32] = match signer.encode().try_into() {
-                Ok(v) => v,
-                Err(e) => {
-                    log::error!("Failed to get caller's public key: {:?}", e);
-                    return Err("Failed to get caller's public key".into());
+            let pubkey_raw: [u8; 32] = signer
+                .encode()
+                .try_into()
+                .or_else(|_| Err(DispatchError::Other("Failed to get caller's public key")))?;
+
+            let tx_out = match dest {
+                Destination::Pubkey(pubkey) => {
+                    TransactionOutput::new_pubkey(value, H256::from(pubkey))
+                }
+                Destination::ScriptHash(hash) => TransactionOutput::new_script_hash(value, hash),
+                Destination::CreatePP(_, _) | Destination::CallPP(_, _) => {
+                    return Err(
+                        "OP_CREATE/OP_CALL UTXOs cannot be used with `send_to_address`".into(),
+                    )
                 }
             };
-
-            let pubkey: Public = Public::from_raw(pubkey_raw);
-            let wit_prog = match bech32::wit_prog::WitnessProgram::from_address(
-                address[..2].to_vec(),
-                address,
-            ) {
-                Ok(v) => v,
-                Err(e) => {
-                    log::error!("Failed to decode Bech32 address: {:?}", e);
-                    return Err("Invalid Bech32 address".into());
-                }
-            };
-
-            // NOTE: we don't have segwit support yet so use P2PKH
-            let script = Script::new_p2pkh(&wit_prog.program);
 
             let mut tx = Transaction {
                 inputs,
                 outputs: vec![
+                    tx_out,
                     TransactionOutput::new_pubkey(total - value, H256::from(pubkey_raw)),
-                    TransactionOutput::new_pubkey_hash(value, script),
                 ],
             };
 
-            let sig = crypto::sr25519_sign(SR25519, &pubkey, &tx.encode()).unwrap();
+            let sig = crypto::sr25519_sign(SR25519, &Public::from_raw(pubkey_raw), &tx.encode())
+                .ok_or(DispatchError::Other("Failed to sign the transaction"))?;
             for i in 0..tx.inputs.len() {
                 tx.inputs[i].witness = sig.0.to_vec();
             }
 
             spend::<T>(&signer, &tx)
-                */
         }
 
         /// unlock the stake, if user wants to stop validating and withdraw the locked utxos.

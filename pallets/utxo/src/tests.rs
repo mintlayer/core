@@ -447,8 +447,8 @@ fn attack_double_spend_by_tweaking_input() {
 fn test_send_to_address() {
     let (mut test_ext, alice_pub_key, _karl_pub_key) = alice_test_ext_and_keys();
     test_ext.execute_with(|| {
-        // `addr` is bech32-encoded hash160(karl_pub_key)
-        let addr = "bc1q7pyaw92rh34mj6flsh7acccd7ayn4wf787ws4m";
+        // `addr` is bech32-encoded, SCALE-encoded `Destination::Pubkey(alice_pub_key)`
+        let addr = "bc1qrft7juyfhl06emj4zzrue5ljs6q39n2jalr4c40rhtcur647n0kwu2nvwe";
 
         assert_err!(
             Utxo::send_to_address(
@@ -468,7 +468,26 @@ fn test_send_to_address() {
             "Caller doesn't have enough UTXOs",
         );
 
-        // send UTXO to karl's address
+        // send 40 utxo to alice
+        assert_ok!(Utxo::send_to_address(
+            Origin::signed(H256::from(alice_pub_key)),
+            40,
+            addr.as_bytes().to_vec(),
+        ));
+
+        // try to transfer to createpp(vec![0x00], vec![0x01]))
+        let addr = "bc1qyzqqpqpfw0ypw";
+        assert_err!(
+            Utxo::send_to_address(
+                Origin::signed(H256::from(alice_pub_key)),
+                40,
+                addr.as_bytes().to_vec(),
+            ),
+            "OP_CREATE/OP_CALL UTXOs cannot be used with `send_to_address`",
+        );
+
+        // try to transfer to scripthash
+        let addr = "bc1qvvknne0acfzfd2ewksccgrgl4qlhcwewq4gjm75mtcpg26al66d5l888mu";
         assert_ok!(Utxo::send_to_address(
             Origin::signed(H256::from(alice_pub_key)),
             40,
