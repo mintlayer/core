@@ -565,10 +565,10 @@ pub mod pallet {
 
             match output.destination {
                 Destination::CreatePP(_, _) => {
-                    log::info!("TODO validate OP_CREATE");
+                    log::info!("TODO validate OP_CREATE as output");
                 }
                 Destination::CallPP(_, _) => {
-                    log::info!("TODO validate OP_CALL");
+                    log::info!("TODO validate OP_CALL as output");
                 }
                 _ => {}
             }
@@ -631,7 +631,13 @@ pub mod pallet {
                         log::info!("TODO validate spending of OP_CREATE");
                     }
                     Destination::CallPP(_, _) => {
-                        log::info!("TODO validate spending of OP_CALL");
+                        let spend =
+                            u16::from_be_bytes(input.witness.clone().try_into().or_else(|_| {
+                                Err(DispatchError::Other(
+                                    "Failed to convert witness to an opcode",
+                                ))
+                            })?);
+                        ensure!(spend == 0x1337, "OP_SPEND not found");
                     }
                     Destination::ScriptHash(_hash) => {
                         let witness = input.witness.clone();
