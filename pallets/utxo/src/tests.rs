@@ -468,30 +468,63 @@ fn test_send_to_address() {
             "Caller doesn't have enough UTXOs",
         );
 
-        // send 40 utxo to alice
+        // send 10 utxo to alice
         assert_ok!(Utxo::send_to_address(
             Origin::signed(H256::from(alice_pub_key)),
-            40,
+            10,
             addr.as_bytes().to_vec(),
         ));
 
-        // try to transfer to createpp(vec![0x00], vec![0x01]))
-        let addr = "bc1qyzqqpqpfw0ypw";
+        // try to transfer to scripthash
+        let addr = "bc1qvvknne0acfzfd2ewksccgrgl4qlhcwewq4gjm75mtcpg26al66d5l888mu";
+        assert_ok!(Utxo::send_to_address(
+            Origin::signed(H256::from(alice_pub_key)),
+            20,
+            addr.as_bytes().to_vec(),
+        ));
+
+        // invalid length
+        let addr = "bc1qyzqqpqpfwa0y1w";
         assert_err!(
             Utxo::send_to_address(
                 Origin::signed(H256::from(alice_pub_key)),
                 40,
                 addr.as_bytes().to_vec(),
             ),
-            "OP_CREATE/OP_CALL UTXOs cannot be used with `send_to_address`",
+            "Failed to decode address: invalid length",
         );
 
-        // try to transfer to scripthash
-        let addr = "bc1qvvknne0acfzfd2ewksccgrgl4qlhcwewq4gjm75mtcpg26al66d5l888mu";
-        assert_ok!(Utxo::send_to_address(
-            Origin::signed(H256::from(alice_pub_key)),
-            40,
-            addr.as_bytes().to_vec(),
-        ));
+        // invalid character
+        let addr = "bc1qyzqqpqpäääypw";
+        assert_err!(
+            Utxo::send_to_address(
+                Origin::signed(H256::from(alice_pub_key)),
+                40,
+                addr.as_bytes().to_vec(),
+            ),
+            "Failed to decode address: invalid character",
+        );
+
+        // mixex case
+        let addr = "bc1qvvknne0acfzfd2ewksccgrgl4qlhcwewq4gjm75MTCpg26AL66d5l888MU";
+        assert_err!(
+            Utxo::send_to_address(
+                Origin::signed(H256::from(alice_pub_key)),
+                40,
+                addr.as_bytes().to_vec(),
+            ),
+            "Failed to decode address: mixed case",
+        );
+
+        // invalid checksum
+        let addr = "bc1qvvknne0acfzfd2ewksccgrgl4qlhcwewq4gjm75mtcpg26al66d5l777mu";
+        assert_err!(
+            Utxo::send_to_address(
+                Origin::signed(H256::from(alice_pub_key)),
+                40,
+                addr.as_bytes().to_vec(),
+            ),
+            "Failed to decode address: invalid checksum",
+        );
     })
 }

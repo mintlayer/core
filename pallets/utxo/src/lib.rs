@@ -995,17 +995,27 @@ pub mod pallet {
             value: Value,
             address: Vec<u8>,
         ) -> DispatchResultWithPostInfo {
-            let (_, data, _) = bech32::decode(&address)
-                .or_else(|_| Err(DispatchError::Other("Failed to decode address")))?;
+            let (_, data, _) = bech32::decode(&address).map_err(|e| match e {
+                bech32::Error::InvalidLength => {
+                    DispatchError::Other("Failed to decode address: invalid length")
+                }
+                bech32::Error::InvalidChar(_) => {
+                    DispatchError::Other("Failed to decode address: invalid character")
+                }
+                bech32::Error::MixedCase => {
+                    DispatchError::Other("Failed to decode address: mixed case")
+                }
+                bech32::Error::InvalidChecksum => {
+                    DispatchError::Other("Failed to decode address: invalid checksum")
+                }
+                _ => DispatchError::Other("Failed to decode address"),
+            })?;
 
             let mut tmp: &[u8] = &Vec::<u8>::from_base32(&data)
-                .or_else(|_| Err(DispatchError::Other("Base32 conversion failed")))?;
+                .map_err(|_| DispatchError::Other("Base32 conversion failed"))?;
 
-            let dest: Destination<T::AccountId> = Destination::decode(&mut tmp).or_else(|_| {
-                Err(DispatchError::Other(
-                    "Failed to decode buffer into `Destination`",
-                ))
-            })?;
+            let dest: Destination<T::AccountId> = Destination::decode(&mut tmp)
+                .map_err(|_| DispatchError::Other("Failed to decode buffer into `Destination`"))?;
             ensure!(value > 0, "Value transferred must be larger than zero");
 
             let signer = ensure_signed(origin)?;
@@ -1021,24 +1031,16 @@ pub mod pallet {
             let pubkey_raw: [u8; 32] = signer
                 .encode()
                 .try_into()
-                .or_else(|_| Err(DispatchError::Other("Failed to get caller's public key")))?;
-
-            let tx_out = match dest {
-                Destination::Pubkey(pubkey) => {
-                    TransactionOutput::new_pubkey(value, H256::from(pubkey))
-                }
-                Destination::ScriptHash(hash) => TransactionOutput::new_script_hash(value, hash),
-                Destination::CreatePP(_, _) | Destination::CallPP(_, _) => {
-                    return Err(
-                        "OP_CREATE/OP_CALL UTXOs cannot be used with `send_to_address`".into(),
-                    )
-                }
-            };
+                .map_err(|_| DispatchError::Other("Failed to get caller's public key"))?;
 
             let mut tx = Transaction {
                 inputs,
                 outputs: vec![
-                    tx_out,
+                    TransactionOutput {
+                        value,
+                        destination: dest,
+                        header: Default::default(),
+                    },
                     TransactionOutput::new_pubkey(total - value, H256::from(pubkey_raw)),
                 ],
             };
