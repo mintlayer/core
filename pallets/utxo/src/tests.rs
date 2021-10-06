@@ -101,7 +101,7 @@ fn test_unchecked_2nd_output() {
         let tx1 = Transaction {
             inputs: vec![input0],
             outputs: vec![
-                TransactionOutput::new_create_pp(0, vec![], vec![]),
+                TransactionOutput::new_pubkey(30, H256::from(alice_pub_key)),
                 TransactionOutput::new_pubkey(50, H256::from(alice_pub_key)),
             ],
         }

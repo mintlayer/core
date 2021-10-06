@@ -558,20 +558,19 @@ pub mod pallet {
                 log::error!("Header error: {}", e);
             }
             ensure!(res.is_ok(), "header error. Please check the logs.");
+            ensure!(output.value > 0, "output value must be nonzero");
+            let hash = tx.outpoint(output_index as u64);
+            ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
+            new_utxos.push(hash.as_fixed_bytes().to_vec());
 
             match output.destination {
-                Destination::Pubkey(_) | Destination::ScriptHash(_) => {
-                    ensure!(output.value > 0, "output value must be nonzero");
-                    let hash = tx.outpoint(output_index as u64);
-                    ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
-                    new_utxos.push(hash.as_fixed_bytes().to_vec());
-                }
                 Destination::CreatePP(_, _) => {
                     log::info!("TODO validate OP_CREATE");
                 }
                 Destination::CallPP(_, _) => {
                     log::info!("TODO validate OP_CALL");
                 }
+                _ => {}
             }
         }
 
@@ -684,18 +683,18 @@ pub mod pallet {
         }
 
         for (index, output) in tx.outputs.iter().enumerate() {
+            let hash = tx.outpoint(index as u64);
+            log::debug!("inserting to UtxoStore {:?} as key {:?}", output, hash);
+            <UtxoStore<T>>::insert(hash, Some(output));
+
             match &output.destination {
-                Destination::Pubkey(_) | Destination::ScriptHash(_) => {
-                    let hash = tx.outpoint(index as u64);
-                    log::debug!("inserting to UtxoStore {:?} as key {:?}", output, hash);
-                    <UtxoStore<T>>::insert(hash, Some(output));
-                }
                 Destination::CreatePP(script, data) => {
                     create::<T>(caller, script, &data);
                 }
                 Destination::CallPP(acct_id, data) => {
                     call::<T>(caller, acct_id, data);
                 }
+                _ => {}
             }
         }
 
