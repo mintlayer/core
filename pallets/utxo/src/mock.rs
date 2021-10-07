@@ -54,7 +54,7 @@ pub fn genesis_utxo() -> [u8; 32] {
 pub struct MockPool<T>(PhantomData<T>);
 
 impl<T: frame_system::Config> ProgrammablePoolApi for MockPool<T> {
-    type AccountId = u64;
+    type AccountId = H256;
 
     fn create(
         _origin: &Self::AccountId,
@@ -109,7 +109,7 @@ impl frame_system::Config for Test {
     type BlockNumber = u64;
     type Hash = H256;
     type Hashing = BlakeTwo256;
-    type AccountId = u64;
+    type AccountId = H256;
     type Lookup = IdentityLookup<Self::AccountId>;
     type Header = Header;
     type Event = Event;
@@ -148,6 +148,7 @@ impl pallet_utxo::Config for Test {
     type Call = Call;
     type WeightInfo = crate::weights::WeightInfo<Test>;
     type ProgrammablePool = MockPool<Test>;
+    type AssetId = u64;
 
     fn authorities() -> Vec<H256> {
         Aura::authorities()

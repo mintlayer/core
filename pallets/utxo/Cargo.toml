@@ -12,13 +12,27 @@ std = [
     'frame-support/std',
     'frame-system/std',
     'frame-benchmarking/std',
-    'sp-core/std'
+    'chainscript/std',
+    'sp-core/std',
+    'sp-std/std',
 ]
 
 [dependencies]
 hex-literal = "0.2.1"
 log = "0.4.8"
 serde = '1.0.119'
+pallet-utxo-tokens = { path = "./tokens" }
+variant_count = '1.1'
+
+[dependencies.bech32]
+default-features = false
+path = '../../libs/bech32'
+version = '0.1.0'
+
+[dependencies.chainscript]
+default-features = false
+path = '../../libs/chainscript'
+version = '0.1.0'
 
 [dependencies.codec]
 default-features = false
@@ -54,6 +68,12 @@ version = '4.0.0-dev'
 branch = "master"
 
 [dependencies.sp-core]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+version = '4.0.0-dev'
+branch = "master"
+
+[dependencies.sp-std]
 default-features = false
 git = 'https://github.com/paritytech/substrate.git'
 version = '4.0.0-dev'

@@ -15,6 +15,9 @@ git = 'https://github.com/paritytech/substrate.git'
 version = '5.0.0-dev'
 branch = "master"
 
+[dependencies]
+pallet-utxo-tokens = { path = "../pallets/utxo/tokens" }
+
 [dependencies.codec]
 default-features = false
 features = ['derive']

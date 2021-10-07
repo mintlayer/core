@@ -13,7 +13,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// Author(s): A. Altonen
+// Author(s): A. Altonen, A. Sinitsyn
+
 use jsonrpc_core::{Error as RpcError, ErrorCode, Result};
 use jsonrpc_derive::rpc;
 pub use pallet_utxo_rpc_runtime_api::UtxoApi as UtxoRuntimeApi;
@@ -26,6 +27,10 @@ use std::sync::Arc;
 pub trait UtxoApi<BlockHash> {
     #[rpc(name = "utxo_send")]
     fn send(&self, at: Option<BlockHash>) -> Result<u32>;
+
+    // What means Vec<(u64, Vec<u8>)> ? Have a look at utxo/rpc/runtime-api/src/lib.rs
+    #[rpc(name = "tokens_list")]
+    fn tokens_list(&self, at: Option<BlockHash>) -> Result<Vec<(u64, Vec<u8>)>>;
 }
 
 /// A struct that implements the [`UtxoApi`].
@@ -50,6 +55,8 @@ pub enum Error {
     DecodeError = 1,
     /// The call to runtime failed.
     RuntimeError = 2,
+    /// The access to Storage failed
+    StorageError = 3,
 }
 
 impl<C, Block> UtxoApi<<Block as BlockT>::Hash> for Utxo<C, Block>
@@ -69,6 +76,20 @@ where
         api.send(&at).map_err(|e| RpcError {
             code: ErrorCode::ServerError(Error::RuntimeError as i64),
             message: "Unable to query dispatch info.".into(),
+            data: Some(format!("{:?}", e).into()),
+        })
+    }
+
+    fn tokens_list(&self, at: Option<<Block as BlockT>::Hash>) -> Result<Vec<(u64, Vec<u8>)>> {
+        let api = self.client.runtime_api();
+        let at = BlockId::hash(at.unwrap_or_else(||
+            // If the block hash is not supplied assume the best block.
+            self.client.info().best_hash));
+
+        let runtime_api_result = api.tokens_list(&at);
+        runtime_api_result.map_err(|e| RpcError {
+            code: ErrorCode::ServerError(Error::StorageError as i64),
+            message: "Something wrong".into(),
             data: Some(format!("{:?}", e).into()),
         })
     }

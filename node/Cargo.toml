@@ -1,16 +1,16 @@
 [package]
-authors = ['Substrate DevHub <https://github.com/substrate-developer-hub>']
+authors = ['RBB S.r.l <https://github.com/mintlayer>']
 build = 'build.rs'
-description = 'A fresh FRAME-based Substrate node, ready for hacking.'
+description = 'The Mintlayer core node'
 edition = '2018'
 homepage = 'https://substrate.dev'
 license = 'Unlicense'
-name = 'node-template'
-repository = 'https://github.com/substrate-developer-hub/substrate-node-template/'
-version = '3.0.0'
+name = 'mintlayer-core'
+repository = 'https://github.com/mintlayer/core'
+version = '0.1.0'
 
 [[bin]]
-name = 'node-template'
+name = 'mintlayer-core'
 
 [package.metadata.docs.rs]
 targets = ['x86_64-unknown-linux-gnu']
@@ -24,6 +24,14 @@ structopt = '0.3.8'
 node-template-runtime = {version = '3.0.0', path = '../runtime'}
 pallet-utxo-rpc = { path = "../pallets/utxo/rpc" }
 pallet-utxo-rpc-runtime-api = { path = "../pallets/utxo/rpc/runtime-api" }
+pallet-utxo-tokens = { path = "../pallets/utxo/tokens" }
+log = "0.4.8"
+ureq = "2.2.0"
+
+[dependencies.serde_json]
+version = '1.0.45'
+default-features = false
+features = ['alloc']
 
 [dependencies.frame-benchmarking]
 git = 'https://github.com/paritytech/substrate.git'
