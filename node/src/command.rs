@@ -51,7 +51,7 @@ fn fetch_bootnode_list() -> Result<Vec<MultiaddrWithPeerId>, Box<dyn Error>> {
 
 impl SubstrateCli for Cli {
     fn impl_name() -> String {
-        "Mint Layer Node".into()
+        "Mintlayer Node".into()
     }
 
     fn impl_version() -> String {
@@ -63,7 +63,7 @@ impl SubstrateCli for Cli {
     }
 
     fn author() -> String {
-        "Mint Layer".into()
+        "Mintlayer".into()
     }
 
     fn support_url() -> String {
