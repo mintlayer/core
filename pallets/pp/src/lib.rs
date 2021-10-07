@@ -50,6 +50,7 @@ use sp_core::{crypto::UncheckedFrom, Bytes, H256};
 
 #[frame_support::pallet]
 pub mod pallet {
+    use frame_support::inherent::Vec;
     use frame_support::pallet_prelude::*;
     use frame_system::pallet_prelude::*;
     use sp_core::{H256, H512};
@@ -61,9 +62,20 @@ pub mod pallet {
         type Utxo: UtxoApi<AccountId = Self::AccountId>;
     }
 
+    #[derive(Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, RuntimeDebug)]
+    pub struct ContractBalance {
+        pub total: u128,
+        pub utxos: Vec<(H256, u128)>,
+    }
+
     #[pallet::pallet]
     #[pallet::generate_store(pub(super) trait Store)]
     pub struct Pallet<T>(_);
+
+    #[pallet::storage]
+    #[pallet::getter(fn contract_balances)]
+    pub(super) type ContractBalances<T: Config> =
+        StorageMap<_, Identity, T::AccountId, Option<ContractBalance>, ValueQuery>;
 
     #[pallet::event]
     #[pallet::metadata(T::AccountId = "AccountId")]
@@ -123,7 +135,7 @@ where
         let code = pallet_contracts_primitives::Code::Upload(Bytes(code.to_vec()));
         let endowment = pallet_contracts::Pallet::<T>::subsistence_threshold();
 
-        let _ = pallet_contracts::Pallet::<T>::bare_instantiate(
+        let res = match pallet_contracts::Pallet::<T>::bare_instantiate(
             caller.clone(),
             endowment * 100_u32.into(), // TODO
             gas_limit,
@@ -131,6 +143,23 @@ where
             data.to_vec(),
             Vec::new(),
             true, // enable debugging
+        )
+        .result
+        {
+            Ok(res) => res,
+            Err(e) => {
+                log::error!("Failed to instantiate contract: {:?}", e);
+                return Err("Failed to instantiate contract");
+            }
+        };
+
+        // Create balance entry for the smart contract
+        <ContractBalances<T>>::insert(
+            res.account_id,
+            Some(ContractBalance {
+                total: 0,
+                utxos: Vec::new(),
+            }),
         );
 
         Ok(())
@@ -140,12 +169,18 @@ where
         caller: &T::AccountId,
         dest: &T::AccountId,
         gas_limit: Weight,
-        _utxo_hash: H256,
-        _utxo_value: u128,
+        utxo_hash: H256,
+        utxo_value: u128,
         input_data: &Vec<u8>,
     ) -> Result<(), &'static str> {
-        let value = pallet_contracts::Pallet::<T>::subsistence_threshold();
+        // check if `dest` exist and if it does, update its balance information
+        <ContractBalances<T>>::get(&dest).ok_or("Contract doesn't exist!")?;
+        <ContractBalances<T>>::mutate(dest, |info| {
+            info.as_mut().unwrap().total += utxo_value.saturated_into::<u128>();
+            info.as_mut().unwrap().utxos.push((utxo_hash, utxo_value));
+        });
 
+        let value = pallet_contracts::Pallet::<T>::subsistence_threshold();
         let _ = pallet_contracts::Pallet::<T>::bare_call(
             caller.clone(),
             dest.clone(),
