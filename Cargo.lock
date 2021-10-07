@@ -4580,6 +4580,7 @@ version = "3.0.0"
 dependencies = [
  "frame-support",
  "frame-system",
+ "sp-core",
  "sp-runtime",
  "sp-std",
 ]

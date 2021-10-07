@@ -46,7 +46,7 @@ use pallet_contracts::chain_extension::{
     ChainExtension, Environment, Ext, InitState, RetVal, SysConfig,
 };
 use pp_api::ProgrammablePoolApi;
-use sp_core::{crypto::UncheckedFrom, Bytes};
+use sp_core::{crypto::UncheckedFrom, Bytes, H256};
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -116,6 +116,8 @@ where
         caller: &T::AccountId,
         gas_limit: Weight,
         code: &Vec<u8>,
+        _utxo_hash: H256,
+        _utxo_value: u128,
         data: &Vec<u8>,
     ) -> Result<(), &'static str> {
         let code = pallet_contracts_primitives::Code::Upload(Bytes(code.to_vec()));
@@ -138,6 +140,8 @@ where
         caller: &T::AccountId,
         dest: &T::AccountId,
         gas_limit: Weight,
+        _utxo_hash: H256,
+        _utxo_value: u128,
         input_data: &Vec<u8>,
     ) -> Result<(), &'static str> {
         let value = pallet_contracts::Pallet::<T>::subsistence_threshold();

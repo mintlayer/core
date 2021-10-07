@@ -420,19 +420,31 @@ pub mod pallet {
         }
     }
 
-    pub fn create<T: Config>(caller: &T::AccountId, code: &Vec<u8>, data: &Vec<u8>) {
+    pub fn create<T: Config>(
+        caller: &T::AccountId,
+        code: &Vec<u8>,
+        utxo_hash: H256,
+        utxo_value: u128,
+        data: &Vec<u8>,
+    ) {
         let weight: Weight = 6000000000;
 
-        match T::ProgrammablePool::create(caller, weight, code, data) {
+        match T::ProgrammablePool::create(caller, weight, code, utxo_hash, utxo_value, data) {
             Ok(_) => log::info!("success!"),
             Err(e) => log::error!("failure: {:#?}", e),
         }
     }
 
-    pub fn call<T: Config>(caller: &T::AccountId, dest: &T::AccountId, data: &Vec<u8>) {
+    pub fn call<T: Config>(
+        caller: &T::AccountId,
+        dest: &T::AccountId,
+        utxo_hash: H256,
+        utxo_value: u128,
+        data: &Vec<u8>,
+    ) {
         let weight: Weight = 6000000000;
 
-        match T::ProgrammablePool::call(caller, dest, weight, data) {
+        match T::ProgrammablePool::call(caller, dest, weight, utxo_hash, utxo_value, data) {
             Ok(_) => log::info!("success!"),
             Err(e) => log::error!("failure: {:#?}", e),
         }
@@ -695,10 +707,10 @@ pub mod pallet {
 
             match &output.destination {
                 Destination::CreatePP(script, data) => {
-                    create::<T>(caller, script, &data);
+                    create::<T>(caller, script, hash, output.value, &data);
                 }
                 Destination::CallPP(acct_id, data) => {
-                    call::<T>(caller, acct_id, data);
+                    call::<T>(caller, acct_id, hash, output.value, data);
                 }
                 _ => {}
             }
