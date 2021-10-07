@@ -27,7 +27,24 @@ mod tests;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 
-use frame_support::{dispatch::Vec, weights::Weight};
+pub use frame_support::{
+    construct_runtime,
+    dispatch::Vec,
+    parameter_types,
+    sp_runtime::{DispatchError, SaturatedConversion},
+    traits::{
+        Currency, Everything, IsSubType, KeyOwnerProofSystem, LockableCurrency, Nothing,
+        Randomness, ReservableCurrency,
+    },
+    weights::{
+        constants::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight, WEIGHT_PER_SECOND},
+        Weight,
+    },
+    StorageValue,
+};
+use pallet_contracts::chain_extension::{
+    ChainExtension, Environment, Ext, InitState, RetVal, SysConfig,
+};
 use pp_api::ProgrammablePoolApi;
 use sp_core::{crypto::UncheckedFrom, Bytes};
 
@@ -135,5 +152,21 @@ where
         );
 
         Ok(())
+    }
+}
+
+impl<T: pallet_contracts::Config + pallet_balances::Config + pallet::Config> ChainExtension<T>
+    for Pallet<T>
+{
+    fn call<E: Ext>(func_id: u32, _env: Environment<E, InitState>) -> Result<RetVal, DispatchError>
+    where
+        <E::T as SysConfig>::AccountId: UncheckedFrom<<E::T as SysConfig>::Hash> + AsRef<[u8]>,
+    {
+        log::error!("Called an unregistered `func_id`: {:}", func_id);
+        return Err(DispatchError::Other("Unimplemented func_id"));
+    }
+
+    fn enabled() -> bool {
+        true
     }
 }
