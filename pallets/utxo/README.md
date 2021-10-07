@@ -19,17 +19,12 @@ To run the test cases, just run command `cargo test`.
          "ScriptHash": "Public",
          "PubkeyHash": "Vec<u8>",
          "Stake": "DestinationStake",
-         "StakeExtra": "Public",
-         "WithdrawStake": "DestinationWithdrawStake"
+         "StakeExtra": "Public"
       }
    },
-   "DestinationWithdrawStake": {
-      "outpoints": "Vec<Hash>",
-      "pub_key": "Public"
-   },
    "DestinationStake": {
-      "stash_account": "AccountId",
-      "controller_account": "AccountId",
+      "stash_account": "Public",
+      "controller_account": "Public",
       "rotate_keys": "Vec<u8>"
    },
    "DestinationCreatePP": {

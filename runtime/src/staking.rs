@@ -3,21 +3,21 @@ use crate::Perbill;
 use codec::{Decode, EncodeLike};
 use frame_support::{traits::Currency, dispatch::{DispatchResultWithPostInfo, Vec}};
 use frame_system::{Config as SysConfig, RawOrigin};
-use pallet_staking::Pallet as StakingPallet;
+use pallet_staking::{Pallet as StakingPallet, BalanceOf};
 use pallet_utxo::staking::StakingHelper;
-use sp_core::{H256, sp_std::vec, sr25519::Public};
+use sp_core::{H256, sp_std::vec};
 use sp_runtime::traits::StaticLookup;
-use sp_runtime::AccountId32;
 
 type StakeAccountId<T> =  <T as SysConfig>::AccountId;
 type LookupSourceOf<T> = <<T as SysConfig>::Lookup as StaticLookup>::Source;
 
 pub struct StakeOps<T>(sp_core::sp_std::marker::PhantomData<T>);
 impl <T: pallet_staking::Config + pallet_utxo::Config + pallet_session::Config> StakingHelper<T::AccountId> for StakeOps<T>
-    where StakeAccountId<T>: From<Public> + EncodeLike<AccountId32>
+    where StakeAccountId<T>: From<[u8; 32]>,
+          BalanceOf<T>: From<u128>
 {
     fn get_account_id(pub_key: &H256) -> StakeAccountId<T> {
-      Public::from_h256(pub_key.clone()).into()
+        pub_key.0.into()
     }
 
     fn stake(stash_account: &StakeAccountId<T>, controller_account: &StakeAccountId<T>, rotate_keys: &mut Vec<u8>) -> DispatchResultWithPostInfo {
@@ -56,6 +56,23 @@ impl <T: pallet_staking::Config + pallet_utxo::Config + pallet_session::Config> 
         Ok(().into())
     }
 
+
+    fn stake_extra(controller_account: &StakeAccountId<T>, value: u128) -> DispatchResultWithPostInfo {
+        // get the stash account first
+        if let Some(stake_ledger) = <StakingPallet<T>>::ledger(controller_account.clone()) {
+            StakingPallet::<T>::bond_extra(
+                RawOrigin::Signed(stake_ledger.stash).into(),
+                value.into()
+            )?;
+
+        } else {
+            log::error!("check sync with pallet-staking.");
+            Err(pallet_utxo::Error::<T>::NoStakingRecordFound)?
+        }
+        Ok(().into())
+    }
+
+
     fn pause(controller_account: &StakeAccountId<T>) -> DispatchResultWithPostInfo {
         // stop validating / block producing
         StakingPallet::<T>::chill(RawOrigin::Signed(controller_account.clone()).into())?;
@@ -63,7 +80,6 @@ impl <T: pallet_staking::Config + pallet_utxo::Config + pallet_session::Config> 
         // get the total balance to free up
         if let Some(stake_ledger) = <StakingPallet<T>>::ledger(controller_account.clone()) {
 
-            // let balance:BalanceOf<T> = stake_ledger.total;
             // unbond
             StakingPallet::<T>::unbond(
                 RawOrigin::Signed(controller_account.clone()).into(),

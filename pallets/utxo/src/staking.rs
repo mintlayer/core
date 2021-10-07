@@ -1,7 +1,13 @@
 
-use crate::{Config, StakingCount, Error,Event, Pallet, TransactionOutput, Destination, LockedUtxos, Value, UtxoStore};
-use sp_core::H256;
+use crate::{
+    Config, StakingCount, Error, Event, Pallet, TransactionOutput, Destination, LockedUtxos,
+    Value, UtxoStore, MLT_UNIT
+};
 use frame_support::{dispatch::{DispatchResultWithPostInfo, Vec}, ensure};
+use sp_core::H256;
+use sp_std::vec;
+use sp_runtime::transaction_validity::{ValidTransaction,TransactionLongevity};
+use sp_runtime::traits::{BlakeTwo256, Hash};
 
 /// A helper trait to handle staking NOT found in pallet-utxo.
 pub trait StakingHelper<AccountId>{
@@ -18,6 +24,9 @@ pub trait StakingHelper<AccountId>{
     /// with validators, eras, sessions. see `pallet-session`.
     fn stake(stash_account:&AccountId, controller_account:&AccountId, rotate_keys:&mut Vec<u8>) -> DispatchResultWithPostInfo;
 
+    /// stake more funds for the validator
+    fn stake_extra(controller_account:&AccountId, value:Value) -> DispatchResultWithPostInfo;
+
     /// quitting the role of a validator.
     fn pause(controller_account:&AccountId) -> DispatchResultWithPostInfo;
 
@@ -28,16 +37,31 @@ pub trait StakingHelper<AccountId>{
 
 /// performs the staking outside of the `pallet-utxo`.
 pub(crate) fn stake<T: Config>(
-    stash_account: &T::AccountId,
-    controller_account: &T::AccountId,
-    rotate_keys:&Vec<u8>)
+    stash_pubkey: &H256,
+    controller_pubkey: &H256,
+    session_key:&Vec<u8>)
     -> DispatchResultWithPostInfo {
-    if <StakingCount<T>>::contains_key(controller_account) {
-        Err(Error::<T>::StakingAlreadyExists)?
-    }
+    ensure!(!<StakingCount<T>>::contains_key(controller_pubkey),Error::<T>::StakingAlreadyExists);
 
-    let mut rotate_keys = rotate_keys.to_vec();
-    T::StakingHelper::stake(stash_account, controller_account, &mut rotate_keys)?;
+    let mut session_key = session_key.to_vec();
+
+    let stash_account = T::StakingHelper::get_account_id(stash_pubkey);
+    let controller_account = T::StakingHelper::get_account_id(controller_pubkey);
+
+    T::StakingHelper::stake(&stash_account, &controller_account, &mut session_key)?;
+
+    Ok(().into())
+}
+
+/// stake more values. This is only for existing validators.
+pub(crate) fn stake_extra<T: Config>(controller_pub_key: &H256, value:Value) -> DispatchResultWithPostInfo {
+    // Checks whether a given pub_key is a validator
+    ensure!(<StakingCount<T>>::contains_key(controller_pub_key.clone()) , Error::<T>::NoStakingRecordFound);
+
+    let controller_account= T::StakingHelper::get_account_id(controller_pub_key);
+
+    let non_mlt_value = value.checked_div(MLT_UNIT).unwrap();
+    T::StakingHelper::stake_extra(&controller_account,non_mlt_value)?;
 
     Ok(().into())
 }
@@ -48,83 +72,59 @@ pub(crate) fn unlock<T: Config>(controller_pubkey: &H256) -> DispatchResultWithP
     let controller_account= T::StakingHelper::get_account_id(controller_pubkey);
     T::StakingHelper::pause(&controller_account)?;
 
+    <Pallet<T>>::deposit_event(Event::<T>::StakeUnlocked(controller_pubkey.clone()));
+
     Ok(().into())
 }
-
 
 /// Consolidates all unlocked utxos  into one, and moves it to `UtxoStore`.
 /// Make SURE that `fn unlock(...)` has been called and the era for withdrawal has passed, before
 /// performing a withdrawal.
 /// # Arguments
-/// * `output` - the output containing the `Destination::WithdrawStake`.
-/// * `hash` - is the outpoint/key to save the new utxo
-pub(crate) fn withdraw<T: Config>(output:&TransactionOutput<T::AccountId>,hash:H256) -> DispatchResultWithPostInfo {
-    if let Destination::WithdrawStake { outpoints, pub_key } =  &output.destination {
-        let controller_account = T::StakingHelper::get_account_id(pub_key);
-        T::StakingHelper::withdraw(&controller_account)?;
+/// * `controller_pub_key` - the public key of the validator. In terms of pallet-staking, that's the
+/// controller, NOT the stash.
+/// * `outpoints` - a list of outpoints that were staked.
+pub(crate) fn withdraw<T: Config>(controller_pub_key: H256, outpoints: Vec<H256>) -> DispatchResultWithPostInfo {
+    let (_, mut total) = <StakingCount<T>>::get(controller_pub_key.clone());
+    //  1 MLT as fee.
+    total -= 1 * MLT_UNIT;
+    // TODO: where do i put this fee? back to MLTCoinsAvailable?
 
-        let mut sum:Value = 0;
-        outpoints.iter().for_each(|hash| sum += <LockedUtxos<T>>::take(hash).unwrap().value);
-
-        let new_tx = TransactionOutput {
-            value: sum,
-            header: 0,
-            destination: Destination::Pubkey(pub_key.clone())
-        };
-
-        if !<UtxoStore<T>>::contains_key(hash) {
-            log::info!("inserting to UtxoStore {:?} as key {:?}", new_tx, hash);
-            <UtxoStore<T>>::insert(hash, Some(new_tx));
-            <StakingCount<T>>::remove(controller_account);
-
-            <Pallet<T>>::deposit_event(Event::<T>::StakeWithdrawn(sum,pub_key.clone()));
-        }
-    } else {
-        log::error!("InvalidOperation; when performing a withdrawal, make sure the destination is `WithdrawStake`");
-        Err(Error::<T>::InvalidOperation)?
+    let mut hashes = vec![];
+    for hash in outpoints {
+        <LockedUtxos<T>>::remove(hash);
+        hashes.push(hash);
     }
+    let hash = BlakeTwo256::hash_of(&hashes);
 
+    let utxo = TransactionOutput {
+        value: total,
+        header: 0,
+        destination: Destination::Pubkey(controller_pub_key.clone())
+    };
+
+    <UtxoStore<T>>::insert(hash, Some(utxo));
+
+    <Pallet<T>>::deposit_event(Event::<T>::StakeWithdrawn(total,controller_pub_key));
     Ok(().into())
 }
 
-/// Checks whether a given pub_key is a validator.
-pub(crate) fn check_controller<T:Config>(controller_pubkey: &H256) -> Option<T::AccountId> {
-    let controller_account = T::StakingHelper::get_account_id(controller_pubkey);
-    if !<StakingCount<T>>::contains_key(&controller_account) {
-        log::error!("No staking record found.");
-        return None;
-    }
-    Some(controller_account.clone())
-}
 
-
-/// Checks a given hash outpoint/key is owned by the specified pub_key
-/// # Arguments
-/// * `hash` - is the outpoint/key of the locked utxo.
-/// * `ctrl_pub_key` - the controller_pub_key, said to "own" the locked utxo
-/// * `ctrl_account` - the account derivation of the controller_pub_key
-pub(crate) fn is_owned_locked_utxo<T:Config>(hash:&H256, ctrl_pub_key: &H256, ctrl_account: &T::AccountId) -> Result<(), &'static str> {
-    if let Some(utxo) = <LockedUtxos<T>>::get(hash) {
-        match utxo.destination {
-            Destination::Stake { stash_account:_, controller_account, rotate_keys: _ } => {
-                ensure!(&controller_account == ctrl_account, "hash of stake not owned");
-
-            }
-            Destination::StakeExtra(controller_pub_key) => {
-                ensure!(&controller_pub_key == ctrl_pub_key, "hash of extra stake not owned");
-            }
-            _ => {
-                log::error!("For locked utxos, only with destinations `Stake` and `StakeExtra` are allowed.");
-                Err("destination not applicable")?
-            }
+pub(crate) fn is_owned_locked_utxo<T:Config>(utxo:&TransactionOutput<T::AccountId>, ctrl_pub_key: &H256) -> Result<(), &'static str> {
+    match &utxo.destination {
+        Destination::Stake { stash_pubkey:_, controller_pubkey, session_key:_ } => {
+            ensure!(controller_pubkey == ctrl_pub_key, "hash of stake not owned");
         }
-    } else {
-        Err("hash not found in lockedutxos.")?
+        Destination::StakeExtra(controller_pub_key) => {
+            ensure!(controller_pub_key == ctrl_pub_key, "hash of extra stake not owned");
+        }
+        _ => {
+            log::error!("For locked utxos, only with destinations `Stake` and `StakeExtra` are allowed.");
+            Err("destination not applicable")?
+        }
     }
-
     Ok(())
 }
-
 
 /// It includes:
 /// 1. Check if the pub key is a controller.
@@ -134,18 +134,28 @@ pub(crate) fn is_owned_locked_utxo<T:Config>(hash:&H256, ctrl_pub_key: &H256, ct
 /// # Arguments
 /// * `controller_pub_key` - An H256 public key of an account
 /// * `outpoints` - List of keys of unlocked utxos said to be "owned" by the controller_pub_key
-pub(crate) fn validate_withdrawal<T:Config>(controller_pub_key: &H256, outpoints:&Vec<H256>) -> Result<(), &'static str> {
-    let controller_account = T::StakingHelper::get_account_id(controller_pub_key);
-    if <StakingCount<T>>::contains_key(controller_account.clone()) {
-        if <StakingCount<T>>::get(&controller_account) == outpoints.len() as u64 {
-            for hash in outpoints {
-                is_owned_locked_utxo::<T>(hash,controller_pub_key,&controller_account)?;
-            }
-        } else {
-            Err("unexpected number of outpoints.")?
-        }
-    } else {
-        Err("controller_pub_key not a validator")?
+pub fn validate_withdrawal<T:Config>(controller_pub_key: &H256, outpoints:&Vec<H256>) -> Result<ValidTransaction, &'static str> {
+    ensure!(<StakingCount<T>>::contains_key(controller_pub_key.clone()),Error::<T>::NoStakingRecordFound);
+
+    let (num_of_utxos, _) = <StakingCount<T>>::get(controller_pub_key.clone());
+    ensure!(num_of_utxos == outpoints.len() as u64, "please provide all staked outpoints.");
+
+    let mut hashes = vec![];
+    for hash in outpoints {
+        ensure!(<LockedUtxos<T>>::contains_key(hash), Error::<T>::OutpointDoesNotExist);
+
+        let utxo =  <LockedUtxos<T>>::get(hash).unwrap();
+        is_owned_locked_utxo::<T>(&utxo,controller_pub_key)?;
+        hashes.push(hash.clone());
     }
-    Ok(())
+
+    let new_hash = BlakeTwo256::hash_of(&hashes).as_fixed_bytes().to_vec();
+
+    Ok(ValidTransaction {
+        priority: 1,
+        requires: vec![],
+        provides: vec![new_hash],
+        longevity: TransactionLongevity::MAX,
+        propagate: true
+    })
 }

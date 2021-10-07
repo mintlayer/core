@@ -21,8 +21,7 @@ use sp_runtime::traits::{
 use sp_runtime::{
     create_runtime_str, generic, impl_opaque_keys,
     transaction_validity::{TransactionSource, TransactionValidity},
-    ApplyExtrinsicResult, MultiSignature,
-    // curve::PiecewiseLinear,
+    ApplyExtrinsicResult, MultiSignature
 };
 use sp_std::prelude::*;
 #[cfg(feature = "std")]
@@ -55,6 +54,7 @@ pub use pallet_pp;
 pub use pallet_utxo;
 pub use staking::*;
 use sp_runtime::transaction_validity::{InvalidTransaction, TransactionValidityError};
+use pallet_utxo::MLT_UNIT;
 
 /// An index to a block.
 pub type BlockNumber = u32;
@@ -265,7 +265,7 @@ impl pallet_timestamp::Config for Runtime {
 }
 
 parameter_types! {
-    pub const ExistentialDeposit: u128 = 500;
+    pub const ExistentialDeposit: u128 = 40_000;
     pub const MaxLocks: u32 = 50;
 }
 
@@ -305,8 +305,8 @@ impl pallet_template::Config for Runtime {
 }
 
 parameter_types!{
-    pub const MinimumStake: u128 = 40_000 * 1_000 * 100_000_000;
-    pub const RewardReductionPeriod: BlockNumber = MINUTES * 5;
+    pub const MinimumStake: u128 = 40_000 * MLT_UNIT;
+    pub const RewardReductionPeriod: BlockNumber = MINUTES * 60 * 24 * 365;
 	pub const RewardReductionFraction: Percent = Percent::from_percent(25);
 }
 
@@ -420,22 +420,10 @@ impl onchain::Config for Runtime {
     type DataProvider = Staking;
 }
 
-// pallet_staking_reward_curve::build! {
-//     const REWARD_CURVE: PiecewiseLinear<'static> = curve!(
-//         min_inflation: 0_025_000,
-// 		max_inflation: 0_100_000,
-// 		ideal_stake: 0_500_000,
-// 		falloff: 0_050_000,
-// 		max_piece_count: 40,
-// 		test_precision: 0_005_000,
-//     );
-// }
-
 parameter_types! {
     pub const SessionsPerEra: sp_staking::SessionIndex = 2;
     pub const BondingDuration: pallet_staking::EraIndex = 2;
-    pub const SlashDeferDuration: pallet_staking::EraIndex = 1; // 1/4 the bonding duration
-    // pub const RewardCurve: &'static PiecewiseLinear<'static> = &REWARD_CURVE;
+    pub const SlashDeferDuration: pallet_staking::EraIndex = 1;
     pub const MaxNominatorRewardedPerValidator: u32 = 5;
     pub OffchainRepeat: BlockNumber = 5;
 }
@@ -479,17 +467,6 @@ impl<C> frame_system::offchain::SendTransactionTypes<C> for Runtime where
     type Extrinsic = UncheckedExtrinsic;
     type OverarchingCall = Call;
 }
-
-// sp_npos_elections::generate_solution_type!(
-// 	#[compact]
-// 	pub struct NposSolution16::<
-// 		VoterIndex = u32,
-// 		TargetIndex = u16,
-// 		Accuracy = sp_runtime::PerU16,
-// 	>(16)
-// );
-
-pub const MAX_NOMINATIONS: u32 = 5; //<NposSolution16 as sp_npos_elections::NposSolution>::LIMIT as u32;
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
 construct_runtime!(

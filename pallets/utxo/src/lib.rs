@@ -46,7 +46,7 @@ pub mod pallet {
     use crate::{OutputHeaderData, OutputHeaderHelper, TokenID};
     use crate::{rewards::reward_block_author};
     use crate::staking;
-    use crate::staking::{StakingHelper, validate_withdrawal};
+    use crate::staking::StakingHelper;
     use chainscript::Script;
     use codec::{Decode, Encode};
     use core::convert::TryInto;
@@ -81,11 +81,12 @@ pub mod pallet {
 
     pub type Value = u128;
     pub type String = Vec<u8>;
+    pub const MLT_UNIT: Value = 1_000 * 100_000_000;
 
     pub struct Mlt(Value);
     impl Mlt {
         pub fn to_munit(&self) -> Value {
-            self.0 * 1_000 * 100_000_000
+            self.0 * MLT_UNIT
         }
     }
 
@@ -125,6 +126,10 @@ pub mod pallet {
 
         /// An action not opted to be performed.
         InvalidOperation,
+
+        /// The hash outpoint key does not exist in the storage where it expects to be.
+        OutpointDoesNotExist,
+
     }
 
     #[pallet::pallet]
@@ -167,6 +172,7 @@ pub mod pallet {
         fn token_create(u: u32) -> Weight;
         fn send_to_address(u: u32) -> Weight;
         fn unlock_stake(u: u32) -> Weight;
+        fn withdraw_stake(u: u32) -> Weight;
     }
 
     /// Transaction input
@@ -250,17 +256,12 @@ pub mod pallet {
         /// First attempt of staking.
         /// Must assign a controller, in order to bond and validate. see pallet-staking
         Stake{
-            stash_account:AccountId,
-            controller_account:AccountId,
-            rotate_keys: Vec<u8>
+            stash_pubkey:H256,
+            controller_pubkey:H256,
+            session_key: Vec<u8>
         },
         /// lock more funds
-        StakeExtra(H256),
-        /// withdraw the staked funds
-        WithdrawStake {
-            outpoints: Vec<H256>,
-            pub_key: H256
-        }
+        StakeExtra(H256)
     }
 
     impl<AccountId> Destination<AccountId> {
@@ -302,11 +303,11 @@ pub mod pallet {
             }
         }
 
-        pub fn new_stake(value: Value, stash_account:AccountId, controller_account:AccountId, rotate_keys:Vec<u8>) -> Self {
+        pub fn new_stake(value: Value, stash_pubkey:H256, controller_pubkey:H256, session_key:Vec<u8>) -> Self {
             Self {
                 value,
                 header: 0,
-                destination: Destination::Stake { stash_account, controller_account, rotate_keys }
+                destination: Destination::Stake { stash_pubkey, controller_pubkey, session_key }
             }
         }
 
@@ -315,17 +316,6 @@ pub mod pallet {
                 value,
                 header: 0,
                 destination: Destination::StakeExtra(controller_pub_key)
-            }
-        }
-
-        pub fn new_withdraw_stake(value: Value, outpoints:Vec<H256>, controller_pub_key: H256) -> Self {
-            Self {
-                value,
-                header: 0,
-                destination: Destination::WithdrawStake{
-                    outpoints,
-                    pub_key: controller_pub_key
-                }
             }
         }
 
@@ -468,7 +458,7 @@ pub mod pallet {
     /// this is to count how many stakings done for that controller account.
     #[pallet::storage]
     #[pallet::getter(fn staking_count)]
-    pub(super) type StakingCount<T: Config> = StorageMap<_, Identity,T::AccountId,u64, ValueQuery>;
+    pub(super) type StakingCount<T: Config> = StorageMap<_, Identity,H256,(u64, Value), ValueQuery>;
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -707,9 +697,6 @@ pub mod pallet {
                         );
 
                     }
-                    Destination::WithdrawStake{ .. } => {
-                        log::info!("TODO validate withdraw stake");
-                    }
                     Destination::CreatePP(_, _) => {
                         log::info!("TODO validate spending of OP_CREATE");
                     }
@@ -764,13 +751,6 @@ pub mod pallet {
                     ensure!(output.value >= T::MinimumStake::get(), "output value must be equal or more than the set minimum stake");
                     let hash = tx.outpoint(output_index);
                     ensure!(!<LockedUtxos<T>>::contains_key(hash), "output already exists");
-                    new_utxos.push(hash.as_fixed_bytes().to_vec());
-                }
-                Destination::WithdrawStake{ outpoints, pub_key } => {
-                    ensure!(output.value == outpoints.len() as Value , "output value must be equivalent to the number of utxos to withdraw.");
-                    validate_withdrawal::<T>(&pub_key,&outpoints, )?;
-
-                    let hash = tx.outpoint(output_index);
                     new_utxos.push(hash.as_fixed_bytes().to_vec());
                 }
                 Destination::CreatePP(_, _) => {
@@ -868,29 +848,26 @@ pub mod pallet {
                     log::debug!("inserting to UtxoStore {:?} as key {:?}", output, hash);
                     <UtxoStore<T>>::insert(hash, Some(output));
                 }
-                Destination::Stake{ stash_account, controller_account, rotate_keys } => {
-                    staking::stake::<T>(stash_account,controller_account,rotate_keys)?;
+                Destination::Stake{ stash_pubkey, controller_pubkey, session_key } => {
+                    staking::stake::<T>(stash_pubkey,controller_pubkey,session_key)?;
 
                     let hash = tx.outpoint(index);
                     log::debug!("inserting to LockedUtxos {:?} as key {:?}", output, hash);
                     <LockedUtxos<T>>::insert(hash, Some(output));
-                    <StakingCount<T>>::insert(controller_account.clone(), 1);
+                    <StakingCount<T>>::insert(controller_pubkey, (1,output.value));
                 }
                 Destination::StakeExtra(controller_pubkey) => {
-                    if let Some(controller_account) =  staking::check_controller::<T>(controller_pubkey) {
-                        let hash = tx.outpoint(index);
-                        log::debug!("inserting to LockedUtxos {:?} as key {:?}", output, hash);
-                        <LockedUtxos<T>>::insert(hash, Some(output));
+                    staking::stake_extra::<T>(controller_pubkey, output.value)?;
 
-                        let staking_count = <StakingCount<T>>::get(&controller_account);
-                        <StakingCount<T>>::insert(controller_account,staking_count + 1);
-                    } else {
-                        Err(Error::<T>::NoStakingRecordFound)?
-                    }
-                }
-                Destination::WithdrawStake{ .. } => {
                     let hash = tx.outpoint(index);
-                    staking::withdraw::<T>(output, hash)?;
+                    log::debug!("inserting to LockedUtxos {:?} as key {:?}", output, hash);
+
+                    let (mut num_of_utxos, mut total) = <StakingCount<T>>::get(&controller_pubkey);
+                    total += output.value;
+                    num_of_utxos +=1;
+
+                    <LockedUtxos<T>>::insert(hash, Some(output));
+                    <StakingCount<T>>::insert(controller_pubkey,(num_of_utxos, total));
                 }
                 Destination::CreatePP(script, data) => {
                     create::<T>(caller, script, &data);
@@ -1097,9 +1074,9 @@ pub mod pallet {
             spend::<T>(&signer, &tx)
         }
 
-        /// unlock the stake, if use wants to stop validating and wants to withdraw the locked utxos.
-        /// To withdraw, note that you need to check with the outside staking (a.k.a. pallet-staking)
-        /// the period of time (or era, as it is called) to when a withdrawal can be done.
+        /// unlock the stake, if user wants to stop validating and withdraw the locked utxos.
+        /// If used with `pallet-staking`, it uses the `BondingDuration`
+        /// to set the period/era on when to withdraw.
         #[pallet::weight(T::WeightInfo::unlock_stake(1 as u32))]
         pub fn unlock_stake(
             origin: OriginFor<T>,
@@ -1107,8 +1084,22 @@ pub mod pallet {
         ) -> DispatchResultWithPostInfo {
             ensure_signed(origin)?;
             staking::unlock::<T>(&controller_pub_key)?;
+            Ok(().into())
+        }
 
-            Self::deposit_event(Event::<T>::StakeUnlocked(controller_pub_key));
+        /// withdraw unlocked stake. Make sure the period for withdrawal has passed.
+        /// If used with `pallet-staking`, then the period can be found in
+        /// its ledger of datatype `StakingLedger`,
+        /// the field `unlocking` of datatype `UnlockChunk`,
+        /// and at field `era`.
+        #[pallet::weight(T::WeightInfo::withdraw_stake(outpoints.len() as u32))]
+        pub fn withdraw_stake(
+            origin: OriginFor<T>,
+            controller_pub_key: H256,
+            outpoints: Vec<H256>
+        ) -> DispatchResultWithPostInfo {
+            ensure_signed(origin)?;
+            staking::withdraw::<T>(controller_pub_key,outpoints)?;
             Ok(().into())
         }
     }
@@ -1148,8 +1139,8 @@ pub mod pallet {
             });
 
             self.locked_utxos.iter().cloned().for_each(|u| {
-                if let Destination::Stake { stash_account:_, controller_account, rotate_keys:_ } =  &u.destination {
-                    <StakingCount<T>>::insert(controller_account.clone(),1);
+                if let Destination::Stake { stash_pubkey:_, controller_pubkey, session_key:_ } =  &u.destination {
+                    <StakingCount<T>>::insert(controller_pubkey.clone(),(1, u.value));
                 }
                 LockedUtxos::<T>::insert(BlakeTwo256::hash_of(&u), Some(u));
             });

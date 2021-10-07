@@ -10,6 +10,7 @@ use sp_core::H256;
 use sp_core::{sr25519, Pair, Public};
 use sp_finality_grandpa::AuthorityId as GrandpaId;
 use sp_runtime::traits::{IdentifyAccount, Verify};
+use node_template_runtime::pallet_utxo::MLT_UNIT;
 
 // The URL for the telemetry server.
 // const STAGING_TELEMETRY_URL: &str = "wss://telemetry.polkadot.io/submit/";
@@ -173,18 +174,21 @@ fn testnet_genesis(
     endowed_utxos: Vec<sr25519::Public>,
     _enable_println: bool,
 ) -> GenesisConfig {
-    const ENDOWMENT: u128 = 1 << 60;
+    const ENDOWMENT: u128 = 1 << 80;
     // minimum balance set in the runtime. check `lib.rs` of runtime module.
-    const STASH: u128 = 500;
+    const STASH: u128 = 40_000;
 
     // only Alice contains 400 million coins.
     let (genesis, locked_genesis) = endowed_utxos
         .first()
         .map(|x| {
+            let x_h256 = H256::from_slice(x.as_slice());
+            let x_stash_h256= H256::from( get_from_seed::<sr25519::Public>("Alice//stash"));
+
             // may need to create a const variable to represent 1_000 and 100_000_000
             let alice_genesis = pallet_utxo::TransactionOutput::new_pubkey(
-                1_000 * 100_000_000 * 400_000_000 as pallet_utxo::Value,
-                H256::from_slice(x.as_slice()),
+                400_000_000 * MLT_UNIT,
+                x_h256,
             );
 
             let alice_auth_keys = authority_keys_from_seed("Alice");
@@ -192,9 +196,9 @@ fn testnet_genesis(
             // since alice is the starting validator, make sure she has some utxos being locked away
             let alice_locked = pallet_utxo::TransactionOutput::new_stake(
                 // this is the minimum stake amount
-                40_000 * 100_000_000 * 1_000,
-                alice_auth_keys.stash_account_id,
-                alice_auth_keys.account_id,
+                40_000 * MLT_UNIT,
+                x_stash_h256,
+                x_h256,
                 vec![]
             );
 
@@ -246,8 +250,8 @@ fn testnet_genesis(
             // Currently forcing only 1 INITIAL AUTHORITY (Alice), hence only 1 locked-genesis.
             // This means only ALICE has staked her utxo.
             locked_utxos: vec![locked_genesis],
-            extra_mlt_coins: 50_000 as pallet_utxo::Value,
-            initial_reward_amount: 100 as pallet_utxo::Value,
+            extra_mlt_coins: 200_000  * MLT_UNIT,
+            initial_reward_amount: 100 * MLT_UNIT,
             _marker: Default::default(),
         },
         pp: PpConfig {
