@@ -38,16 +38,17 @@ mod header;
 mod rewards;
 mod script;
 mod sign;
+pub mod staking;
 pub mod weights;
 
 #[frame_support::pallet]
 pub mod pallet {
     use crate::sign::{self, Scheme};
     use crate::{OutputHeaderData, OutputHeaderHelper, TXOutputHeader, TokenID, TokenType};
-    use bech32;
     use crate::{rewards::reward_block_author};
     use crate::staking;
-    use crate::staking::StakingHelper;
+    use crate::staking::{StakingHelper, validate_withdrawal};
+    use bech32;
     use chainscript::Script;
     use codec::{Decode, Encode};
     use core::marker::PhantomData;
@@ -250,10 +251,10 @@ pub mod pallet {
 
     /// Destination specifies where a payment goes. Can be a pubkey hash, script, etc.
     #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-    #[derive(Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, RuntimeDebug, Hash)]
+    #[derive(Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, RuntimeDebug)]
     pub enum Destination<AccountId> {
         /// Plain pay-to-pubkey
-        Pubkey(H256),
+        Pubkey(sr25519::Public),
         /// Pay to fund a new programmable pool. Takes code and data.
         CreatePP(Vec<u8>, Vec<u8>),
         /// Pay to an existing contract. Takes a destination account and input data.
@@ -290,7 +291,7 @@ pub mod pallet {
 
     /// Output of a transaction
     #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-    #[derive(Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, RuntimeDebug, Hash)]
+    #[derive(Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, RuntimeDebug)]
     pub struct TransactionOutput<AccountId> {
         pub(crate) value: Value,
         pub(crate) header: TXOutputHeader,
@@ -363,15 +364,6 @@ pub mod pallet {
                 value,
                 header: 0,
                 destination: Destination::ScriptHash(hash),
-            }
-        }
-
-        /// Create a new output to given pubkey hash
-        pub fn new_pubkey_hash(value: Value, script: Script) -> Self {
-            Self {
-                value,
-                header: 0,
-                destination: Destination::PubkeyHash(script.into_bytes()),
             }
         }
     }
@@ -839,7 +831,7 @@ pub mod pallet {
                 Destination::Stake{ stash_pubkey, controller_pubkey, session_key } => {
                     staking::stake::<T>(stash_pubkey,controller_pubkey,session_key, output.value)?;
 
-                    let hash = tx.outpoint(index);
+                    let hash = tx.outpoint(index as u64);
                     log::debug!("inserting to LockedUtxos {:?} as key {:?}", output, hash);
                     <LockedUtxos<T>>::insert(hash, Some(output));
                     <StakingCount<T>>::insert(controller_pubkey, Some((1,output.value)));
@@ -847,7 +839,7 @@ pub mod pallet {
                 Destination::StakeExtra(controller_pubkey) => {
                     staking::stake_extra::<T>(controller_pubkey, output.value)?;
 
-                    let hash = tx.outpoint(index);
+                    let hash = tx.outpoint(index as u64);
                     log::debug!("inserting to LockedUtxos {:?} as key {:?}", output, hash);
 
                     let (mut num_of_utxos, mut total) = <StakingCount<T>>::get(&controller_pubkey).ok_or("cannot find the public key inside the stakingcount.")?;
@@ -1036,12 +1028,12 @@ pub mod pallet {
             ensure!(value > 0, "Value transferred must be larger than zero");
 
             let signer = ensure_signed(origin)?;
-            let (total, utxos) = pick_utxo::<T>(&signer, value);
+            let (total, hashes, utxos) = pick_utxo::<T>(&signer, value);
 
             ensure!(total >= value, "Caller doesn't have enough UTXOs");
 
             let mut inputs: Vec<TransactionInput> = Vec::new();
-            for utxo in utxos.iter() {
+            for utxo in hashes.iter() {
                 inputs.push(TransactionInput::new_empty(*utxo));
             }
 

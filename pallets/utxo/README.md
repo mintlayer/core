@@ -17,7 +17,6 @@ To run the test cases, just run command `cargo test`.
          "CreatePP": "DestinationCreatePP",
          "CallPP": "DestinationCallPP",
          "ScriptHash": "Public",
-         "PubkeyHash": "Vec<u8>",
          "Stake": "DestinationStake",
          "StakeExtra": "Public"
       }
