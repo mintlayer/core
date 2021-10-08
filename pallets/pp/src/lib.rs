@@ -64,7 +64,7 @@ pub mod pallet {
 
     #[derive(Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, RuntimeDebug)]
     pub struct ContractBalance {
-        pub total: u128,
+        pub funds: u128,
         pub utxos: Vec<(H256, u128)>,
     }
 
@@ -157,7 +157,7 @@ where
         <ContractBalances<T>>::insert(
             res.account_id,
             Some(ContractBalance {
-                total: 0,
+                funds: 0,
                 utxos: Vec::new(),
             }),
         );
@@ -171,14 +171,21 @@ where
         gas_limit: Weight,
         utxo_hash: H256,
         utxo_value: u128,
+        fund_contract: bool,
         input_data: &Vec<u8>,
     ) -> Result<(), &'static str> {
         // check if `dest` exist and if it does, update its balance information
         <ContractBalances<T>>::get(&dest).ok_or("Contract doesn't exist!")?;
         <ContractBalances<T>>::mutate(dest, |info| {
-            info.as_mut().unwrap().total += utxo_value.saturated_into::<u128>();
             info.as_mut().unwrap().utxos.push((utxo_hash, utxo_value));
         });
+
+        // only if explicitly specified, fund the contract
+        if fund_contract {
+            <ContractBalances<T>>::mutate(dest, |info| {
+                info.as_mut().unwrap().funds += utxo_value.saturated_into::<u128>();
+            });
+        }
 
         let value = pallet_contracts::Pallet::<T>::subsistence_threshold();
         let _ = pallet_contracts::Pallet::<T>::bare_call(

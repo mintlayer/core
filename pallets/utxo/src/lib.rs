@@ -205,8 +205,9 @@ pub mod pallet {
         Pubkey(sr25519::Public),
         /// Pay to fund a new programmable pool. Takes code and data.
         CreatePP(Vec<u8>, Vec<u8>),
-        /// Pay to an existing contract. Takes a destination account and input data.
-        CallPP(AccountId, Vec<u8>),
+        /// Pay to an existing contract. Takes a destination account,
+        /// whether the call funds the contract, and input data.
+        CallPP(AccountId, bool, Vec<u8>),
         /// Pay to script hash
         ScriptHash(H256),
     }
@@ -261,11 +262,16 @@ pub mod pallet {
         }
 
         /// Create a new output to call a smart contract routine.
-        pub fn new_call_pp(value: Value, dest_account: AccountId, input: Vec<u8>) -> Self {
+        pub fn new_call_pp(
+            value: Value,
+            dest_account: AccountId,
+            fund: bool,
+            input: Vec<u8>,
+        ) -> Self {
             Self {
                 value,
                 header: 0,
-                destination: Destination::CallPP(dest_account, input),
+                destination: Destination::CallPP(dest_account, fund, input),
             }
         }
 
@@ -440,11 +446,20 @@ pub mod pallet {
         dest: &T::AccountId,
         utxo_hash: H256,
         utxo_value: u128,
+        fund_contract: bool,
         data: &Vec<u8>,
     ) {
         let weight: Weight = 6000000000;
 
-        match T::ProgrammablePool::call(caller, dest, weight, utxo_hash, utxo_value, data) {
+        match T::ProgrammablePool::call(
+            caller,
+            dest,
+            weight,
+            utxo_hash,
+            utxo_value,
+            fund_contract,
+            data,
+        ) {
             Ok(_) => log::info!("success!"),
             Err(e) => log::error!("failure: {:#?}", e),
         }
@@ -579,7 +594,7 @@ pub mod pallet {
                 Destination::CreatePP(_, _) => {
                     log::info!("TODO validate OP_CREATE as output");
                 }
-                Destination::CallPP(_, _) => {
+                Destination::CallPP(_, _, _) => {
                     log::info!("TODO validate OP_CALL as output");
                 }
                 _ => {}
@@ -642,7 +657,7 @@ pub mod pallet {
                     Destination::CreatePP(_, _) => {
                         log::info!("TODO validate spending of OP_CREATE");
                     }
-                    Destination::CallPP(_, _) => {
+                    Destination::CallPP(_, _, _) => {
                         let spend =
                             u16::from_be_bytes(input.witness.clone().try_into().or_else(|_| {
                                 Err(DispatchError::Other(
@@ -709,8 +724,8 @@ pub mod pallet {
                 Destination::CreatePP(script, data) => {
                     create::<T>(caller, script, hash, output.value, &data);
                 }
-                Destination::CallPP(acct_id, data) => {
-                    call::<T>(caller, acct_id, hash, output.value, data);
+                Destination::CallPP(acct_id, fund, data) => {
+                    call::<T>(caller, acct_id, hash, output.value, *fund, data);
                 }
                 _ => {}
             }
