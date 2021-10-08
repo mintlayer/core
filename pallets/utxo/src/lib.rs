@@ -56,7 +56,7 @@ pub mod pallet {
         dispatch::{DispatchResultWithPostInfo, Vec},
         pallet_prelude::*,
         sp_io::crypto,
-        sp_runtime::traits::{BlakeTwo256, Dispatchable, Hash, SaturatedConversion, Saturating},
+        sp_runtime::traits::{BlakeTwo256, Dispatchable, Hash, SaturatedConversion},
         sp_runtime::Percent,
         traits::IsSubType,
     };
@@ -165,6 +165,11 @@ pub mod pallet {
         /// the minimum value for initial staking.
         #[pallet::constant]
         type MinimumStake:Get<Value>;
+
+        /// how much are we charging for withdrawing the unlocked stake.
+        #[pallet::constant]
+        type StakeWithdrawalFee:Get<Value>;
+
     }
 
     pub trait WeightInfo {
@@ -494,19 +499,6 @@ pub mod pallet {
     }
 
 
-    /// Returns `true` if reward reduction period has passed; and if a new period has to be created.
-    pub(super) fn period_elapsed<T:Config>(time_now: T::BlockNumber) -> bool {
-        let starting_period =  <StartingPeriod<T>>::get();
-        let time_elapsed = time_now.saturating_sub(starting_period);
-        let has_elapse = time_elapsed > T::RewardReductionPeriod::get();
-
-        if has_elapse {
-            log::debug!("period has elapsed. Updating the start of period to now");
-            <StartingPeriod<T>>::put(time_now);
-        }
-        has_elapse
-    }
-
     // Strips a transaction of its Signature fields by replacing value with ZERO-initialized fixed hash.
     pub fn get_simple_transaction<AccountId: Encode + Clone>(
         tx: &Transaction<AccountId>,
@@ -684,17 +676,7 @@ pub mod pallet {
                         log::info!("TODO validate stake");
                     }
                     Destination::StakeExtra(pubkey) => {
-                        let sig = (&input.witness[..])
-                            .try_into()
-                            .map_err(|_| "signature length incorrect")?;
-                        ensure!(
-                            crypto::sr25519_verify(
-                                &SR25Sig::from_raw(sig),
-                                &simple_tx,
-                                &Public::from_h256(pubkey)
-                            ),
-                            "signature must be valid"
-                        );
+                        log::info!("TODO validate stake extra");
 
                     }
                     Destination::CreatePP(_, _) => {
@@ -750,8 +732,8 @@ pub mod pallet {
                 Destination::Stake {..} => {
                     ensure!(output.value >= T::MinimumStake::get(), "output value must be equal or more than the set minimum stake");
                     let hash = tx.outpoint(output_index);
-                    ensure!(!<LockedUtxos<T>>::contains_key(hash), "output already exists");
                     new_utxos.push(hash.as_fixed_bytes().to_vec());
+                    ensure!(!<LockedUtxos<T>>::contains_key(hash), "output already exists");
                 }
                 Destination::CreatePP(_, _) => {
                     log::info!("TODO validate OP_CREATE");
@@ -849,7 +831,7 @@ pub mod pallet {
                     <UtxoStore<T>>::insert(hash, Some(output));
                 }
                 Destination::Stake{ stash_pubkey, controller_pubkey, session_key } => {
-                    staking::stake::<T>(stash_pubkey,controller_pubkey,session_key)?;
+                    staking::stake::<T>(stash_pubkey,controller_pubkey,session_key, output.value)?;
 
                     let hash = tx.outpoint(index);
                     log::debug!("inserting to LockedUtxos {:?} as key {:?}", output, hash);

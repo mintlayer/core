@@ -23,9 +23,9 @@ To run the test cases, just run command `cargo test`.
       }
    },
    "DestinationStake": {
-      "stash_account": "Public",
-      "controller_account": "Public",
-      "rotate_keys": "Vec<u8>"
+      "stash_pubkey": "Public",
+      "controller_pubkey": "Public",
+      "session_key": "Vec<u8>"
    },
    "DestinationCreatePP": {
       "code": "Vec<u8>",

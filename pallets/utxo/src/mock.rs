@@ -39,6 +39,7 @@ use sp_core::{
 use sp_keystore::{testing::KeyStore, KeystoreExt, SyncCryptoStore};
 use frame_support::dispatch::DispatchResultWithPostInfo;
 use frame_system::Config as SysConfig;
+use frame_benchmarking::frame_support::pallet_prelude::Get;
 
 pub type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 pub type Block = frame_system::mocking::MockBlock<Test>;
@@ -54,7 +55,6 @@ pub struct MockStaking<T:pallet_utxo::Config>{
     pub lock_stash_map:BTreeMap<T::AccountId,T::AccountId>,
     pub marker: PhantomData<T>
 }
-
 
 thread_local! {
     pub static AUTHORITIES: RefCell<Vec<Public>> = RefCell::new(vec![]);
@@ -122,7 +122,7 @@ impl <T:pallet_utxo::Config> StakingHelper<AccountId> for MockStaking<T>
         pub_key.clone()
     }
 
-    fn stake(stash_account: &AccountId, controller_account: &AccountId, _rotate_keys: &mut Vec<u8>) -> DispatchResultWithPostInfo {
+    fn stake(stash_account: &AccountId, controller_account: &AccountId, _rotate_keys: &mut Vec<u8>, value:u128) -> DispatchResultWithPostInfo {
         MOCK_STAKING.with(|stake_info| {
             let mut stake_info = stake_info.borrow_mut();
 
@@ -134,7 +134,7 @@ impl <T:pallet_utxo::Config> StakingHelper<AccountId> for MockStaking<T>
                 Err("CANNOT STAKE. CONTROLLER ACCOUNT IS ACTUALLY A STASH ACCOUNT")?
             }
 
-            if stake_info.stash_map.contains_key(stash_account) {
+            if stake_info.lock_stash_map.contains_key(stash_account) {
                 Err("CANNOT STAKE. STASH ACCOUNT EXISTS IN STASH MAP")?
             }
 
@@ -144,6 +144,22 @@ impl <T:pallet_utxo::Config> StakingHelper<AccountId> for MockStaking<T>
 
             Ok(().into())
         } )
+    }
+
+    fn stake_extra(controller_account: &AccountId, value: u128) -> DispatchResultWithPostInfo {
+        MOCK_STAKING.with(|stake_info| {
+            let stake_info = stake_info.borrow();
+
+            if !stake_info.lock_map.contains_key(controller_account) {
+                Err(pallet_utxo::Error::<T>::NoStakingRecordFound)?
+            }
+
+            if stake_info.stash_map.contains_key(controller_account) {
+                Err("CANNOT STAKE. CONTROLLER ACCOUNT IS ACTUALLY A STASH ACCOUNT")?
+            }
+
+            Ok(().into())
+        })
     }
 
     fn pause(controller_account: &AccountId) -> DispatchResultWithPostInfo {
@@ -241,6 +257,7 @@ impl SysConfig for Test {
 parameter_types! {
     pub const MaxAuthorities: u32 = 1000;
     pub const MinimumStake: u128 = 10;
+    pub const StakeWithdrawalFee: u128 = 1;
     pub const RewardReductionPeriod: BlockNumber = 5;
 	pub const RewardReductionFraction: Percent = Percent::from_percent(25);
 }
@@ -263,6 +280,7 @@ impl pallet_utxo::Config for Test {
 
     type StakingHelper =MockStaking<Test>;
     type MinimumStake = MinimumStake;
+    type StakeWithdrawalFee = StakeWithdrawalFee;
 }
 
 fn create_pub_key(keystore: &KeyStore, phrase: &str) -> Public {

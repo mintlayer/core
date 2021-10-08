@@ -15,10 +15,24 @@
 //
 // Author(s): C. Yap
 
-use crate::{Config, Pallet, Event, BlockAuthorRewardAmount, BlockAuthor, MLTCoinsAvailable, TransactionOutput, UtxoStore, period_elapsed};
+use crate::{Config, Pallet, Event, BlockAuthorRewardAmount, BlockAuthor, MLTCoinsAvailable, TransactionOutput, UtxoStore, StartingPeriod};
 
 use frame_support::traits::Get;
-use sp_runtime::traits::{SaturatedConversion, BlakeTwo256, Hash, Zero};
+use sp_runtime::traits::{SaturatedConversion, Saturating, BlakeTwo256, Hash, Zero};
+
+
+/// Returns `true` if reward reduction period has passed; and if a new period has to be created.
+pub(crate) fn period_elapsed<T:Config>(time_now: T::BlockNumber) -> bool {
+    let starting_period =  <StartingPeriod<T>>::get();
+    let time_elapsed = time_now.saturating_sub(starting_period);
+    let has_elapse = time_elapsed > T::RewardReductionPeriod::get();
+
+    if has_elapse {
+        log::debug!("period has elapsed. Updating the start of period to now");
+        <StartingPeriod<T>>::put(time_now);
+    }
+    has_elapse
+}
 
 /// Returns the newly reduced reward amount for a Block Author.
 /// How much a reward is reduced, is based on the config's`RewardReductionFraction`.
@@ -46,8 +60,7 @@ pub(super) fn update_reward_amount<T:Config>(coins_available:u128) -> u128 {
     0
 }
 
-
-/// Rewards the block author with a utxo of value basaed on the `BlockAuthorRewardAmount`.
+/// Rewards the block author with a utxo of value based on the `BlockAuthorRewardAmount`.
 pub(super) fn reward_block_author<T:Config>(block_number: T::BlockNumber) {
     let coins_available = <MLTCoinsAvailable<T>>::take();
 
@@ -86,7 +99,6 @@ pub(super) fn reward_block_author<T:Config>(block_number: T::BlockNumber) {
                     return;
                 }
             }
-
         } else {
             log::warn!("no block author found for block number {:?}", block_number);
         }

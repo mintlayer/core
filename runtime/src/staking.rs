@@ -20,20 +20,19 @@ impl <T: pallet_staking::Config + pallet_utxo::Config + pallet_session::Config> 
         pub_key.0.into()
     }
 
-    fn stake(stash_account: &StakeAccountId<T>, controller_account: &StakeAccountId<T>, rotate_keys: &mut Vec<u8>) -> DispatchResultWithPostInfo {
+    fn stake(stash_account: &StakeAccountId<T>, controller_account: &StakeAccountId<T>, session_key: &mut Vec<u8>, value: u128) -> DispatchResultWithPostInfo {
         let controller_lookup: LookupSourceOf<T> = T::Lookup::unlookup(controller_account.clone());
-        let amount = T::Currency::minimum_balance();
         let reward_destination = pallet_staking::RewardDestination::Staked;
 
         // bond the funds
         StakingPallet::<T>::bond(
             RawOrigin::Signed(stash_account.clone()).into(),
             controller_lookup,
-            amount,
+            value.into(),
             reward_destination
         )?;
 
-        let rotate_keys = sp_core::Bytes::from(rotate_keys.to_vec());
+        let rotate_keys = sp_core::Bytes::from(session_key.to_vec());
         // session keys
         let sesh_key = <T as pallet_session::Config>::Keys::decode(&mut &rotate_keys[..]).expect("SessionKeys decoded successfully");
         pallet_session::Pallet::<T>::set_keys(

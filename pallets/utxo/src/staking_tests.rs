@@ -15,14 +15,14 @@
 //
 // Author(s): C. Yap
 
-use crate::{mock::*, Transaction, TransactionInput, TransactionOutput, UtxoStore, LockedUtxos, Error, StakingCount, StartingPeriod, period_elapsed, BlockAuthorRewardAmount, MLTCoinsAvailable};
+use crate::{mock::*, Transaction, TransactionInput, TransactionOutput, UtxoStore, LockedUtxos, Error, StakingCount, StartingPeriod, BlockAuthorRewardAmount, MLTCoinsAvailable};
 use codec::Encode;
 use frame_support::{
     assert_err, assert_ok,
     sp_io::crypto,
 };
 use sp_core::{sp_std::vec, testing::SR25519, H256};
-use crate::rewards::update_reward_amount;
+use crate::rewards::{update_reward_amount, period_elapsed};
 
 #[test]
 fn simple_staking() {
@@ -53,6 +53,7 @@ fn simple_staking() {
         assert!(LockedUtxos::<Test>::contains_key(locked_utxo_hash));
         assert!(StakingCount::<Test>::contains_key(H256::from(alice_pub_key)));
         assert!(StakingCount::<Test>::contains_key(H256::from(karl_pub_key)));
+        assert_eq!(StakingCount::<Test>::get(H256::from(karl_pub_key)), (1,10));
     })
 }
 
@@ -153,7 +154,7 @@ fn simple_staking_extra() {
         assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx));
         assert!(UtxoStore::<Test>::contains_key(new_utxo_hash));
         assert!(LockedUtxos::<Test>::contains_key(locked_utxo_hash));
-        assert_eq!(StakingCount::<Test>::get(H256::from(alice_pub_key)),2);
+        assert_eq!(StakingCount::<Test>::get(H256::from(alice_pub_key)), (2,30));
     })
 }
 
@@ -193,28 +194,19 @@ fn pausing_and_withdrawing() {
         let (alice_pub_key, alice_genesis) = keys_and_hashes[0];
 
         assert_ok!(Utxo::unlock_stake(Origin::signed(H256::zero()),H256::from(alice_pub_key)));
-        next_block();
 
-        let mut tx = Transaction {
-            inputs: vec![
-                TransactionInput::new_empty(alice_genesis)
-            ],
-            outputs: vec![
-                // ALICE withdraws her stake.
-                TransactionOutput::new_withdraw_stake(1,vec![alice_locked_utxo],H256::from(alice_pub_key)),
-                TransactionOutput::new_pubkey(98,H256::from(alice_pub_key))
-            ]
-        };
-        let alice_sig = crypto::sr25519_sign(SR25519,&alice_pub_key, &tx.encode()).unwrap();
-        tx.inputs[0].witness = alice_sig.0.to_vec();
+        // increase the block number 6 times, as if new blocks has been created.
+        for i in 1 .. 6{
+            next_block();
+        }
+        assert_ok!(Utxo::withdraw_stake(
+            Origin::signed(H256::zero()),
+            H256::from(alice_pub_key),
+            vec![alice_locked_utxo]
+        ));
 
-        // increase the block number, as if a new block has been created.
-        next_block();
-        next_block();
-        next_block();
-        next_block();
-        next_block();
-        assert_ok!(Utxo::spend(Origin::signed(H256::zero()),tx));
+        assert!(!LockedUtxos::<Test>::contains_key(alice_locked_utxo));
+        assert_eq!(MLTCoinsAvailable::<Test>::get(),1_001);
     })
 }
 
@@ -242,20 +234,11 @@ fn non_validator_withdrawing() {
         }).collect();
         let alice_locked_utxo = alice_locked_utxo.pop().unwrap();
 
-        let mut tx = Transaction {
-            inputs: vec![
-                TransactionInput::new_empty(karl_genesis)
-            ],
-            outputs: vec![
-                // ALICE withdraws her stake.
-                TransactionOutput::new_withdraw_stake(1,vec![alice_locked_utxo],H256::from(karl_pub_key)),
-                TransactionOutput::new_pubkey(98,H256::from(karl_pub_key))
-            ]
-        };
-        let karl_sig = crypto::sr25519_sign(SR25519,&karl_pub_key, &tx.encode()).unwrap();
-        tx.inputs[0].witness = karl_sig.0.to_vec();
-
-        assert_err!(Utxo::spend(Origin::signed(H256::zero()),tx), "controller_pub_key not a validator");
+        assert_err!(Utxo::withdraw_stake(
+            Origin::signed(H256::zero()),
+            H256::from(karl_pub_key),
+            vec![alice_locked_utxo]
+        ), "NoStakingRecordFound");
     })
 }
 
@@ -274,21 +257,31 @@ fn withdrawing_before_expected_period() {
 
         assert_ok!(Utxo::unlock_stake(Origin::signed(H256::zero()),H256::from(alice_pub_key)));
 
-        let mut tx = Transaction {
-            inputs: vec![
-                TransactionInput::new_empty(alice_genesis)
-            ],
-            outputs: vec![
-                // ALICE withdraws her stake.
-                TransactionOutput::new_withdraw_stake(1,vec![alice_locked_utxo],H256::from(alice_pub_key)),
-                TransactionOutput::new_pubkey(98,H256::from(alice_pub_key))
-            ]
-        };
-        let alice_sig = crypto::sr25519_sign(SR25519,&alice_pub_key, &tx.encode()).unwrap();
-        tx.inputs[0].witness = alice_sig.0.to_vec();
-
         // ALICE is not waiting for the withdrawal period.
-        assert_err!(Utxo::spend(Origin::signed(H256::zero()),tx), Error::<Test>::InvalidOperation);
+        assert_err!(Utxo::withdraw_stake(
+            Origin::signed(H256::zero()),
+            H256::from(alice_pub_key),
+            vec![alice_locked_utxo]
+        ), Error::<Test>::InvalidOperation);
+    })
+}
+
+#[test]
+fn withdrawing_unknown_locked_utxo(){
+    let (mut test_ext, keys_and_hashes) = multiple_keys_test_ext();
+    test_ext.execute_with(|| {
+
+        // ALICE (index 0) wants to stop validating.
+        let (alice_pub_key, alice_genesis) = keys_and_hashes[0];
+
+        assert_ok!(Utxo::unlock_stake(Origin::signed(H256::zero()),H256::from(alice_pub_key)));
+
+        // ALICE withdrawing something.
+        assert_err!(Utxo::withdraw_stake(
+            Origin::signed(H256::zero()),
+            H256::from(alice_pub_key),
+            vec![H256::random()]
+        ), "OutpointDoesNotExist");
     })
 }
 

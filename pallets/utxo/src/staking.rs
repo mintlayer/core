@@ -1,9 +1,6 @@
 
-use crate::{
-    Config, StakingCount, Error, Event, Pallet, TransactionOutput, Destination, LockedUtxos,
-    Value, UtxoStore, MLT_UNIT
-};
-use frame_support::{dispatch::{DispatchResultWithPostInfo, Vec}, ensure};
+use crate::{Config, StakingCount, Error, Event, Pallet, TransactionOutput, Destination, LockedUtxos, Value, UtxoStore, MLT_UNIT, MLTCoinsAvailable};
+use frame_support::{dispatch::{DispatchResultWithPostInfo, Vec}, ensure, traits::Get};
 use sp_core::H256;
 use sp_std::vec;
 use sp_runtime::transaction_validity::{ValidTransaction,TransactionLongevity};
@@ -12,6 +9,7 @@ use sp_runtime::traits::{BlakeTwo256, Hash};
 /// A helper trait to handle staking NOT found in pallet-utxo.
 pub trait StakingHelper<AccountId>{
 
+    /// to convert a public key into an AccountId
     fn get_account_id(pub_key: &H256) -> AccountId;
 
     /// start the staking.
@@ -20,9 +18,9 @@ pub trait StakingHelper<AccountId>{
     /// the `pallet-staking`'s needs to be able to stake.
     /// * `controller_account` - The ACTUAL validator. But this is NOT SO, in the `pallet-staking`.
     /// In `pallet-staking`, its job is like an "accountant" to the stash account.
-    /// * `rotate_keys` - or also called the session keys, to get up-to-date
-    /// with validators, eras, sessions. see `pallet-session`.
-    fn stake(stash_account:&AccountId, controller_account:&AccountId, rotate_keys:&mut Vec<u8>) -> DispatchResultWithPostInfo;
+    /// * `session_key` - to get up-to-date with validators, eras, sessions. see `pallet-session`.
+    /// * `value` - the amount to stake/bond/stash
+    fn stake(stash_account:&AccountId, controller_account:&AccountId, session_key:&mut Vec<u8>, value:Value) -> DispatchResultWithPostInfo;
 
     /// stake more funds for the validator
     fn stake_extra(controller_account:&AccountId, value:Value) -> DispatchResultWithPostInfo;
@@ -35,11 +33,21 @@ pub trait StakingHelper<AccountId>{
 
 }
 
-/// performs the staking outside of the `pallet-utxo`.
+/// performs the staking OUTSIDE of the `pallet-utxo`. Calls the `fn stake(...)` function of
+/// `StakingHelper` trait.
+/// # Arguments
+/// * `stash_pubkey` - is a `validator` in terms of `pallet-staking`; but in the utxo, this is nothing.
+/// This is only to satisfy the `pallet-staking`. BUT this acts as a "bank", so this account MUST have
+/// funds in its `pallet-balances` counterpart.
+/// * `controller_pubkey` - is the `validator` in our utxo system.
+/// * `session_key` - to get up-to-date with the validators, eras, sessions. see `pallet-session`.
+/// * `value` - the amount to stake/bond/stash
 pub(crate) fn stake<T: Config>(
     stash_pubkey: &H256,
     controller_pubkey: &H256,
-    session_key:&Vec<u8>)
+    session_key:&Vec<u8>,
+    value:Value
+)
     -> DispatchResultWithPostInfo {
     ensure!(!<StakingCount<T>>::contains_key(controller_pubkey),Error::<T>::StakingAlreadyExists);
 
@@ -48,7 +56,8 @@ pub(crate) fn stake<T: Config>(
     let stash_account = T::StakingHelper::get_account_id(stash_pubkey);
     let controller_account = T::StakingHelper::get_account_id(controller_pubkey);
 
-    T::StakingHelper::stake(&stash_account, &controller_account, &mut session_key)?;
+    let non_mlt_value = value.checked_div(MLT_UNIT).unwrap();
+    T::StakingHelper::stake(&stash_account, &controller_account, &mut session_key,non_mlt_value)?;
 
     Ok(().into())
 }
@@ -81,14 +90,19 @@ pub(crate) fn unlock<T: Config>(controller_pubkey: &H256) -> DispatchResultWithP
 /// Make SURE that `fn unlock(...)` has been called and the era for withdrawal has passed, before
 /// performing a withdrawal.
 /// # Arguments
-/// * `controller_pub_key` - the public key of the validator. In terms of pallet-staking, that's the
+/// * `controller_pubkey` - the public key of the validator. In terms of pallet-staking, that's the
 /// controller, NOT the stash.
 /// * `outpoints` - a list of outpoints that were staked.
-pub(crate) fn withdraw<T: Config>(controller_pub_key: H256, outpoints: Vec<H256>) -> DispatchResultWithPostInfo {
-    let (_, mut total) = <StakingCount<T>>::get(controller_pub_key.clone());
-    //  1 MLT as fee.
-    total -= 1 * MLT_UNIT;
-    // TODO: where do i put this fee? back to MLTCoinsAvailable?
+pub(crate) fn withdraw<T: Config>(controller_pubkey: H256, outpoints: Vec<H256>) -> DispatchResultWithPostInfo {
+    validate_withdrawal::<T>(&controller_pubkey,&outpoints)?;
+
+    let controller_account = T::StakingHelper::get_account_id(&controller_pubkey);
+    T::StakingHelper::withdraw(&controller_account)?;
+
+    let (_, mut total) = <StakingCount<T>>::get(controller_pubkey.clone());
+
+    let fee = T::StakeWithdrawalFee::get();
+    total = total.checked_sub(fee).ok_or( "Total amount of Locked UTXOs is less than minimum?")?;
 
     let mut hashes = vec![];
     for hash in outpoints {
@@ -100,12 +114,16 @@ pub(crate) fn withdraw<T: Config>(controller_pub_key: H256, outpoints: Vec<H256>
     let utxo = TransactionOutput {
         value: total,
         header: 0,
-        destination: Destination::Pubkey(controller_pub_key.clone())
+        destination: Destination::Pubkey(controller_pubkey.clone())
     };
 
     <UtxoStore<T>>::insert(hash, Some(utxo));
 
-    <Pallet<T>>::deposit_event(Event::<T>::StakeWithdrawn(total,controller_pub_key));
+    // move fee back to the rewards
+    let coins_available = <MLTCoinsAvailable<T>>::take();
+    <MLTCoinsAvailable<T>>::put(coins_available + fee);
+
+    <Pallet<T>>::deposit_event(Event::<T>::StakeWithdrawn(total,controller_pubkey));
     Ok(().into())
 }
 
