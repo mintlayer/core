@@ -27,10 +27,11 @@ mod tests;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 
+use codec::Encode;
 pub use frame_support::{
     construct_runtime,
     dispatch::Vec,
-    parameter_types,
+    ensure, parameter_types,
     sp_runtime::{DispatchError, SaturatedConversion},
     traits::{
         Currency, Everything, IsSubType, KeyOwnerProofSystem, LockableCurrency, Nothing,
@@ -47,6 +48,7 @@ use pallet_contracts::chain_extension::{
 };
 use pp_api::ProgrammablePoolApi;
 use sp_core::{crypto::UncheckedFrom, Bytes, H256};
+use utxo_api::UtxoApi;
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -118,6 +120,33 @@ pub mod pallet {
     }
 }
 
+/// Create Pay-to-Pubkey transaction from smart contract's UTXOs
+/// and send it by calling into the UTXO system.
+///
+/// UTXO system implements the consensus-critical coin-picking
+/// algorithm by condensing all vins into one transaction and
+/// using the outpoint in asceding order to select the place
+/// for each vin in the array of inputs. This ensures that all
+/// PP validator nodes that execute the transaction output the
+/// exact same TX.
+///
+/// # Arguments
+/// * `caller` - Smart contract's account id
+/// * `dest`   - Recipients account id
+/// * `value`  - How much is tranferred to `dest`
+fn send_p2pk_tx<T: Config>(
+    caller: &T::AccountId,
+    dest: &T::AccountId,
+    value: u128,
+) -> Result<(), DispatchError> {
+    let fund_info =
+        <ContractBalances<T>>::get(&caller).ok_or(DispatchError::Other("Caller doesn't exist"))?;
+    ensure!(fund_info.funds >= value, "Caller doesn't have enough funds");
+    let outpoints = fund_info.utxos.iter().map(|x| x.0).collect::<Vec<H256>>();
+
+    T::Utxo::send_conscrit_p2pk(caller, dest, value, &outpoints)
+}
+
 impl<T: Config> ProgrammablePoolApi for Pallet<T>
 where
     T::AccountId: UncheckedFrom<T::Hash> + AsRef<[u8]>,
@@ -187,11 +216,10 @@ where
             });
         }
 
-        let value = pallet_contracts::Pallet::<T>::subsistence_threshold();
         let _ = pallet_contracts::Pallet::<T>::bare_call(
             caller.clone(),
             dest.clone(),
-            value * 0u32.into(),
+            0u32.into(),
             gas_limit,
             input_data.to_vec(),
             true, // enable debugging
@@ -201,15 +229,40 @@ where
     }
 }
 
-impl<T: pallet_contracts::Config + pallet_balances::Config + pallet::Config> ChainExtension<T>
-    for Pallet<T>
-{
-    fn call<E: Ext>(func_id: u32, _env: Environment<E, InitState>) -> Result<RetVal, DispatchError>
+impl<T: pallet_contracts::Config + pallet::Config> ChainExtension<T> for Pallet<T> {
+    fn call<E: Ext>(func_id: u32, env: Environment<E, InitState>) -> Result<RetVal, DispatchError>
     where
         <E::T as SysConfig>::AccountId: UncheckedFrom<<E::T as SysConfig>::Hash> + AsRef<[u8]>,
     {
-        log::error!("Called an unregistered `func_id`: {:}", func_id);
-        return Err(DispatchError::Other("Unimplemented func_id"));
+        match func_id {
+            1000 => {
+                let mut env = env.buf_in_buf_out();
+                let (acc_id, dest, value): (T::AccountId, T::AccountId, u128) = env.read_as()?;
+
+                if !<ContractBalances<T>>::get(&dest).is_none() {
+                    return Err(DispatchError::Other(
+                        "Contract-to-contract transactions not implemented",
+                    ));
+                }
+
+                send_p2pk_tx::<T>(&acc_id, &dest, value)?
+            }
+            1001 => {
+                let mut env = env.buf_in_buf_out();
+                let acc_id: T::AccountId = env.read_as()?;
+                let fund_info = <ContractBalances<T>>::get(&acc_id).ok_or(DispatchError::Other(
+                    "Contract doesn't own any UTXO or it doesn't exist!",
+                ))?;
+
+                env.write(&fund_info.funds.encode(), false, None)
+                    .map_err(|_| DispatchError::Other("Failed to return value?"))?;
+            }
+            _ => {
+                log::error!("Called an unregistered `func_id`: {:}", func_id);
+                return Err(DispatchError::Other("Unimplemented function"));
+            }
+        }
+        Ok(RetVal::Converging(0))
     }
 
     fn enabled() -> bool {

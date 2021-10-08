@@ -34,6 +34,17 @@ mod script;
 mod sign;
 pub mod weights;
 
+use chainscript::Builder;
+use codec::Encode;
+use core::convert::TryInto;
+use frame_support::{
+    inherent::Vec,
+    pallet_prelude::{DispatchError, DispatchResultWithPostInfo},
+};
+use sp_core::{crypto::UncheckedFrom, H256, H512};
+use sp_runtime::sp_std::vec;
+use utxo_api::UtxoApi;
+
 #[frame_support::pallet]
 pub mod pallet {
     use crate::sign::{self, Scheme};
@@ -659,7 +670,7 @@ pub mod pallet {
                     }
                     Destination::CallPP(_, _, _) => {
                         let spend =
-                            u16::from_be_bytes(input.witness.clone().try_into().or_else(|_| {
+                            u16::from_le_bytes(input.witness[1..].try_into().or_else(|_| {
                                 Err(DispatchError::Other(
                                     "Failed to convert witness to an opcode",
                                 ))
@@ -975,14 +986,6 @@ impl<T: Config> crate::Pallet<T> {
     }
 }
 
-use frame_support::pallet_prelude::DispatchResultWithPostInfo;
-use sp_core::{
-    crypto::UncheckedFrom,
-    {H256, H512},
-};
-use sp_runtime::sp_std::vec;
-use utxo_api::UtxoApi;
-
 impl<T: Config> UtxoApi for Pallet<T>
 where
     T::AccountId: UncheckedFrom<T::Hash> + AsRef<[u8]>,
@@ -1003,5 +1006,47 @@ where
                 outputs: vec![TransactionOutputFor::<T>::new_pubkey(value, address)],
             },
         )
+    }
+
+    fn send_conscrit_p2pk(
+        caller: &T::AccountId,
+        dest: &T::AccountId,
+        value: u128,
+        outpoints: &Vec<H256>,
+    ) -> Result<(), DispatchError> {
+        let mut inputs: Vec<TransactionInput> = Vec::new();
+
+        // consensus-critical sorting function...
+        let mut outpoints = outpoints.clone();
+        outpoints.sort();
+
+        for outpoint in outpoints.iter() {
+            let tx = <UtxoStore<T>>::get(&outpoint).ok_or("UTXO doesn't exist!")?;
+            match tx.destination {
+                Destination::CallPP(_, _, _) => {
+                    inputs.push(TransactionInput::new_script(
+                        *outpoint,
+                        Builder::new().into_script(),
+                        Builder::new().push_int(0x1337).into_script(),
+                    ));
+                }
+                _ => {
+                    return Err(DispatchError::Other("Only OP_CALL vouts can be spent!"));
+                }
+            }
+        }
+        let pubkey_raw: [u8; 32] =
+            dest.encode().try_into().map_err(|_| "Failed to get caller's public key")?;
+
+        spend::<T>(
+            caller,
+            &Transaction {
+                inputs: inputs,
+                outputs: vec![TransactionOutput::new_pubkey(value, H256::from(pubkey_raw))],
+            },
+        )
+        .map_err(|_| "Failed to spend the transaction!")?;
+
+        Ok(())
     }
 }
