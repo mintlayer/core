@@ -431,16 +431,17 @@ impl Variant {
 /// * If [validate_hrp] returns an error for the given HRP.
 /// # Deviations from standard
 /// * No length limits are enforced for the data part
-pub fn encode<T: AsRef<[u5]>>(hrp: &str, data: T, variant: Variant) -> Result<String, Error> {
+pub fn encode<T: AsRef<[u8]>>(hrp: &str, data: T, variant: Variant) -> Result<String, Error> {
     let mut buf = String::new();
-    encode_to_fmt(&mut buf, hrp, data, variant)?.unwrap();
+    let converted = data.to_base32();
+    encode_to_fmt(&mut buf, hrp, converted, variant)?.unwrap();
     Ok(buf)
 }
 
 /// Decode a bech32 string into the raw HRP and the data bytes.
 ///
 /// Returns the HRP in lowercase..
-pub fn decode(s: &Vec<u8>) -> Result<(Vec<u8>, Vec<u5>, Variant), Error> {
+pub fn decode(s: &Vec<u8>) -> Result<(Vec<u8>, Vec<u8>, Variant), Error> {
     // Ensure overall length is within bounds
     if s.len() < 8 {
         return Err(Error::InvalidLength);
@@ -504,8 +505,9 @@ pub fn decode(s: &Vec<u8>) -> Result<(Vec<u8>, Vec<u5>, Variant), Error> {
             // Remove checksum from data payload
             let dbl: usize = data.len();
             data.truncate(dbl - 6);
+            let converted = Vec::<u8>::from_base32(&data)?;
 
-            Ok((hrp_lower, data, variant))
+            Ok((hrp_lower, converted, variant))
         }
         None => Err(Error::InvalidChecksum),
     }
@@ -679,9 +681,9 @@ mod tests {
     #[test]
     fn getters() {
         let decoded = decode(&"ML1ZQ8PGRCQ737UWQ".as_bytes().to_vec()).unwrap();
-        let data = [16, 14, 20, 15, 0].to_base32();
+        let data = [16, 14, 20, 15, 0];
         assert_eq!(decoded.0, "ml".as_bytes().to_vec());
-        assert_eq!(decoded.1, data.as_slice());
+        assert_eq!(decoded.1, data);
     }
 
     #[test]
@@ -819,11 +821,7 @@ mod tests {
     #[test]
     fn test_encode() {
         assert_eq!(
-            encode(
-                "",
-                vec![1u8, 2, 3, 4].check_base32().unwrap(),
-                Variant::Bech32
-            ),
+            encode("", vec![1u8, 2, 3, 4], Variant::Bech32),
             Err(Error::InvalidLength)
         );
     }
@@ -843,7 +841,6 @@ mod tests {
 
     #[test]
     fn to_base32() {
-        use ToBase32;
         assert_eq!([0xffu8].to_base32(), [0x1f, 0x1c].check_base32().unwrap());
     }
 
@@ -868,14 +865,15 @@ mod tests {
     #[test]
     fn writer() {
         let hrp = "ml";
-        let data = "Hello World!".as_bytes().to_base32();
+        let data = "Hello World!".as_bytes();
+        let u5_data = data.to_base32();
 
         let mut written_str = String::new();
         {
             let mut writer =
                 Bech32Writer::new(&hrp.as_bytes().to_vec(), Variant::Bech32, &mut written_str)
                     .unwrap();
-            writer.write(&data).unwrap();
+            writer.write(&u5_data).unwrap();
             writer.finalize().unwrap();
         }
 
@@ -887,14 +885,15 @@ mod tests {
     #[test]
     fn write_on_drop() {
         let hrp = "tm";
-        let data = "Hello World!".as_bytes().to_base32();
+        let data = "Hello World!".as_bytes();
+        let u5_data = data.to_base32();
 
         let mut written_str = String::new();
         {
             let mut writer =
                 Bech32Writer::new(&hrp.as_bytes().to_vec(), Variant::Bech32, &mut written_str)
                     .unwrap();
-            writer.write(&data).unwrap();
+            writer.write(&u5_data).unwrap();
         }
 
         let encoded_str = encode(hrp, data, Variant::Bech32).unwrap();
@@ -905,11 +904,10 @@ mod tests {
     #[test]
     fn test_hrp_case() {
         // Tests for issue with HRP case checking being ignored for encoding
-        use ToBase32;
-        let encoded_str = encode("ML", [0x00, 0x00].to_base32(), Variant::Bech32).unwrap();
+        let encoded_str = encode("ML", [0x00, 0x00], Variant::Bech32).unwrap();
         let decoded = decode(&encoded_str.as_bytes().to_vec()).unwrap();
 
         assert_eq!(encoded_str, "ml1qqqqu4dtlg");
-        assert_eq!(decoded.1, [0x00, 0x00].to_base32());
+        assert_eq!(decoded.1, [0x00, 0x00]);
     }
 }
