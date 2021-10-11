@@ -448,7 +448,7 @@ fn test_send_to_address() {
     let (mut test_ext, alice_pub_key, _karl_pub_key) = alice_test_ext_and_keys();
     test_ext.execute_with(|| {
         // `addr` is bech32-encoded, SCALE-encoded `Destination::Pubkey(alice_pub_key)`
-        let addr = "bc1qrft7juyfhl06emj4zzrue5ljs6q39n2jalr4c40rhtcur647n0kwu2nvwe";
+        let addr = "ml1qrft7juyfhl06emj4zzrue5ljs6q39n2jalr4c40rhtcur647n0kwueyfsn";
 
         assert_err!(
             Utxo::send_to_address(
@@ -476,7 +476,7 @@ fn test_send_to_address() {
         ));
 
         // try to transfer to scripthash
-        let addr = "bc1qvvknne0acfzfd2ewksccgrgl4qlhcwewq4gjm75mtcpg26al66d5l888mu";
+        let addr = "ml1qvvknne0acfzfd2ewksccgrgl4qlhcwewq4gjm75mtcpg26al66d5l5sz9k";
         assert_ok!(Utxo::send_to_address(
             Origin::signed(H256::from(alice_pub_key)),
             20,
@@ -484,7 +484,7 @@ fn test_send_to_address() {
         ));
 
         // invalid length
-        let addr = "bc1qyzqqpqpfwa0y1w";
+        let addr = "ml1qrft7juyfhl06emj4zzrue5ljs6q39n2jalr4c40rhtcur647n0kwue1yfsn";
         assert_err!(
             Utxo::send_to_address(
                 Origin::signed(H256::from(alice_pub_key)),
@@ -495,7 +495,7 @@ fn test_send_to_address() {
         );
 
         // invalid character
-        let addr = "bc1qyzqqpqpäääypw";
+        let addr = "ml1qyzqqpqpäääypw";
         assert_err!(
             Utxo::send_to_address(
                 Origin::signed(H256::from(alice_pub_key)),
@@ -505,8 +505,8 @@ fn test_send_to_address() {
             "Failed to decode address: invalid character",
         );
 
-        // mixex case
-        let addr = "bc1qvvknne0acfzfd2ewksccgrgl4qlhcwewq4gjm75MTCpg26AL66d5l888MU";
+        // mixed case
+        let addr = "ml1qrft7juyfhl06emj4zzrue5ljs6q39n2JALR4c40rhtcur647n0kWUYEFSN";
         assert_err!(
             Utxo::send_to_address(
                 Origin::signed(H256::from(alice_pub_key)),
@@ -517,7 +517,7 @@ fn test_send_to_address() {
         );
 
         // invalid checksum
-        let addr = "bc1qvvknne0acfzfd2ewksccgrgl4qlhcwewq4gjm75mtcpg26al66d5l777mu";
+        let addr = "ml1qrft7juyfhl06emj4zzrue5ljs6q39n2jalr4c40rhtcur647n0kwueyf66";
         assert_err!(
             Utxo::send_to_address(
                 Origin::signed(H256::from(alice_pub_key)),
@@ -525,6 +525,17 @@ fn test_send_to_address() {
                 addr.as_bytes().to_vec(),
             ),
             "Failed to decode address: invalid checksum",
+        );
+
+        // invalid HRP
+        let addr = "bc1qrft7juyfhl06emj4zzrue5ljs6q39n2jalr4c40rhtcur647n0kwueyfsn";
+        assert_err!(
+            Utxo::send_to_address(
+                Origin::signed(H256::from(alice_pub_key)),
+                40,
+                addr.as_bytes().to_vec(),
+            ),
+            "Failed to decode address: invalid HRP",
         );
     })
 }
