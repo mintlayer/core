@@ -68,11 +68,6 @@ extern crate core;
 #[cfg(all(not(feature = "std"), not(test)))]
 use alloc::{string::String, vec::Vec};
 
-#[cfg(all(not(feature = "std"), not(test)))]
-use alloc::borrow::Cow;
-#[cfg(any(feature = "std", test))]
-use std::borrow::Cow;
-
 use core::{fmt, mem};
 
 /// Integer in the range `0..32`
@@ -144,7 +139,7 @@ impl<'a> Bech32Writer<'a> {
     /// This is a rather low-level API and doesn't check the HRP or data length for standard
     /// compliance.
     pub fn new(
-        hrp: &str,
+        hrp: &Vec<u8>,
         variant: Variant,
         fmt: &'a mut fmt::Write,
     ) -> Result<Bech32Writer<'a>, fmt::Error> {
@@ -154,15 +149,16 @@ impl<'a> Bech32Writer<'a> {
             variant,
         };
 
-        writer.formatter.write_str(hrp)?;
+        writer.formatter.write_char(hrp[0] as char)?;
+        writer.formatter.write_char(hrp[1] as char)?;
         writer.formatter.write_char(SEP)?;
 
         // expand HRP
-        for b in hrp.bytes() {
+        for b in hrp.iter() {
             writer.polymod_step(u5(b >> 5));
         }
         writer.polymod_step(u5(0));
-        for b in hrp.bytes() {
+        for b in hrp.iter() {
             writer.polymod_step(u5(b & 0x1f));
         }
 
@@ -361,43 +357,23 @@ enum Case {
 /// * **MixedCase**: If the HRP contains both uppercase and lowercase characters.
 /// * **InvalidChar**: If the HRP contains any non-ASCII characters (outside 33..=126).
 /// * **InvalidLength**: If the HRP is outside 1..83 characters long.
-fn check_hrp(hrp: &[u8]) -> Result<Case, Error> {
-    if hrp.is_empty() || hrp.len() > 83 {
+fn validate_hrp(hrp: &[u8]) -> Result<Vec<u8>, Error> {
+    if hrp.is_empty() || hrp.len() > 2 {
         return Err(Error::InvalidLength);
     }
+    let hrp = hrp.iter().map(|x| (*x as char).to_ascii_lowercase() as u8).collect();
 
-    let mut has_lower: bool = false;
-    let mut has_upper: bool = false;
-    for b in hrp.iter() {
-        let b = *b;
-        // Valid subset of ASCII
-        if b < 33 || b > 126 {
-            return Err(Error::InvalidChar(b as char));
-        }
-        if b >= b'a' && b <= b'z' {
-            has_lower = true;
-        } else if b >= b'A' && b <= b'Z' {
-            has_upper = true;
-        };
-
-        if has_lower && has_upper {
-            return Err(Error::MixedCase);
-        }
+    if hrp != ['m' as u8, 'l' as u8] && hrp != ['t' as u8, 'm' as u8] {
+        return Err(Error::InvalidHrp);
     }
-
-    Ok(match (has_upper, has_lower) {
-        (true, false) => Case::Upper,
-        (false, true) => Case::Lower,
-        (false, false) => Case::None,
-        (true, true) => unreachable!(),
-    })
+    Ok(hrp)
 }
 
 /// Encode a bech32 payload to an [fmt::Write].
 /// This method is intended for implementing traits from [std::fmt].
 ///
 /// # Errors
-/// * If [check_hrp] returns an error for the given HRP.
+/// * If [validate_hrp] returns an error for the given HRP.
 /// # Deviations from standard
 /// * No length limits are enforced for the data part
 pub fn encode_to_fmt<T: AsRef<[u5]>>(
@@ -406,10 +382,7 @@ pub fn encode_to_fmt<T: AsRef<[u5]>>(
     data: T,
     variant: Variant,
 ) -> Result<fmt::Result, Error> {
-    let hrp_lower = match check_hrp(&hrp.as_bytes())? {
-        Case::Upper => Cow::Owned(hrp.to_lowercase()),
-        Case::Lower | Case::None => Cow::Borrowed(hrp),
-    };
+    let hrp_lower = validate_hrp(&hrp.as_bytes())?;
 
     match Bech32Writer::new(&hrp_lower, variant, fmt) {
         Ok(mut writer) => {
@@ -455,7 +428,7 @@ impl Variant {
 /// Encode a bech32 payload to string.
 ///
 /// # Errors
-/// * If [check_hrp] returns an error for the given HRP.
+/// * If [validate_hrp] returns an error for the given HRP.
 /// # Deviations from standard
 /// * No length limits are enforced for the data part
 pub fn encode<T: AsRef<[u5]>>(hrp: &str, data: T, variant: Variant) -> Result<String, Error> {
@@ -492,12 +465,8 @@ pub fn decode(s: &Vec<u8>) -> Result<(Vec<u8>, Vec<u5>, Variant), Error> {
         }
     }
 
-    let mut case = check_hrp(&raw_hrp)?;
-    let hrp_lower = match case {
-        Case::Upper => raw_hrp.iter().map(|x| (*x as char).to_ascii_lowercase() as u8).collect(),
-        // already lowercase
-        Case::Lower | Case::None => raw_hrp.to_vec().clone(),
-    };
+    let hrp_lower = validate_hrp(&raw_hrp)?;
+    let mut case = Case::None;
 
     // Check data payload
     let mut data = raw_data
@@ -617,6 +586,8 @@ pub enum Error {
     InvalidPadding,
     /// The whole string must be of one case
     MixedCase,
+    /// Invalid human readable part
+    InvalidHrp,
 }
 
 impl fmt::Display for Error {
@@ -629,6 +600,7 @@ impl fmt::Display for Error {
             Error::InvalidData(n) => write!(f, "invalid data point ({})", n),
             Error::InvalidPadding => write!(f, "invalid padding"),
             Error::MixedCase => write!(f, "mixed-case strings not allowed"),
+            Error::InvalidHrp => write!(f, "invalid human-readable part"),
         }
     }
 }
@@ -644,6 +616,7 @@ impl std::error::Error for Error {
             Error::InvalidData(_) => "invalid data point",
             Error::InvalidPadding => "invalid padding",
             Error::MixedCase => "mixed-case strings not allowed",
+            Error::InvalidHrp => "invalid human-readable part",
         }
     }
 }
@@ -705,29 +678,23 @@ mod tests {
 
     #[test]
     fn getters() {
-        let decoded = decode(&"BC1SW50QA3JX3S".as_bytes().to_vec()).unwrap();
-        let data = [16, 14, 20, 15, 0].check_base32().unwrap();
-        assert_eq!(decoded.0, "bc".as_bytes().to_vec());
+        let decoded = decode(&"ML1ZQ8PGRCQ737UWQ".as_bytes().to_vec()).unwrap();
+        let data = [16, 14, 20, 15, 0].to_base32();
+        assert_eq!(decoded.0, "ml".as_bytes().to_vec());
         assert_eq!(decoded.1, data.as_slice());
     }
 
     #[test]
     fn valid_checksum() {
         let strings: Vec<&str> = vec!(
-            // Bech32
-            "A12UEL5L",
-            "an83characterlonghumanreadablepartthatcontainsthenumber1andtheexcludedcharactersbio1tt5tgs",
-            "abcdef1qpzry9x8gf2tvdw0s3jn54khce6mua7lmqqqxw",
-            "11qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqc8247j",
-            "split1checkupstagehandshakeupstreamerranterredcaperred2y9e3w",
-            // Bech32m
-            "A1LQFN3A",
-            "a1lqfn3a",
-            "an83characterlonghumanreadablepartthatcontainsthetheexcludedcharactersbioandnumber11sg7hg6",
-            "abcdef1l7aum6echk45nj3s0wdvt2fg8x9yrzpqzd3ryx",
-            "11llllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllludsr8",
-            "split1checkupstagehandshakeupstreamerranterredcaperredlc445v",
-            "?1v759aa",
+            "ml1sfzzf0",
+            "tm18fuupe",
+            "ml1qpzry9x8gf2tvdw0s3jn54khce6mua7l4w9gsa",
+            "tm1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqg2mrf",
+            "ml1checkupstagehandshakeupstreamerranterredcaperredhaf8kn",
+            "ml1sfzzf0",
+            "tm18fuupe",
+            "ml1l7aum6echk45nj3s0wdvt2fg8x9yrzpqely8hh",
         );
         for s in strings {
             match decode(&s.as_bytes().to_vec()) {
@@ -744,28 +711,28 @@ mod tests {
     #[test]
     fn invalid_strings() {
         let pairs: Vec<(&str, Error)> = vec![
-            (" 1nwldj5", Error::InvalidChar(' ')),
+            ("ml1 nwldj5", Error::InvalidChar(' ')),
             ("abc1\u{2192}axkwrx", Error::InvalidChar('â')),
             ("an84characterslonghumanreadablepartthatcontainsthenumber1andtheexcludedcharactersbio1569pvx",
                 Error::InvalidLength),
             ("pzry9x0s0muk", Error::MissingSeparator),
             ("1pzry9x0s0muk", Error::InvalidLength),
-            ("x1b4n0q5v", Error::InvalidChar('b')),
-            ("ABC1DEFGOH", Error::InvalidChar('O')),
+            ("tm1b4n0q5v", Error::InvalidChar('b')),
+            ("ML1DEFGOH", Error::InvalidChar('O')),
             ("li1dgmt3", Error::InvalidLength),
             ("de1lg7wt\u{ff}", Error::InvalidChar('Ã')),
-            ("\u{20}1xj0phk", Error::InvalidChar('\u{20}')),
-            ("\u{7F}1g6xzxy", Error::InvalidChar('\u{7F}')),
+            ("ml1\u{20}xj0phk", Error::InvalidChar('\u{20}')),
+            ("tm1g6xz\u{7F}xy", Error::InvalidChar('\u{7F}')),
             ("an84characterslonghumanreadablepartthatcontainsthetheexcludedcharactersbioandnumber11d6pts4",
                 Error::InvalidLength),
             ("qyrz8wqd2c9m", Error::MissingSeparator),
             ("1qyrz8wqd2c9m", Error::InvalidLength),
-            ("y1b0jsk6g", Error::InvalidChar('b')),
-            ("lt1igcx5c0", Error::InvalidChar('i')),
+            ("ml1b0jsk6g", Error::InvalidChar('b')),
+            ("tm1igcx5c0", Error::InvalidChar('i')),
             ("in1muywd", Error::InvalidLength),
-            ("mm1crxm3i", Error::InvalidChar('i')),
-            ("au1s5cgom", Error::InvalidChar('o')),
-            ("M1VUXWEZ", Error::InvalidChecksum),
+            ("tm1crxm3i", Error::InvalidChar('i')),
+            ("ml1s5cgom", Error::InvalidChar('o')),
+            ("ML1VUXWEZ", Error::InvalidChecksum),
             ("16plkw9", Error::InvalidLength),
             ("1p2gdwpf", Error::InvalidLength),
         ];
@@ -900,12 +867,14 @@ mod tests {
 
     #[test]
     fn writer() {
-        let hrp = "lnbc";
+        let hrp = "ml";
         let data = "Hello World!".as_bytes().to_base32();
 
         let mut written_str = String::new();
         {
-            let mut writer = Bech32Writer::new(hrp, Variant::Bech32, &mut written_str).unwrap();
+            let mut writer =
+                Bech32Writer::new(&hrp.as_bytes().to_vec(), Variant::Bech32, &mut written_str)
+                    .unwrap();
             writer.write(&data).unwrap();
             writer.finalize().unwrap();
         }
@@ -917,12 +886,14 @@ mod tests {
 
     #[test]
     fn write_on_drop() {
-        let hrp = "lntb";
+        let hrp = "tm";
         let data = "Hello World!".as_bytes().to_base32();
 
         let mut written_str = String::new();
         {
-            let mut writer = Bech32Writer::new(hrp, Variant::Bech32, &mut written_str).unwrap();
+            let mut writer =
+                Bech32Writer::new(&hrp.as_bytes().to_vec(), Variant::Bech32, &mut written_str)
+                    .unwrap();
             writer.write(&data).unwrap();
         }
 
@@ -935,8 +906,10 @@ mod tests {
     fn test_hrp_case() {
         // Tests for issue with HRP case checking being ignored for encoding
         use ToBase32;
-        let encoded_str = encode("HRP", [0x00, 0x00].to_base32(), Variant::Bech32).unwrap();
+        let encoded_str = encode("ML", [0x00, 0x00].to_base32(), Variant::Bech32).unwrap();
+        let decoded = decode(&encoded_str.as_bytes().to_vec()).unwrap();
 
-        assert_eq!(encoded_str, "hrp1qqqq40atq3");
+        assert_eq!(encoded_str, "ml1qqqqu4dtlg");
+        assert_eq!(decoded.1, [0x00, 0x00].to_base32());
     }
 }

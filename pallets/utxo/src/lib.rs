@@ -833,6 +833,9 @@ pub mod pallet {
                 bech32::Error::InvalidChecksum => {
                     DispatchError::Other("Failed to decode address: invalid checksum")
                 }
+                bech32::Error::InvalidHrp => {
+                    DispatchError::Other("Failed to decode address: invalid HRP")
+                }
                 _ => DispatchError::Other("Failed to decode address"),
             })?;
 
