@@ -44,10 +44,10 @@ pub mod weights;
 pub mod pallet {
     use crate::TXOutputHeader;
     use crate::{OutputHeaderData, OutputHeaderHelper, TokenID};
+    use bech32;
     use crate::{rewards::reward_block_author};
     use crate::staking;
     use crate::staking::StakingHelper;
-    use bech32::{self, FromBase32};
     use chainscript::Script;
     use codec::{Decode, Encode};
     use core::convert::TryInto;
@@ -1014,10 +1014,7 @@ pub mod pallet {
                 _ => DispatchError::Other("Failed to decode address"),
             })?;
 
-            let mut tmp: &[u8] = &Vec::<u8>::from_base32(&data)
-                .map_err(|_| DispatchError::Other("Base32 conversion failed"))?;
-
-            let dest: Destination<T::AccountId> = Destination::decode(&mut tmp)
+            let dest: Destination<T::AccountId> = Destination::decode(&mut &data[..])
                 .map_err(|_| DispatchError::Other("Failed to decode buffer into `Destination`"))?;
             ensure!(value > 0, "Value transferred must be larger than zero");
 
