@@ -4,14 +4,11 @@
 Code base uses the substrate node v3.0.0 template as a base.
 More information can be found on substrate.dev
 
-NOTE: to build this you need the BLS repo in the parent directory.
-for example in the dir ~/dev you should have both core and BLS.
-
 To build this use cargo build --release
 
 To build and run use cargo run --release -- --dev --tmp
 
-To purge the chain ./target/release/node-template purge-chain --dev
+To purge the chain ./target/release/mintlayer-core purge-chain --dev
 
 
 ## Substrate Node Template
@@ -57,7 +54,7 @@ Once the project has been built, the following command can be used to explore al
 subcommands:
 
 ```sh
-./target/release/node-template -h
+./target/release/mintlayer-core -h
 ```
 
 ## Run
@@ -71,19 +68,19 @@ node.
 This command will start the single-node development chain with persistent state:
 
 ```bash
-./target/release/node-template --dev
+./target/release/mintlayer-core --dev
 ```
 
 Purge the development chain's state:
 
 ```bash
-./target/release/node-template purge-chain --dev
+./target/release/mintlayer-core purge-chain --dev
 ```
 
 Start the development chain with detailed logging:
 
 ```bash
-RUST_LOG=debug RUST_BACKTRACE=1 ./target/release/node-template -lruntime=debug --dev
+RUST_LOG=debug RUST_BACKTRACE=1 ./target/release/mintlayer-core -lruntime=debug --dev
 ```
 
 ### Connect with Polkadot-JS Apps Front-end
