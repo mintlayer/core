@@ -111,7 +111,7 @@ pub(crate) fn withdraw<T: Config>(controller_pubkey: H256, outpoints: Vec<H256>)
     let controller_account = T::StakingHelper::get_account_id(&controller_pubkey);
     T::StakingHelper::withdraw(&controller_account)?;
 
-    let (_, mut total) = <StakingCount<T>>::get(controller_pubkey.clone());
+    let (_, mut total) = <StakingCount<T>>::get(controller_pubkey.clone()).ok_or("cannot find the public key inside the stakingcount.")?;
 
     let fee = T::StakeWithdrawalFee::get();
     total = total.checked_sub(fee).ok_or( "Total amount of Locked UTXOs is less than minimum?")?;
@@ -167,7 +167,7 @@ pub(crate) fn is_owned_locked_utxo<T:Config>(utxo:&TransactionOutput<T::AccountI
 pub fn validate_withdrawal<T:Config>(controller_pubkey: &H256, outpoints:&Vec<H256>) -> Result<ValidTransaction, &'static str> {
     ensure!(<StakingCount<T>>::contains_key(controller_pubkey.clone()),Error::<T>::NoStakingRecordFound);
 
-    let (num_of_utxos, _) = <StakingCount<T>>::get(controller_pubkey.clone());
+    let (num_of_utxos, _) = <StakingCount<T>>::get(controller_pubkey.clone()).ok_or("cannot find the public key inside the stakingcount.")?;
     ensure!(num_of_utxos == outpoints.len() as u64, "please provide all staked outpoints.");
 
     let mut hashes = vec![];

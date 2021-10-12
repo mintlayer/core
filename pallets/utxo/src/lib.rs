@@ -468,7 +468,7 @@ pub mod pallet {
     /// this is to count how many stakings done for that controller account.
     #[pallet::storage]
     #[pallet::getter(fn staking_count)]
-    pub(super) type StakingCount<T: Config> = StorageMap<_, Identity,H256,(u64, Value), ValueQuery>;
+    pub(super) type StakingCount<T: Config> = StorageMap<_, Identity,H256,Option<(u64, Value)>, ValueQuery>;
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -841,7 +841,7 @@ pub mod pallet {
                     let hash = tx.outpoint(index);
                     log::debug!("inserting to LockedUtxos {:?} as key {:?}", output, hash);
                     <LockedUtxos<T>>::insert(hash, Some(output));
-                    <StakingCount<T>>::insert(controller_pubkey, (1,output.value));
+                    <StakingCount<T>>::insert(controller_pubkey, Some((1,output.value)));
                 }
                 Destination::StakeExtra(controller_pubkey) => {
                     staking::stake_extra::<T>(controller_pubkey, output.value)?;
@@ -849,12 +849,12 @@ pub mod pallet {
                     let hash = tx.outpoint(index);
                     log::debug!("inserting to LockedUtxos {:?} as key {:?}", output, hash);
 
-                    let (mut num_of_utxos, mut total) = <StakingCount<T>>::get(&controller_pubkey);
+                    let (mut num_of_utxos, mut total) = <StakingCount<T>>::get(&controller_pubkey).ok_or("cannot find the public key inside the stakingcount.")?;
                     total += output.value;
                     num_of_utxos +=1;
 
                     <LockedUtxos<T>>::insert(hash, Some(output));
-                    <StakingCount<T>>::insert(controller_pubkey,(num_of_utxos, total));
+                    <StakingCount<T>>::insert(controller_pubkey,Some((num_of_utxos, total)));
                 }
                 Destination::CreatePP(script, data) => {
                     create::<T>(caller, script, &data);
@@ -1155,7 +1155,7 @@ pub mod pallet {
 
             self.locked_utxos.iter().cloned().for_each(|u| {
                 if let Destination::Stake { stash_pubkey:_, controller_pubkey, session_key:_ } =  &u.destination {
-                    <StakingCount<T>>::insert(controller_pubkey.clone(),(1, u.value));
+                    <StakingCount<T>>::insert(controller_pubkey.clone(),Some((1, u.value)));
                 }
                 LockedUtxos::<T>::insert(BlakeTwo256::hash_of(&u), Some(u));
             });
