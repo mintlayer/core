@@ -444,51 +444,11 @@ fn attack_double_spend_by_tweaking_input() {
 }
 
 #[test]
-fn test_pubkey_hash() {
-    use chainscript::{Builder, Script};
-    execute_with_alice(|alice_pub_key| {
-        // `pubkey_hash` is hash160(alice_pub_key)
-        let pubkey_hash = [
-            0x8c, 0x6a, 0xef, 0x68, 0x71, 0x98, 0x61, 0xb3, 0x25, 0x7f, 0x68, 0x44, 0x84, 0xc7,
-            0xec, 0x36, 0x27, 0x97, 0xbf, 0x9f,
-        ];
-
-        let script = Script::new_p2pkh(&pubkey_hash);
-        let mut tx1 = Transaction {
-            inputs: vec![tx_input_gen_no_signature()],
-            outputs: vec![TransactionOutput::new_pubkey_hash(40, script)],
-        };
-        let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx1.encode()).unwrap();
-        tx1.inputs[0].witness = alice_sig.0.to_vec();
-
-        let mut tx2 = Transaction {
-            inputs: vec![TransactionInput::new_script(
-                tx1.outpoint(0),
-                Builder::new().into_script(),
-                Builder::new().into_script(),
-            )],
-            outputs: vec![TransactionOutput::new_pubkey(20, H256::zero())],
-        };
-
-        let sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx2.encode()).unwrap();
-        let witness_script = Builder::new()
-            .push_slice(&sig.encode())
-            .push_slice(&alice_pub_key)
-            .into_script();
-
-        tx2.inputs[0].witness = witness_script.into_bytes();
-
-        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx1));
-        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx2));
-    })
-}
-
-#[test]
 fn test_send_to_address() {
     let (mut test_ext, alice_pub_key, _karl_pub_key) = new_test_ext_and_keys();
     test_ext.execute_with(|| {
-        // `addr` is bech32-encoded hash160(karl_pub_key)
-        let addr = "bc1q7pyaw92rh34mj6flsh7acccd7ayn4wf787ws4m";
+        // `addr` is bech32-encoded, SCALE-encoded `Destination::Pubkey(alice_pub_key)`
+        let addr = "ml1qrft7juyfhl06emj4zzrue5ljs6q39n2jalr4c40rhtcur647n0kwueyfsn";
 
         assert_err!(
             Utxo::send_to_address(
@@ -508,11 +468,74 @@ fn test_send_to_address() {
             "Caller doesn't have enough UTXOs",
         );
 
-        // send UTXO to karl's address
+        // send 10 utxo to alice
         assert_ok!(Utxo::send_to_address(
             Origin::signed(H256::from(alice_pub_key)),
-            40,
+            10,
             addr.as_bytes().to_vec(),
         ));
+
+        // try to transfer to scripthash
+        let addr = "ml1qvvknne0acfzfd2ewksccgrgl4qlhcwewq4gjm75mtcpg26al66d5l5sz9k";
+        assert_ok!(Utxo::send_to_address(
+            Origin::signed(H256::from(alice_pub_key)),
+            20,
+            addr.as_bytes().to_vec(),
+        ));
+
+        // invalid length
+        let addr = "ml1qrft7juyfhl06emj4zzrue5ljs6q39n2jalr4c40rhtcur647n0kwue1yfsn";
+        assert_err!(
+            Utxo::send_to_address(
+                Origin::signed(H256::from(alice_pub_key)),
+                40,
+                addr.as_bytes().to_vec(),
+            ),
+            "Failed to decode address: invalid length",
+        );
+
+        // invalid character
+        let addr = "ml1qyzqqpqpäääypw";
+        assert_err!(
+            Utxo::send_to_address(
+                Origin::signed(H256::from(alice_pub_key)),
+                40,
+                addr.as_bytes().to_vec(),
+            ),
+            "Failed to decode address: invalid character",
+        );
+
+        // mixed case
+        let addr = "ml1qrft7juyfhl06emj4zzrue5ljs6q39n2JALR4c40rhtcur647n0kWUYEFSN";
+        assert_err!(
+            Utxo::send_to_address(
+                Origin::signed(H256::from(alice_pub_key)),
+                40,
+                addr.as_bytes().to_vec(),
+            ),
+            "Failed to decode address: mixed case",
+        );
+
+        // invalid checksum
+        let addr = "ml1qrft7juyfhl06emj4zzrue5ljs6q39n2jalr4c40rhtcur647n0kwueyf66";
+        assert_err!(
+            Utxo::send_to_address(
+                Origin::signed(H256::from(alice_pub_key)),
+                40,
+                addr.as_bytes().to_vec(),
+            ),
+            "Failed to decode address: invalid checksum",
+        );
+
+        // invalid HRP
+        let addr = "bc1qrft7juyfhl06emj4zzrue5ljs6q39n2jalr4c40rhtcur647n0kwueyfsn";
+        assert_err!(
+            Utxo::send_to_address(
+                Origin::signed(H256::from(alice_pub_key)),
+                40,
+                addr.as_bytes().to_vec(),
+            ),
+            "Failed to decode address: invalid HRP",
+        );
     })
 }
