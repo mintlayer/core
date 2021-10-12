@@ -193,7 +193,7 @@ def main():
 def run_tests(test_list, src_dir, build_dir, exeext, tmpdir, jobs=1, enable_coverage=False, args=[], combined_logs_len=0):
     # Warn if node is already running (unix only)
     try:
-        if subprocess.check_output(["pidof", "node-template"]) is not None:
+        if subprocess.check_output(["pidof", "mintlayer-core"]) is not None:
             print("%sWARNING!%s There is already a Mintlayer node process running on this system. Tests may fail unexpectedly due to resource contention!" % (BOLD[1], BOLD[0]))
     except (OSError, subprocess.SubprocessError):
         pass
@@ -205,7 +205,7 @@ def run_tests(test_list, src_dir, build_dir, exeext, tmpdir, jobs=1, enable_cove
 
     #Set env vars
     if "NODEEXE" not in os.environ:
-        os.environ["NODEEXE"] = build_dir + '/node-template' + exeext
+        os.environ["NODEEXE"] = build_dir + '/mintlayer-core' + exeext
 
     tests_dir = src_dir + '/test/functional/'
 
