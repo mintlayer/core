@@ -17,6 +17,23 @@
 
 //! Context provide interface between script engine and blockchain
 
+/// Result of parsing data with possible future extensions.
+#[derive(PartialEq, Eq, Debug)]
+pub enum ParseResult<T> {
+    /// Decoding successful
+    Ok(T),
+    /// Decoding failed
+    Err,
+    /// Reserved for future extensions
+    Reserved,
+}
+
+impl<T> From<Option<T>> for ParseResult<T> {
+    fn from(o: Option<T>) -> Self {
+        o.map_or(ParseResult::Err, ParseResult::Ok)
+    }
+}
+
 /// Context for the script interpreter.
 ///
 /// This trait defines how the interpreter interfaces with the blockchain. It allows the client
@@ -31,6 +48,7 @@
 ///   multiple smaller ones for greater flexibility in the future.
 /// * The interface is not fully finalized. It is likely to change as new requirements come in. E.g.
 ///   it may be currently too limited to support signature batching.
+/// * The constants may be turned into methods to allow chain forks.
 pub trait Context {
     /// Maximum number of bytes pushable to the stack
     const MAX_SCRIPT_ELEMENT_SIZE: usize = 520;
@@ -41,20 +59,27 @@ pub trait Context {
     /// Maximum script length in bytes
     const MAX_SCRIPT_SIZE: usize;
 
-    /// Signature, parsed and verified for correct format.
-    type Signature;
-
     /// Public key type.
     type Public;
 
-    /// Extract a signature and check it is in the correct format.
-    fn parse_signature(&self, sig: &[u8]) -> Option<Self::Signature>;
+    /// Data needed to verify a signature. This probably contains signature, public key, sighash
+    /// if used and other data used for verification.
+    type SignatureData;
 
     /// Extract a pubkey and check it is in the correct format.
-    fn parse_pubkey(&self, pk: &[u8]) -> Option<Self::Public>;
+    fn parse_pubkey(&self, pk: &[u8]) -> ParseResult<Self::Public>;
+
+    /// Extract a signature and check it is in the correct format. Pubkey is provided since it may
+    /// determine signature format and is likely to be included in the result.
+    fn parse_signature(&self, pk: Self::Public, sig: &[u8]) -> Option<Self::SignatureData>;
 
     /// Verify signature.
-    fn verify_signature(&self, sig: &Self::Signature, pk: &Self::Public, subscript: &[u8]) -> bool;
+    fn verify_signature(
+        &self,
+        sig: &Self::SignatureData,
+        subscript: &[u8],
+        codesep_idx: u32,
+    ) -> bool;
 
     /// Check absolute time lock.
     fn check_lock_time(&self, _lock_time: i64) -> bool {
@@ -108,25 +133,21 @@ pub mod testcontext {
         const MAX_SCRIPT_SIZE: usize = 10000;
 
         // Signatures, keys and transaction IDs are just 4-byte binary data each.
-        type Signature = [u8; 4];
+        type SignatureData = [u8; 4];
         type Public = [u8; 4];
 
-        fn parse_signature(&self, sig: &[u8]) -> Option<Self::Signature> {
-            Self::Signature::try_from(sig).ok()
+        fn parse_signature(&self, pk: Self::Public, sig: &[u8]) -> Option<Self::SignatureData> {
+            let res: Vec<_> = sig.iter().zip(pk.iter()).map(|(&s, &p)| s ^ p).collect();
+            Self::SignatureData::try_from(&res[..]).ok()
         }
 
-        fn parse_pubkey(&self, pk: &[u8]) -> Option<Self::Public> {
-            Self::Public::try_from(pk).ok()
+        fn parse_pubkey(&self, pk: &[u8]) -> ParseResult<Self::Public> {
+            Self::Public::try_from(pk).ok().into()
         }
 
-        fn verify_signature(
-            &self,
-            sig: &Self::Signature,
-            pk: &Self::Public,
-            subscript: &[u8],
-        ) -> bool {
+        fn verify_signature(&self, sig: &Self::SignatureData, subscript: &[u8], _ix: u32) -> bool {
             let msg = sha256(&[&self.transaction[..], subscript].concat());
-            sig.iter().zip(pk.iter()).zip(msg.iter()).all(|((&s, &p), &m)| (s ^ p ^ m) == 0)
+            sig.iter().zip(msg.iter()).all(|(&s, &m)| (s ^ m) == 0)
         }
     }
 }
