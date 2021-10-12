@@ -39,4 +39,12 @@ pub trait UtxoApi {
         value: u128,
         outpoints: &Vec<H256>,
     ) -> Result<(), DispatchError>;
+
+    fn send_conscrit_c2c(
+        caller: &Self::AccountId,
+        destination: &Self::AccountId,
+        value: u128,
+        data: &Vec<u8>,
+        outpoints: &Vec<H256>,
+    ) -> Result<(), DispatchError>;
 }

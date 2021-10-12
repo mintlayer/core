@@ -986,6 +986,32 @@ impl<T: Config> crate::Pallet<T> {
     }
 }
 
+fn coin_picker<T: Config>(outpoints: &Vec<H256>) -> Result<Vec<TransactionInput>, DispatchError> {
+    let mut inputs: Vec<TransactionInput> = Vec::new();
+
+    // consensus-critical sorting function...
+    let mut outpoints = outpoints.clone();
+    outpoints.sort();
+
+    for outpoint in outpoints.iter() {
+        let tx = <UtxoStore<T>>::get(&outpoint).ok_or("UTXO doesn't exist!")?;
+        match tx.destination {
+            Destination::CallPP(_, _, _) => {
+                inputs.push(TransactionInput::new_script(
+                    *outpoint,
+                    Builder::new().into_script(),
+                    Builder::new().push_int(0x1337).into_script(),
+                ));
+            }
+            _ => {
+                return Err(DispatchError::Other("Only OP_CALL vouts can be spent!"));
+            }
+        }
+    }
+
+    Ok(inputs)
+}
+
 impl<T: Config> UtxoApi for Pallet<T>
 where
     T::AccountId: UncheckedFrom<T::Hash> + AsRef<[u8]>,
@@ -1014,39 +1040,40 @@ where
         value: u128,
         outpoints: &Vec<H256>,
     ) -> Result<(), DispatchError> {
-        let mut inputs: Vec<TransactionInput> = Vec::new();
-
-        // consensus-critical sorting function...
-        let mut outpoints = outpoints.clone();
-        outpoints.sort();
-
-        for outpoint in outpoints.iter() {
-            let tx = <UtxoStore<T>>::get(&outpoint).ok_or("UTXO doesn't exist!")?;
-            match tx.destination {
-                Destination::CallPP(_, _, _) => {
-                    inputs.push(TransactionInput::new_script(
-                        *outpoint,
-                        Builder::new().into_script(),
-                        Builder::new().push_int(0x1337).into_script(),
-                    ));
-                }
-                _ => {
-                    return Err(DispatchError::Other("Only OP_CALL vouts can be spent!"));
-                }
-            }
-        }
         let pubkey_raw: [u8; 32] =
             dest.encode().try_into().map_err(|_| "Failed to get caller's public key")?;
 
         spend::<T>(
             caller,
             &Transaction {
-                inputs: inputs,
+                inputs: coin_picker::<T>(outpoints)?,
                 outputs: vec![TransactionOutput::new_pubkey(value, H256::from(pubkey_raw))],
             },
         )
         .map_err(|_| "Failed to spend the transaction!")?;
+        Ok(())
+    }
 
+    fn send_conscrit_c2c(
+        caller: &Self::AccountId,
+        dest: &Self::AccountId,
+        value: u128,
+        data: &Vec<u8>,
+        outpoints: &Vec<H256>,
+    ) -> Result<(), DispatchError> {
+        spend::<T>(
+            caller,
+            &Transaction {
+                inputs: coin_picker::<T>(outpoints)?,
+                outputs: vec![TransactionOutput::new_call_pp(
+                    value,
+                    dest.clone(),
+                    true,
+                    data.clone(),
+                )],
+            },
+        )
+        .map_err(|_| "Failed to spend the transaction!")?;
         Ok(())
     }
 }

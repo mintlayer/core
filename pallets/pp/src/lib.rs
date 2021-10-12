@@ -41,7 +41,7 @@ pub use frame_support::{
         constants::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight, WEIGHT_PER_SECOND},
         Weight,
     },
-    StorageValue,
+    BoundedVec, StorageValue,
 };
 use pallet_contracts::chain_extension::{
     ChainExtension, Environment, Ext, InitState, RetVal, SysConfig,
@@ -145,6 +145,31 @@ fn send_p2pk_tx<T: Config>(
     let outpoints = fund_info.utxos.iter().map(|x| x.0).collect::<Vec<H256>>();
 
     T::Utxo::send_conscrit_p2pk(caller, dest, value, &outpoints)
+}
+
+/// Create Contract-to-Contract transfer that allows smart contracts to
+/// call each other and transfer funds through the UTXO system.
+///
+/// UTXO system converts this high-level transaction request from
+/// `caller` to `dest` to an actual transaction, uses OP_SPEND
+/// to unlock the OP_CALL funds that the `caller` has acquired
+/// and creates a new OP_CALL vout with `data` that calls `dest`
+/// and transfers all funds of `caller` to this smart contract
+///
+/// * `caller` -  Smart contract that is doing the calling
+/// * `dest` - Smart contract that is to be called
+/// * `data` - Selector and all other data `dest` takes as input
+fn send_c2c_tx<T: Config>(
+    caller: &T::AccountId,
+    dest: &T::AccountId,
+    data: &Vec<u8>,
+) -> Result<(), DispatchError> {
+    let fund_info = <ContractBalances<T>>::get(caller).ok_or(DispatchError::Other(
+        "Contract doesn't own any UTXO or it doesn't exist!",
+    ))?;
+    let outpoints = fund_info.utxos.iter().map(|x| x.0).collect::<Vec<H256>>();
+
+    T::Utxo::send_conscrit_c2c(caller, dest, fund_info.funds, data, &outpoints)
 }
 
 impl<T: Config> ProgrammablePoolApi for Pallet<T>
@@ -256,6 +281,29 @@ impl<T: pallet_contracts::Config + pallet::Config> ChainExtension<T> for Pallet<
 
                 env.write(&fund_info.funds.encode(), false, None)
                     .map_err(|_| DispatchError::Other("Failed to return value?"))?;
+            }
+            1002 => {
+                // `read_as_unbounded()` has to be used here because the size of `data`
+                //  is only known during runtime
+                let mut env = env.buf_in_buf_out();
+                let (acc_id, dest, selector, mut data): (
+                    T::AccountId,
+                    T::AccountId,
+                    [u8; 4],
+                    Vec<u8>,
+                ) = env.read_as_unbounded(env.in_len())?;
+
+                if <ContractBalances<T>>::get(&dest).is_none() {
+                    return Err(DispatchError::Other("Destination doesn't exist"));
+                }
+
+                // append data to the selector so the final data
+                // passed on to the contract is in correct format
+                let mut selector = selector.to_vec();
+                selector.append(&mut data);
+
+                // C2C transfers all funds as refunding to a contract is not possible (at least for now)
+                send_c2c_tx::<T>(&acc_id, &dest, &selector)?
             }
             _ => {
                 log::error!("Called an unregistered `func_id`: {:}", func_id);
