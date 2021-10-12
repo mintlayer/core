@@ -37,6 +37,7 @@ pub mod weights;
 pub mod pallet {
     use crate::TXOutputHeader;
     use crate::{OutputHeaderData, OutputHeaderHelper, TokenID};
+    use bech32;
     use chainscript::Script;
     use codec::{Decode, Encode};
     use core::convert::TryInto;
@@ -209,8 +210,6 @@ pub mod pallet {
         CallPP(AccountId, Vec<u8>),
         /// Pay to script hash
         ScriptHash(H256),
-        /// Pay to pubkey hash
-        PubkeyHash(Vec<u8>),
     }
 
     impl<AccountId> Destination<AccountId> {
@@ -287,15 +286,6 @@ pub mod pallet {
                 value,
                 header: 0,
                 destination: Destination::ScriptHash(hash),
-            }
-        }
-
-        /// Create a new output to given pubkey hash
-        pub fn new_pubkey_hash(value: Value, script: Script) -> Self {
-            Self {
-                value,
-                header: 0,
-                destination: Destination::PubkeyHash(script.into_bytes()),
             }
         }
     }
@@ -564,13 +554,6 @@ pub mod pallet {
                             "script verification failed"
                         );
                     }
-                    Destination::PubkeyHash(script) => {
-                        use crate::script::verify;
-                        ensure!(
-                            verify(&simple_tx, input.witness.clone(), script).is_ok(),
-                            "pubkeyhash verification failed"
-                        );
-                    }
                 }
             } else {
                 missing_utxos.push(input.outpoint.clone().as_fixed_bytes().to_vec());
@@ -587,9 +570,7 @@ pub mod pallet {
             ensure!(res.is_ok(), "header error. Please check the logs.");
 
             match output.destination {
-                Destination::Pubkey(_)
-                | Destination::ScriptHash(_)
-                | Destination::PubkeyHash(_) => {
+                Destination::Pubkey(_) | Destination::ScriptHash(_) => {
                     ensure!(output.value > 0, "output value must be nonzero");
                     let hash = tx.outpoint(output_index);
                     ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
@@ -683,9 +664,7 @@ pub mod pallet {
 
         for (index, output) in tx.enumerate_outputs()? {
             match &output.destination {
-                Destination::Pubkey(_)
-                | Destination::ScriptHash(_)
-                | Destination::PubkeyHash(_) => {
+                Destination::Pubkey(_) | Destination::ScriptHash(_) => {
                     let hash = tx.outpoint(index);
                     log::debug!("inserting to UtxoStore {:?} as key {:?}", output, hash);
                     <UtxoStore<T>>::insert(hash, Some(output));
@@ -841,10 +820,28 @@ pub mod pallet {
             value: Value,
             address: Vec<u8>,
         ) -> DispatchResultWithPostInfo {
-            use chainscript::Script;
+            let (_, data, _) = bech32::decode(&address).map_err(|e| match e {
+                bech32::Error::InvalidLength => {
+                    DispatchError::Other("Failed to decode address: invalid length")
+                }
+                bech32::Error::InvalidChar(_) => {
+                    DispatchError::Other("Failed to decode address: invalid character")
+                }
+                bech32::Error::MixedCase => {
+                    DispatchError::Other("Failed to decode address: mixed case")
+                }
+                bech32::Error::InvalidChecksum => {
+                    DispatchError::Other("Failed to decode address: invalid checksum")
+                }
+                bech32::Error::InvalidHrp => {
+                    DispatchError::Other("Failed to decode address: invalid HRP")
+                }
+                _ => DispatchError::Other("Failed to decode address"),
+            })?;
 
+            let dest: Destination<T::AccountId> = Destination::decode(&mut &data[..])
+                .map_err(|_| DispatchError::Other("Failed to decode buffer into `Destination`"))?;
             ensure!(value > 0, "Value transferred must be larger than zero");
-            ensure!(address.len() >= 42, "Invalid Bech32 address");
 
             let signer = ensure_signed(origin)?;
             let (total, utxos) = pick_utxo::<T>(&signer, value);
@@ -856,38 +853,25 @@ pub mod pallet {
                 inputs.push(TransactionInput::new_empty(*utxo));
             }
 
-            let pubkey_raw: [u8; 32] = match signer.encode().try_into() {
-                Ok(v) => v,
-                Err(e) => {
-                    log::error!("Failed to get caller's public key: {:?}", e);
-                    return Err("Failed to get caller's public key".into());
-                }
-            };
-
-            let pubkey: Public = Public::from_raw(pubkey_raw);
-            let wit_prog = match bech32::wit_prog::WitnessProgram::from_address(
-                address[..2].to_vec(),
-                address,
-            ) {
-                Ok(v) => v,
-                Err(e) => {
-                    log::error!("Failed to decode Bech32 address: {:?}", e);
-                    return Err("Invalid Bech32 address".into());
-                }
-            };
-
-            // NOTE: we don't have segwit support yet so use P2PKH
-            let script = Script::new_p2pkh(&wit_prog.program);
+            let pubkey_raw: [u8; 32] = signer
+                .encode()
+                .try_into()
+                .map_err(|_| DispatchError::Other("Failed to get caller's public key"))?;
 
             let mut tx = Transaction {
                 inputs,
                 outputs: vec![
+                    TransactionOutput {
+                        value,
+                        destination: dest,
+                        header: Default::default(),
+                    },
                     TransactionOutput::new_pubkey(total - value, H256::from(pubkey_raw)),
-                    TransactionOutput::new_pubkey_hash(value, script),
                 ],
             };
 
-            let sig = crypto::sr25519_sign(SR25519, &pubkey, &tx.encode()).unwrap();
+            let sig = crypto::sr25519_sign(SR25519, &Public::from_raw(pubkey_raw), &tx.encode())
+                .ok_or(DispatchError::Other("Failed to sign the transaction"))?;
             for i in 0..tx.inputs.len() {
                 tx.inputs[i].witness = sig.0.to_vec();
             }
