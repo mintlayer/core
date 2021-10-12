@@ -10,7 +10,7 @@ use sp_runtime::traits::{BlakeTwo256, Hash};
 pub trait StakingHelper<AccountId>{
 
     /// to convert a public key into an AccountId
-    fn get_account_id(pub_key: &H256) -> AccountId;
+    fn get_account_id(pubkey: &H256) -> AccountId;
 
     /// start the staking.
     /// # Arguments
@@ -56,23 +56,19 @@ pub(crate) fn stake<T: Config>(
     let stash_account = T::StakingHelper::get_account_id(stash_pubkey);
     let controller_account = T::StakingHelper::get_account_id(controller_pubkey);
 
-    let non_mlt_value = value.checked_div(MLT_UNIT).unwrap();
-    T::StakingHelper::stake(&stash_account, &controller_account, &mut session_key,non_mlt_value)?;
-
-    Ok(().into())
+    let non_mlt_value = value.checked_div(MLT_UNIT).ok_or("could not convert to a non mlt value.")?;
+    T::StakingHelper::stake(&stash_account, &controller_account, &mut session_key,non_mlt_value)
 }
 
 /// stake more values. This is only for existing validators.
-pub(crate) fn stake_extra<T: Config>(controller_pub_key: &H256, value:Value) -> DispatchResultWithPostInfo {
-    // Checks whether a given pub_key is a validator
-    ensure!(<StakingCount<T>>::contains_key(controller_pub_key.clone()) , Error::<T>::NoStakingRecordFound);
+pub(crate) fn stake_extra<T: Config>(controller_pubkey: &H256, value:Value) -> DispatchResultWithPostInfo {
+    // Checks whether a given pubkey is a validator
+    ensure!(<StakingCount<T>>::contains_key(controller_pubkey.clone()) , Error::<T>::NoStakingRecordFound);
 
-    let controller_account= T::StakingHelper::get_account_id(controller_pub_key);
+    let controller_account= T::StakingHelper::get_account_id(controller_pubkey);
 
-    let non_mlt_value = value.checked_div(MLT_UNIT).unwrap();
-    T::StakingHelper::stake_extra(&controller_account,non_mlt_value)?;
-
-    Ok(().into())
+    let non_mlt_value = value.checked_div(MLT_UNIT).ok_or("could not convert to a non mlt value.")?;
+    T::StakingHelper::stake_extra(&controller_account,non_mlt_value)
 }
 
 /// unlocking the staked funds outside of the `pallet-utxo`.
@@ -128,13 +124,13 @@ pub(crate) fn withdraw<T: Config>(controller_pubkey: H256, outpoints: Vec<H256>)
 }
 
 
-pub(crate) fn is_owned_locked_utxo<T:Config>(utxo:&TransactionOutput<T::AccountId>, ctrl_pub_key: &H256) -> Result<(), &'static str> {
+pub(crate) fn is_owned_locked_utxo<T:Config>(utxo:&TransactionOutput<T::AccountId>, ctrl_pubkey: &H256) -> Result<(), &'static str> {
     match &utxo.destination {
         Destination::Stake { stash_pubkey:_, controller_pubkey, session_key:_ } => {
-            ensure!(controller_pubkey == ctrl_pub_key, "hash of stake not owned");
+            ensure!(controller_pubkey == ctrl_pubkey, "hash of stake not owned");
         }
-        Destination::StakeExtra(controller_pub_key) => {
-            ensure!(controller_pub_key == ctrl_pub_key, "hash of extra stake not owned");
+        Destination::StakeExtra(controller_pubkey) => {
+            ensure!(controller_pubkey == ctrl_pubkey, "hash of extra stake not owned");
         }
         _ => {
             log::error!("For locked utxos, only with destinations `Stake` and `StakeExtra` are allowed.");
@@ -150,20 +146,20 @@ pub(crate) fn is_owned_locked_utxo<T:Config>(utxo:&TransactionOutput<T::AccountI
 /// 3. Checking each outpoints if they are indeed owned by the pub key
 /// Returns a Result with an empty Ok, or an Err in string.
 /// # Arguments
-/// * `controller_pub_key` - An H256 public key of an account
-/// * `outpoints` - List of keys of unlocked utxos said to be "owned" by the controller_pub_key
-pub fn validate_withdrawal<T:Config>(controller_pub_key: &H256, outpoints:&Vec<H256>) -> Result<ValidTransaction, &'static str> {
-    ensure!(<StakingCount<T>>::contains_key(controller_pub_key.clone()),Error::<T>::NoStakingRecordFound);
+/// * `controller_pubkey` - An H256 public key of an account
+/// * `outpoints` - List of keys of unlocked utxos said to be "owned" by the controller_pubkey
+pub fn validate_withdrawal<T:Config>(controller_pubkey: &H256, outpoints:&Vec<H256>) -> Result<ValidTransaction, &'static str> {
+    ensure!(<StakingCount<T>>::contains_key(controller_pubkey.clone()),Error::<T>::NoStakingRecordFound);
 
-    let (num_of_utxos, _) = <StakingCount<T>>::get(controller_pub_key.clone());
+    let (num_of_utxos, _) = <StakingCount<T>>::get(controller_pubkey.clone());
     ensure!(num_of_utxos == outpoints.len() as u64, "please provide all staked outpoints.");
 
     let mut hashes = vec![];
     for hash in outpoints {
         ensure!(<LockedUtxos<T>>::contains_key(hash), Error::<T>::OutpointDoesNotExist);
 
-        let utxo =  <LockedUtxos<T>>::get(hash).unwrap();
-        is_owned_locked_utxo::<T>(&utxo,controller_pub_key)?;
+        let utxo =  <LockedUtxos<T>>::get(hash).ok_or(Error::<T>::OutpointDoesNotExist)?;
+        is_owned_locked_utxo::<T>(&utxo,controller_pubkey)?;
         hashes.push(hash.clone());
     }
 
@@ -176,4 +172,97 @@ pub fn validate_withdrawal<T:Config>(controller_pub_key: &H256, outpoints:&Vec<H
         longevity: TransactionLongevity::MAX,
         propagate: true
     })
+}
+
+/// This is to make life easier, but the signing thing doesn't work yet,
+/// so it's still a TODO.
+pub mod calls {
+    use super::*;
+    use sp_core::{sr25519::Public as SR25519Public, testing::SR25519};
+    use frame_support::sp_runtime::app_crypto::RuntimePublic;
+    use crate::{Transaction, TransactionInput, spend};
+    use codec::Encode;
+    use core::convert::TryInto;
+
+    pub fn stake<T: Config>(
+        controller_account:T::AccountId,
+        stash_account:T::AccountId,
+        session_key:Vec<u8>,
+        outpoint: H256,
+        stake_value:Value
+    ) -> DispatchResultWithPostInfo {
+
+        let pubkey_raw: [u8; 32] = match controller_account.encode().try_into() {
+            Ok(v) => v,
+            Err(e) => {
+                log::error!("Failed to get caller's public key: {:?}", e);
+                Err("Failed to get caller's public key")?
+            }
+        };
+        let controller_pubkey = H256::from(pubkey_raw);
+        let controller_public = SR25519Public::from_h256(controller_pubkey);
+
+        let pubkey_raw: [u8; 32] = match stash_account.encode().try_into() {
+            Ok(v) => v,
+            Err(e) => {
+                log::error!("Failed to get stash account's public key: {:?}", e);
+                Err("Failed to get stash account's public key")?
+            }
+        };
+        let stash_pubkey = H256::from(pubkey_raw);
+
+        let utxo =  <UtxoStore<T>>::get(outpoint).ok_or(
+            Error::<T>::OutpointDoesNotExist
+        )?;
+
+        ensure!(utxo.value > stake_value + MLT_UNIT, Error::<T>::BalanceLow);
+
+        let mut tx = Transaction {
+            inputs: vec![TransactionInput::new_empty(outpoint)],
+            outputs: vec![
+                TransactionOutput::new_stake(stake_value,stash_pubkey,controller_pubkey,session_key),
+                TransactionOutput::new_pubkey(utxo.value - (stake_value + MLT_UNIT), controller_pubkey)
+            ]
+        };
+
+        let sig = controller_public.sign(SR25519, &tx.encode()).ok_or(Error::<T>::FailedSigningTransaction)?;
+        tx.inputs[0].witness = sig.0.to_vec();
+
+        spend::<T>(&controller_account,&tx)
+    }
+
+    pub fn stake_extra<T: Config>(
+        controller_account:T::AccountId,
+        outpoint: H256,
+        stake_value:Value
+    ) -> DispatchResultWithPostInfo {
+        let pubkey_raw: [u8; 32] = match controller_account.encode().try_into() {
+            Ok(v) => v,
+            Err(e) => {
+                log::error!("Failed to get caller's public key: {:?}", e);
+                Err("Failed to get caller's public key")?
+            }
+        };
+        let controller_pubkey = H256::from(pubkey_raw);
+        let controller_public = SR25519Public::from_h256(controller_pubkey);
+
+        let utxo =  <UtxoStore<T>>::get(outpoint).ok_or(
+            Error::<T>::OutpointDoesNotExist
+        )?;
+
+        ensure!(utxo.value > stake_value + MLT_UNIT, Error::<T>::BalanceLow);
+
+        let mut tx = Transaction {
+            inputs: vec![TransactionInput::new_empty(outpoint)],
+            outputs: vec![
+                TransactionOutput::new_stake_extra(stake_value,controller_pubkey),
+                TransactionOutput::new_pubkey(utxo.value - (stake_value + MLT_UNIT), controller_pubkey)
+            ]
+        };
+
+        let sig = controller_public.sign(SR25519, &tx.encode()).ok_or(Error::<T>::FailedSigningTransaction)?;
+        tx.inputs[0].witness = sig.0.to_vec();
+
+        spend::<T>(&controller_account,&tx)
+    }
 }

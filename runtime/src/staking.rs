@@ -1,7 +1,7 @@
 use crate::Perbill;
 
-use codec::{Decode, EncodeLike};
-use frame_support::{traits::Currency, dispatch::{DispatchResultWithPostInfo, Vec}};
+use codec::Decode;
+use frame_support::dispatch::{DispatchResultWithPostInfo, Vec};
 use frame_system::{Config as SysConfig, RawOrigin};
 use pallet_staking::{Pallet as StakingPallet, BalanceOf};
 use pallet_utxo::staking::StakingHelper;
@@ -63,12 +63,11 @@ impl <T: pallet_staking::Config + pallet_utxo::Config + pallet_session::Config> 
                 RawOrigin::Signed(stake_ledger.stash).into(),
                 value.into()
             )?;
-
-        } else {
-            log::error!("check sync with pallet-staking.");
-            Err(pallet_utxo::Error::<T>::NoStakingRecordFound)?
+            return Ok(().into());
         }
-        Ok(().into())
+
+        log::error!("check sync with pallet-staking.");
+        return Err(pallet_utxo::Error::<T>::NoStakingRecordFound)?;
     }
 
 
@@ -77,25 +76,21 @@ impl <T: pallet_staking::Config + pallet_utxo::Config + pallet_session::Config> 
         StakingPallet::<T>::chill(RawOrigin::Signed(controller_account.clone()).into())?;
 
         // get the total balance to free up
-        if let Some(stake_ledger) = <StakingPallet<T>>::ledger(controller_account.clone()) {
+        let stake_ledger = <StakingPallet<T>>::ledger(controller_account.clone()).ok_or(
+            pallet_utxo::Error::<T>::NoStakingRecordFound
+        )?;
 
-            // unbond
-            StakingPallet::<T>::unbond(
-                RawOrigin::Signed(controller_account.clone()).into(),
-                stake_ledger.total
-            )?;
-        } else {
-            log::error!("check sync with pallet-staking.");
-            Err(pallet_utxo::Error::<T>::NoStakingRecordFound)?
-        }
+        // unbond
+        StakingPallet::<T>::unbond(
+            RawOrigin::Signed(controller_account.clone()).into(),
+            stake_ledger.total
+        )?;
 
         Ok(().into())
     }
 
 
     fn withdraw(controller_account: &StakeAccountId<T>) -> DispatchResultWithPostInfo {
-        StakingPallet::<T>::withdraw_unbonded(RawOrigin::Signed(controller_account.clone()).into(),0)?;
-
-        Ok(().into())
+        StakingPallet::<T>::withdraw_unbonded(RawOrigin::Signed(controller_account.clone()).into(),0)
     }
 }

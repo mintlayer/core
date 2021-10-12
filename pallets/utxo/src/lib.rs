@@ -127,6 +127,9 @@ pub mod pallet {
         /// An action not opted to be performed.
         InvalidOperation,
 
+        /// Problem signing a transaction with the public key
+        FailedSigningTransaction,
+
         /// The hash outpoint key does not exist in the storage where it expects to be.
         OutpointDoesNotExist,
 
@@ -178,6 +181,8 @@ pub mod pallet {
         fn send_to_address(u: u32) -> Weight;
         fn unlock_stake(u: u32) -> Weight;
         fn withdraw_stake(u: u32) -> Weight;
+        fn stake_using_account_id(u: u32) -> Weight;
+        fn stake_extra(u: u32) -> Weight;
     }
 
     /// Transaction input
@@ -316,11 +321,11 @@ pub mod pallet {
             }
         }
 
-        pub fn new_stake_extra(value: Value, controller_pub_key: H256) -> Self {
+        pub fn new_stake_extra(value: Value, controller_pubkey: H256) -> Self {
             Self {
                 value,
                 header: 0,
-                destination: Destination::StakeExtra(controller_pub_key)
+                destination: Destination::StakeExtra(controller_pubkey)
             }
         }
 
@@ -675,7 +680,7 @@ pub mod pallet {
                     Destination::Stake { .. } => {
                         log::info!("TODO validate stake");
                     }
-                    Destination::StakeExtra(pubkey) => {
+                    Destination::StakeExtra(_) => {
                         log::info!("TODO validate stake extra");
 
                     }
@@ -1062,10 +1067,10 @@ pub mod pallet {
         #[pallet::weight(T::WeightInfo::unlock_stake(1 as u32))]
         pub fn unlock_stake(
             origin: OriginFor<T>,
-            controller_pub_key: H256
+            controller_pubkey: H256
         ) -> DispatchResultWithPostInfo {
             ensure_signed(origin)?;
-            staking::unlock::<T>(&controller_pub_key)?;
+            staking::unlock::<T>(&controller_pubkey)?;
             Ok(().into())
         }
 
@@ -1077,11 +1082,39 @@ pub mod pallet {
         #[pallet::weight(T::WeightInfo::withdraw_stake(outpoints.len() as u32))]
         pub fn withdraw_stake(
             origin: OriginFor<T>,
-            controller_pub_key: H256,
+            controller_pubkey: H256,
             outpoints: Vec<H256>
         ) -> DispatchResultWithPostInfo {
             ensure_signed(origin)?;
-            staking::withdraw::<T>(controller_pub_key,outpoints)?;
+            staking::withdraw::<T>(controller_pubkey,outpoints)?;
+            Ok(().into())
+        }
+
+        /// TODO: This does not work yet, because of the sign() thing
+        #[pallet::weight(T::WeightInfo::stake_using_account_id(1 as u32))]
+        pub fn stake_using_account_id(
+            origin: OriginFor<T>,
+            stash_account:T::AccountId,
+            session_key:Vec<u8>,
+            outpoint: H256,
+            stake_value:Value
+        ) -> DispatchResultWithPostInfo {
+            let signer = ensure_signed(origin)?;
+            staking::calls::stake::<T>(signer,stash_account,session_key,outpoint,stake_value)?;
+
+            Ok(().into())
+        }
+
+        /// TODO: This does not work yet, because of the sign() thing
+        #[pallet::weight(T::WeightInfo::stake_extra(1 as u32))]
+        pub fn stake_extra(
+            origin: OriginFor<T>,
+            outpoint: H256,
+            stake_value:Value
+        ) -> DispatchResultWithPostInfo {
+            let controller = ensure_signed(origin)?;
+            staking::calls::stake_extra::<T>(controller,outpoint,stake_value)?;
+
             Ok(().into())
         }
     }
