@@ -53,6 +53,9 @@ pub trait Context {
     /// Maximum number of bytes pushable to the stack
     const MAX_SCRIPT_ELEMENT_SIZE: usize = 520;
 
+    /// Maximum number of elements on the stack
+    const MAX_STACK_ELEMENTS: usize = 1000;
+
     /// Maximum number of public keys per multisig
     const MAX_PUBKEYS_PER_MULTISIG: usize;
 
