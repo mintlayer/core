@@ -55,7 +55,7 @@ class TestNode():
             # Wait for up to 600 seconds for the RPC server to respond
             self.rpc_timeout = 600
         if binary is None:
-            self.binary = os.getenv("NODEEXE", "node-template")
+            self.binary = os.getenv("NODEEXE", "mintlayer-core")
         else:
             self.binary = binary
         self.stderr = stderr
@@ -102,10 +102,10 @@ class TestNode():
             print("Cleaning up leftover process")
             self.process.kill()
 
-    def __getattr__(self, name):
-        """Dispatches any unrecognised messages to the RPC connection."""
-        assert self.rpc_connected and self.rpc is not None, "Error: no RPC connection"
-        return getattr(self.rpc, name)
+    # def __getattr__(self, name):
+    #     """Dispatches any unrecognised messages to the RPC connection."""
+    #     assert self.rpc_connected and self.rpc is not None, "Error: no RPC connection"
+    #     return getattr(self.rpc, name)
 
     def start(self, extra_args=None, stderr=None, *args, **kwargs):
         """Start the node."""
