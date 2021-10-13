@@ -45,17 +45,13 @@ To run the test cases, just run command `cargo test`.
   "TransactionFor": "Transaction",
   "Address": "MultiAddress",
   "LookupSource": "MultiAddress",
-  "TXOutputHeader": "u16",
+  "TXOutputHeader": "u128",
   "Difficulty": "U256",
   "DifficultyAndTimestamp": {
     "difficulty": "Difficulty",
     "timestamp": "Moment"
   },
-  "Pubkey": {
-    "_enum": {
-      "Schnorr": "Public"
-    }
-  },
+  "Pubkey": "H256",
   "Public": "H256"
 }
 ```
@@ -70,21 +66,14 @@ Click the **+** button on the right. It should show:
   header: 0
 }
 ```
-3. Let's spend 50 of Alice's utxo to Bob. Go to **Developer** > **Extrinsics**.  
-Choose `utxo` for _submit the following extrinsic_ dropdown. Input the ff. parameters (and then submit transaction):  
-    * outpoint: `0x549bd1814a1e714aa4cd96f53fed26676021741d68e48a4c214d02aa13571304`
-    * lock: `0x` (empty byte string)
-    * witness (signature): `0x7860d0e15cb0dbc98c713857b334aa0fbe1c11cb7daeca09ec4b87928c9dbb34e78aea9cb5818b601c2088751477c0d3b90cd28fffc50c51a39791b8f5d3da83`
-    * value: `50`
-    * destination: Pubkey: `0x8eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a48`
 3. Let's spend 50 of Alice's utxo to Bob. Go to **Developer** > **Extrinsics**.
    Choose `utxo` for _submit the following extrinsic_ dropdown.
    Input the following parameters (and then submit transaction):
-    * outpoint: `0xfa1d0b34f8950f771881cd7a1601cc8817376ed5b18c6d528cc1ccac863482cc`
+    * outpoint: `0xe9ea4ce6bf71396302db8d08e7924b5be6a5b0913798bd38741c6c6e9811e864`
     * lock: `0x` (empty byte string)
-    * witness (signature): `0x3c2f4d9264285ce26317e3aaec119db3efe46cbc7e6304d6015fced79d0d342dd9308e9fa07cbc00731513bcfc410c062c2b46083e6d1dae4ba29a95250c2f83`
+    * witness (signature): `0x2821de9fb1c50ff0e6f7177f64026c8e21fda53629c6df14374ec00759a95672e5a398c99d3be228a98b64192f09c567927d22eb55c9155d59a7e9d6ee71c988`
     * value: `50`
-    * destination: Pubkey: Schnorr: `0x8eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a48`
+    * destination: Pubkey: `0x8eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a48`
 4. Wait for the upper right corner to change from 
 ```
 utxo.spend
