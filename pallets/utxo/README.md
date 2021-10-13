@@ -10,49 +10,65 @@ To run the test cases, just run command `cargo test`.
 1. After running the core, declare the custom datatypes. GO to **Settings** > **Developer** tab and paste in the ff. JSON and then save:
 ```json
 {
-  "Value": "u128",
-  "Destination": {
-    "_enum": {
-      "Pubkey": "Pubkey",
-      "CreatePP": "DestinationCreatePP",
-      "CallPP": "DestinationCallPP",
-      "ScriptHash": "H256"
-    }
-  },
-  "DestinationCreatePP": {
-    "code": "Vec<u8>",
-    "data": "Vec<u8>"
-  },
-  "DestinationCallPP": {
-    "dest_account": "AccountId",
-    "input_data": "Vec<u8>"
-  },
-  "TransactionInput": {
-    "outpoint": "Hash",
-    "lock": "Vec<u8>",
-    "witness": "Vec<u8>"
-  },
-  "TransactionOutput": {
-    "value": "Value",
-    "header": "TXOutputHeader",
-    "destination": "Destination"
-  },
-  "TransactionOutputFor": "TransactionOutput",
-  "Transaction": {
-    "inputs": "Vec<TransactionInput>",
-    "outputs": "Vec<TransactionOutput>"
-  },
-  "TransactionFor": "Transaction",
-  "Address": "MultiAddress",
-  "LookupSource": "MultiAddress",
-  "TXOutputHeader": "u128",
-  "Difficulty": "U256",
-  "DifficultyAndTimestamp": {
-    "difficulty": "Difficulty",
-    "timestamp": "Moment"
-  },
-  "Pubkey": "H256",
-  "Public": "H256"
+   "Value": "u128",
+   "Destination": {
+      "_enum": {
+         "Pubkey": "Pubkey",
+         "CreatePP": "DestinationCreatePP",
+         "CallPP": "DestinationCallPP",
+         "ScriptHash": "H256",
+         "Stake": "DestinationStake",
+         "StakeExtra": "Public"
+      }
+   },
+   "DestinationStake": {
+      "stash_pubkey": "Public",
+      "controller_pubkey": "Public",
+      "session_key": "Vec<u8>"
+   },
+   "DestinationCreatePP": {
+      "code": "Vec<u8>",
+      "data": "Vec<u8>"
+   },
+   "DestinationCallPP": {
+      "dest_account": "AccountId",
+      "input_data": "Vec<u8>"
+   },
+   "TransactionInput": {
+      "outpoint": "Hash",
+      "lock": "Vec<u8>",
+      "witness": "Vec<u8>"
+   },
+   "TransactionOutput": {
+      "value": "Value",
+      "header": "TXOutputHeader",
+      "destination": "Destination"
+   },
+   "TransactionOutputFor": "TransactionOutput",
+   "Transaction": {
+      "inputs": "Vec<TransactionInput>",
+      "outputs": "Vec<TransactionOutput>"
+   },
+   "TransactionFor": "Transaction",
+   "Address": "MultiAddress",
+   "LookupSource": "MultiAddress",
+   "TXOutputHeader": "u128",
+   "Difficulty": "U256",
+   "DifficultyAndTimestamp": {
+      "difficulty": "Difficulty",
+      "timestamp": "Moment"
+   },
+   "Pubkey": "H256",
+   "Public": "H256",
+   "String": "Vec<u8>",
+   "TokenID": "u64",
+   "TokenInstance": {
+      "id": "u64",
+      "name": "String",
+      "ticker": "String",
+      "supply": "u128"
+   },
+   "TokenListData": "Vec<TokenInstance>"
 }
 ```
 2. To confirm that Alice already has UTXO at genesis, go to **Developer** > **Chain state** > **Storage**.  

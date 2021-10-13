@@ -2,22 +2,26 @@
 // `construct_runtime!` does a lot of recursion and requires us to increase the limit to 256.
 #![recursion_limit = "256"]
 
+mod staking;
+
 // Make the WASM binary available.
 #[cfg(feature = "std")]
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
+use frame_election_provider_support::onchain;
 use pallet_grandpa::fg_primitives;
 use pallet_grandpa::{AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList};
+use pallet_session::historical as pallet_session_historical;
 use sp_api::impl_runtime_apis;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{crypto::KeyTypeId, OpaqueMetadata, H256};
 use sp_runtime::traits::{
-    AccountIdLookup, BlakeTwo256, Block as BlockT, IdentifyAccount, NumberFor, Verify,
+    AccountIdLookup, BlakeTwo256, Block as BlockT, IdentifyAccount, NumberFor, OpaqueKeys, Verify
 };
 use sp_runtime::{
     create_runtime_str, generic, impl_opaque_keys,
     transaction_validity::{TransactionSource, TransactionValidity},
-    ApplyExtrinsicResult, MultiSignature,
+    ApplyExtrinsicResult, MultiSignature
 };
 use sp_std::prelude::*;
 #[cfg(feature = "std")]
@@ -27,7 +31,7 @@ use sp_version::RuntimeVersion;
 // A few exports that help ease life for downstream crates.
 pub use frame_support::{
     construct_runtime, parameter_types,
-    traits::{Everything, IsSubType, KeyOwnerProofSystem, Nothing, Randomness},
+    traits::{Everything, IsSubType, KeyOwnerProofSystem, Nothing, Randomness, U128CurrencyToVote},
     weights::{
         constants::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight, WEIGHT_PER_SECOND},
         IdentityFee, Weight,
@@ -37,17 +41,20 @@ pub use frame_support::{
 pub use pallet_balances::Call as BalancesCall;
 use pallet_contracts::weights::WeightInfo;
 pub use pallet_timestamp::Call as TimestampCall;
+pub use pallet_staking::StakerStatus;
 use pallet_transaction_payment::CurrencyAdapter;
 #[cfg(any(feature = "std", test))]
 pub use sp_runtime::BuildStorage;
-pub use sp_runtime::{Perbill, Permill};
+pub use sp_runtime::{Perbill, Permill, Percent};
 
 /// Import the template pallet.
 pub use pallet_template;
 
 pub use pallet_pp;
 pub use pallet_utxo;
+pub use staking::*;
 use sp_runtime::transaction_validity::{InvalidTransaction, TransactionValidityError};
+use pallet_utxo::MLT_UNIT;
 
 /// An index to a block.
 pub type BlockNumber = u32;
@@ -230,7 +237,7 @@ impl pallet_grandpa::Config for Runtime {
     type Event = Event;
     type Call = Call;
 
-    type KeyOwnerProofSystem = ();
+    type KeyOwnerProofSystem = (); //Historical
 
     type KeyOwnerProof =
         <Self::KeyOwnerProofSystem as KeyOwnerProofSystem<(KeyTypeId, GrandpaId)>>::Proof;
@@ -258,7 +265,7 @@ impl pallet_timestamp::Config for Runtime {
 }
 
 parameter_types! {
-    pub const ExistentialDeposit: u128 = 500;
+    pub const ExistentialDeposit: u128 = 40_000;
     pub const MaxLocks: u32 = 50;
 }
 
@@ -297,12 +304,22 @@ impl pallet_template::Config for Runtime {
     type Event = Event;
 }
 
+parameter_types!{
+    pub const MinimumStake: u128 = 40_000 * MLT_UNIT;
+    pub const StakeWithdrawalFee: u128 =  1 * MLT_UNIT;
+    pub const RewardReductionPeriod: BlockNumber = MINUTES * 60 * 24 * 365;
+	pub const RewardReductionFraction: Percent = Percent::from_percent(25);
+}
+
 impl pallet_utxo::Config for Runtime {
     type Event = Event;
     type Call = Call;
     type WeightInfo = pallet_utxo::weights::WeightInfo<Runtime>;
     type ProgrammablePool = pallet_pp::Pallet<Runtime>;
     type AssetId = u64;
+
+    type RewardReductionFraction = RewardReductionFraction;
+    type RewardReductionPeriod = RewardReductionPeriod;
 
     fn authorities() -> Vec<H256> {
         Aura::authorities()
@@ -313,6 +330,10 @@ impl pallet_utxo::Config for Runtime {
             })
             .collect()
     }
+
+    type StakingHelper = StakeOps<Runtime>;
+    type MinimumStake = MinimumStake;
+    type StakeWithdrawalFee = StakeWithdrawalFee;
 }
 
 impl pallet_pp::Config for Runtime {
@@ -370,6 +391,85 @@ impl pallet_contracts::Config for Runtime {
     type ContractDeposit = ();
 }
 
+parameter_types! {
+    pub const DisabledValidatorsThreshold: Perbill = Perbill::from_percent(17);
+    pub const Period: u32 = 2;
+    pub const Offset: u32 = 0;
+}
+
+impl pallet_session_historical::Config for Runtime {
+    type FullIdentification = pallet_staking::Exposure<AccountId, Balance>;
+    type FullIdentificationOf = pallet_staking::ExposureOf<Runtime>;
+}
+
+impl pallet_session::Config for Runtime {
+    type Event = Event;
+    type ValidatorId = AccountId;
+    type ValidatorIdOf = pallet_staking::StashOf<Self>;
+    type ShouldEndSession = pallet_session::PeriodicSessions<Period, Offset>;
+    type NextSessionRotation = ();
+    type SessionManager = pallet_session_historical::NoteHistoricalRoot<Self,Staking>;
+    type SessionHandler = <opaque::SessionKeys as OpaqueKeys>::KeyTypeIdProviders;
+    type Keys = opaque::SessionKeys;
+    type DisabledValidatorsThreshold = DisabledValidatorsThreshold;
+    type WeightInfo = pallet_session::weights::SubstrateWeight<Runtime>;
+}
+
+impl onchain::Config for Runtime {
+    type AccountId = AccountId;
+    type BlockNumber = BlockNumber;
+    type Accuracy = Perbill;
+    type DataProvider = Staking;
+}
+
+parameter_types! {
+    pub const SessionsPerEra: sp_staking::SessionIndex = 2;
+    pub const BondingDuration: pallet_staking::EraIndex = 2;
+    pub const SlashDeferDuration: pallet_staking::EraIndex = 1;
+    pub const MaxNominatorRewardedPerValidator: u32 = 5;
+    pub OffchainRepeat: BlockNumber = 5;
+}
+
+impl pallet_staking::Config for Runtime {
+    type Currency = Balances;
+    type UnixTime = Timestamp;
+    type CurrencyToVote = U128CurrencyToVote;
+    type ElectionProvider = onchain::OnChainSequentialPhragmen<Self>;
+    type GenesisElectionProvider = Self::ElectionProvider;
+    const MAX_NOMINATIONS: u32 = 5;
+    type RewardRemainder = (); // Treasury, or something similar
+    type Event = Event;
+    type Slash = (); // Treasury, or something similar
+    type Reward = ();
+    type SessionsPerEra = SessionsPerEra;
+    type BondingDuration = BondingDuration;
+    type SlashDeferDuration = SlashDeferDuration;
+    type SlashCancelOrigin = frame_system::EnsureRoot<Self::AccountId>;
+    type SessionInterface = Self;
+    type EraPayout = (); // pallet_staking::ConvertCurve<RewardCurve>;
+    type NextNewSession = Session;
+    type MaxNominatorRewardedPerValidator = MaxNominatorRewardedPerValidator;
+    type WeightInfo = pallet_staking::weights::SubstrateWeight<Runtime>;
+}
+
+parameter_types! {
+    pub const UncleGenerations: BlockNumber = 4;
+}
+
+impl pallet_authorship::Config for Runtime {
+    type FindAuthor = pallet_utxo::FindAccountFromAuthorIndex<Self, Aura, Session>;
+    type UncleGenerations = UncleGenerations;
+    type FilterUncle = ();
+    type EventHandler = (); //pallet_staking::Pallet<Runtime>;
+}
+
+impl<C> frame_system::offchain::SendTransactionTypes<C> for Runtime where
+    Call: From<C>,
+{
+    type Extrinsic = UncheckedExtrinsic;
+    type OverarchingCall = Call;
+}
+
 // Create the runtime by composing the FRAME pallets that were previously configured.
 construct_runtime!(
     pub enum Runtime where
@@ -390,6 +490,10 @@ construct_runtime!(
         Utxo: pallet_utxo::{Pallet, Call, Config<T>, Storage, Event<T>},
         Pp: pallet_pp::{Pallet, Call, Config<T>, Storage, Event<T>},
         Contracts: pallet_contracts::{Pallet, Call, Storage, Event<T>},
+        Authorship: pallet_authorship::{Pallet, Call, Storage, Inherent},
+        Session: pallet_session::{Pallet, Call, Config<T>, Storage, Event},
+        Staking: pallet_staking::{Pallet, Call, Config<T>, Storage, Event<T>},
+        Historical: pallet_session_historical::{Pallet},
     }
 );
 
@@ -474,11 +578,13 @@ impl_runtime_apis! {
             tx: <Block as BlockT>::Extrinsic,
             block_hash: <Block as BlockT>::Hash,
         ) -> TransactionValidity {
+            log::debug!("transaction to validate: {:?}",tx);
             if let Some(pallet_utxo::Call::spend(ref tx)) =
             IsSubType::<pallet_utxo::Call::<Runtime>>::is_sub_type(&tx.function) {
                 match pallet_utxo::validate_transaction::<Runtime>(&tx) {
                     Ok(valid_tx) => { return Ok(valid_tx); }
-                    Err(_) => {
+                    Err(e) => {
+                        log::error!("pallet_utxo validation error: {:?}", e);
                         return Err(TransactionValidityError::Invalid(InvalidTransaction::Custom(1)));
                     }
                 }
@@ -537,12 +643,13 @@ impl_runtime_apis! {
 
         fn generate_key_ownership_proof(
             _set_id: fg_primitives::SetId,
-            _authority_id: GrandpaId,
+            authority_id: GrandpaId,
         ) -> Option<fg_primitives::OpaqueKeyOwnershipProof> {
-            // NOTE: this is the only implementation possible since we've
-            // defined our key owner proof type as a bottom type (i.e. a type
-            // with no values).
-            None
+            use codec::Encode;
+
+            Historical::prove((fg_primitives::KEY_TYPE, authority_id))
+            .map(|p| p.encode())
+            .map(fg_primitives::OpaqueKeyOwnershipProof::new)
         }
     }
 
