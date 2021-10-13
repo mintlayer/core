@@ -4,9 +4,13 @@ Functional tests system for Mintlayer
 
 To run the test:
 
-1. Make sure substrate-interface python package is installed
-2. compile Mintlayer in debug mode (TODO: make this automatically detect the mode using config.ini and [code generation](https://doc.rust-lang.org/cargo/reference/build-script-examples.html#code-generation)
-3. run the `test_runner.py` script
+1. Make sure substrate-interface python package is installed, preferably, use this command for installation:
+```
+python -m pip install 'substrate-interface == 0.13.12'
+python -m pip install 'scalecodec == 0.11.18'
+```
+2. compile Mintlayer
+3. run the `test_runner.py`
 
-You can choose the test you want by putting it as an argument to test runner
+You can choose the test you want by putting it as an argument to test runner. For example `test_runner.py example_test.py`
 
