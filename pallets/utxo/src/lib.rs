@@ -47,10 +47,11 @@ pub mod pallet {
     use crate::{OutputHeaderData, OutputHeaderHelper, TXOutputHeader, TokenID, TokenType};
     use crate::{rewards::reward_block_author};
     use crate::staking;
-    use crate::staking::{StakingHelper, validate_withdrawal};
+    use crate::staking::StakingHelper;
     use bech32;
     use chainscript::Script;
     use codec::{Decode, Encode};
+    use core::convert::TryInto;
     use core::marker::PhantomData;
     use frame_support::weights::PostDispatchInfo;
     use frame_support::{
@@ -69,7 +70,7 @@ pub mod pallet {
     use serde::{Deserialize, Serialize};
     use sp_core::{
         sp_std::collections::btree_map::BTreeMap,
-        sp_std::{convert::TryInto, str, vec},
+        sp_std::{str, vec},
         sr25519,
         testing::SR25519,
         H256, H512,
@@ -694,13 +695,13 @@ pub mod pallet {
                 }
                 Destination::StakeExtra(_) => {
                     ensure!(output.value > 0, "output value must be nonzero");
-                    let hash = tx.outpoint(output_index);
+                    let hash = tx.outpoint(output_index as u64);
                     new_utxos.push(hash.as_fixed_bytes().to_vec());
                     ensure!(!<LockedUtxos<T>>::contains_key(hash), "output already exists");
                 }
                 Destination::Stake {..} => {
                     ensure!(output.value >= T::MinimumStake::get(), "output value must be equal or more than the set minimum stake");
-                    let hash = tx.outpoint(output_index);
+                    let hash = tx.outpoint(output_index as u64);
                     new_utxos.push(hash.as_fixed_bytes().to_vec());
                     ensure!(!<LockedUtxos<T>>::contains_key(hash), "output already exists");
                 }
@@ -777,6 +778,12 @@ pub mod pallet {
                         let lock = input.lock.clone();
                         crate::script::verify(&tx, &input_utxos, index as u64, witness, lock)
                             .map_err(|_| "script verification failed")?;
+                    }
+                    Destination::Stake { .. } => {
+                        log::info!("TODO validate STAKE spending");
+                    }
+                    Destination::StakeExtra(_) => {
+                        log::info!("TODO validate STAKE EXTRA spending");
                     }
                 }
             }
@@ -1151,15 +1158,15 @@ pub mod pallet {
             <MLTCoinsAvailable<T>>::put(self.extra_mlt_coins);
             <BlockAuthorRewardAmount<T>>::put(self.initial_reward_amount);
 
-            self.genesis_utxos.iter().cloned().for_each(|u| {
-                UtxoStore::<T>::insert(BlakeTwo256::hash_of(&u), Some(u));
+            self.genesis_utxos.iter().cloned().enumerate().for_each(|(index,u)| {
+                UtxoStore::<T>::insert(BlakeTwo256::hash_of(&(&u, index as u64, "genesis")), Some(u));
             });
 
-            self.locked_utxos.iter().cloned().for_each(|u| {
+            self.locked_utxos.iter().cloned().enumerate().for_each(|(index, u)| {
                 if let Destination::Stake { stash_pubkey:_, controller_pubkey, session_key:_ } =  &u.destination {
                     <StakingCount<T>>::insert(controller_pubkey.clone(),Some((1, u.value)));
                 }
-                LockedUtxos::<T>::insert(BlakeTwo256::hash_of(&u), Some(u));
+                LockedUtxos::<T>::insert(BlakeTwo256::hash_of(&(&u, index as u64, "genesis")), Some(u));
             });
         }
     }

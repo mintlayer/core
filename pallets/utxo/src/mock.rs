@@ -68,7 +68,7 @@ pub fn genesis_utxo() -> (TransactionOutput<H256>, H256) {
     let keystore = KeyStore::new();
     let alice_pub_key = create_pub_key(&keystore, ALICE_PHRASE);
     let output = TransactionOutput::<H256>::new_pubkey(100, H256::from(alice_pub_key));
-    let hash = BlakeTwo256::hash_of(&output);
+    let hash =  BlakeTwo256::hash_of(&(&output, 0u64, "genesis"));
     (output, hash)
 }
 
@@ -395,9 +395,9 @@ pub fn multiple_keys_test_ext()  -> (TestExternalities, Vec<(Public,H256)>) {
 
 
     (ext, vec![
-        (alice_pub_key, BlakeTwo256::hash_of(&alice_genesis)),
-        (karl_pub_key, BlakeTwo256::hash_of(&karl_genesis)),
-        (greg_pub_key,BlakeTwo256::hash_of(&greg_genesis)),
-        (tom_pub_key,BlakeTwo256::hash_of(&tom_genesis)),
+        (alice_pub_key, BlakeTwo256::hash_of(&(&alice_genesis, 0u64, "genesis"))),
+        (karl_pub_key, BlakeTwo256::hash_of(&(&karl_genesis, 1u64, "genesis"))),
+        (greg_pub_key,BlakeTwo256::hash_of(&(&greg_genesis, 2u64, "genesis"))),
+        (tom_pub_key,BlakeTwo256::hash_of(&(&tom_genesis, 3u64, "genesis"))),
     ])
 }

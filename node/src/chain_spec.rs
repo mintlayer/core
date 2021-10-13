@@ -36,19 +36,29 @@ where
 }
 
 /// Keys required by pallet-session
+#[derive(Clone)]
 pub struct AuthorityKeys {
-    /// also called as `controller` account Id. see `pallet-staking`
-    account_id: AccountId,
-    stash_account_id: AccountId,
+    controller: sr25519::Public,
+    stash: sr25519::Public,
     aura_id: AuraId,
     grandpa_id: GrandpaId
+}
+
+impl  AuthorityKeys {
+    fn controller_account_id(&self) -> AccountId {
+        AccountPublic::from(self.controller.clone()).into_account()
+    }
+
+    fn stash_account_id(&self) -> AccountId {
+        AccountPublic::from(self.stash.clone()).into_account()
+    }
 }
 
 /// Generate AuthorityKeys given a seed string
 pub fn authority_keys_from_seed(seed: &str) -> AuthorityKeys {
     AuthorityKeys {
-        account_id: get_account_id_from_seed::<sr25519::Public>(seed),
-        stash_account_id: get_account_id_from_seed::<sr25519::Public>(&format!("{}//stash",seed)),
+        controller: get_from_seed::<sr25519::Public>(seed),
+        stash: get_from_seed::<sr25519::Public>(&format!("{}//stash",seed)),
         aura_id: get_from_seed::<AuraId>(seed),
         grandpa_id: get_from_seed::<GrandpaId>(seed)
     }
@@ -92,10 +102,6 @@ pub fn development_config() -> Result<ChainSpec, String> {
                     get_account_id_from_seed::<sr25519::Public>("Bob"),
                     get_account_id_from_seed::<sr25519::Public>("Alice//stash"),
                     get_account_id_from_seed::<sr25519::Public>("Bob//stash"),
-                ],
-                vec![
-                    get_from_seed::<sr25519::Public>("Alice"),
-                    get_from_seed::<sr25519::Public>("Bob"),
                 ],
                 true,
             )
@@ -145,10 +151,6 @@ pub fn local_testnet_config() -> Result<ChainSpec, String> {
                     get_account_id_from_seed::<sr25519::Public>("Eve//stash"),
                     get_account_id_from_seed::<sr25519::Public>("Ferdie//stash"),
                 ],
-                vec![
-                    get_from_seed::<sr25519::Public>("Alice"),
-                    get_from_seed::<sr25519::Public>("Bob"),
-                ],
                 true,
             )
         },
@@ -171,30 +173,35 @@ fn testnet_genesis(
     initial_authorities: Vec<AuthorityKeys>,
     root_key: AccountId,
     endowed_accounts: Vec<AccountId>,
-    endowed_utxos: Vec<sr25519::Public>,
     _enable_println: bool,
-) -> GenesisConfig {
+) -> GenesisConfig
+{
     const ENDOWMENT: u128 = 1 << 80;
     // minimum balance set in the runtime. check `lib.rs` of runtime module.
     const STASH: u128 = 40_000;
 
     // only Alice contains 400 million coins.
-    let (genesis, locked_genesis) = endowed_utxos
+    let (genesis_utxos, locked_genesis) = initial_authorities
         .first()
         .map(|x| {
-            let x_h256 = H256::from_slice(x.as_slice());
-            let x_stash_h256= H256::from( get_from_seed::<sr25519::Public>("Alice//stash"));
+            let x_h256 = H256::from(x.controller.clone());
+            let x_stash_h256= H256::from(x.stash.clone());
 
-            // may need to create a const variable to represent 1_000 and 100_000_000
-            let alice_genesis = pallet_utxo::TransactionOutput::new_pubkey(
-                400_000_000 * MLT_UNIT,
-                x_h256,
-            );
+            let num_of_utxos = 5;
+            let value = (400_000_000 * MLT_UNIT) / num_of_utxos;
 
-            let alice_auth_keys = authority_keys_from_seed("Alice");
+            let mut initial_utxos = vec![];
 
-            // since alice is the starting validator, make sure she has some utxos being locked away
-            let alice_locked = pallet_utxo::TransactionOutput::new_stake(
+            for _ in 0 .. num_of_utxos {
+                initial_utxos.push( pallet_utxo::TransactionOutput::<AccountId>::new_pubkey(
+                    value,
+                    x_h256.clone(),
+                ));
+            }
+
+            // initial authorities meaning they're also validators.
+            // locking some values as a stake from validators
+            let locked = pallet_utxo::TransactionOutput::<AccountId>::new_stake(
                 // this is the minimum stake amount
                 40_000 * MLT_UNIT,
                 x_stash_h256,
@@ -202,15 +209,15 @@ fn testnet_genesis(
                 vec![]
             );
 
-            (alice_genesis, alice_locked)
+            (initial_utxos, locked)
         })
         .unwrap();
 
     // initial_authorities also mean the starting validators in the chain.
     let stakers = initial_authorities.iter()
         .map(|auth_keys| (
-            auth_keys.stash_account_id.clone(),
-            auth_keys.account_id.clone(),
+            auth_keys.stash_account_id(),
+            auth_keys.controller_account_id(),
             STASH,
             // the role is `validator`. See pallet-staking
             StakerStatus::Validator))
@@ -218,8 +225,8 @@ fn testnet_genesis(
 
     // Where aura and grandpa are initialized.
     let session_keys = initial_authorities.iter().map(|x| (
-        x.stash_account_id.clone(),
-        x.stash_account_id.clone(),
+        x.stash_account_id(),
+        x.stash_account_id(),
         node_template_runtime::opaque::SessionKeys {
             aura: x.aura_id.clone(),
             grandpa: x.grandpa_id.clone()
@@ -245,7 +252,7 @@ fn testnet_genesis(
             key: root_key,
         },
         utxo: UtxoConfig {
-            genesis_utxos: vec![genesis],
+            genesis_utxos,
             // The # of validators set should also be the same here.
             // Currently forcing only 1 INITIAL AUTHORITY (Alice), hence only 1 locked-genesis.
             // This means only ALICE has staked her utxo.
@@ -264,7 +271,7 @@ fn testnet_genesis(
             validator_count: initial_authorities.len() as u32 + 5u32, // provide 5 more slots
             // The # ofvalidators set should be the same number of locked_utxos specified in UtxoConfig.
             minimum_validator_count: initial_authorities.len() as u32,
-            invulnerables: initial_authorities.iter().map(|x| x.account_id.clone()).collect(),
+            invulnerables: initial_authorities.iter().map(|x| x.controller_account_id()).collect(),
             slash_reward_fraction: sp_runtime::Perbill::from_percent(10),
             stakers,
             .. Default::default()

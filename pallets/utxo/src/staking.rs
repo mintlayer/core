@@ -123,11 +123,7 @@ pub(crate) fn withdraw<T: Config>(controller_pubkey: H256, outpoints: Vec<H256>)
     }
     let hash = BlakeTwo256::hash_of(&hashes);
 
-    let utxo = TransactionOutput {
-        value: total,
-        header: 0,
-        destination: Destination::Pubkey(controller_pubkey.clone())
-    };
+    let utxo = TransactionOutput::new_pubkey(total, controller_pubkey);
 
     <UtxoStore<T>>::insert(hash, Some(utxo));
 

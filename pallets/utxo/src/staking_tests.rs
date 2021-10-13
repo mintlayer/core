@@ -32,7 +32,9 @@ fn simple_staking() {
         let (alice_pub_key, _) = keys_and_hashes[0];
         let (greg_pub_key, _) = keys_and_hashes[2];
 
-        let mut tx = Transaction {
+        let utxo = UtxoStore::<Test>::get(karl_genesis).expect("tom's utxo does not exist");
+
+        let tx = Transaction {
             inputs: vec![
                 TransactionInput::new_empty(karl_genesis)
             ],
@@ -42,9 +44,7 @@ fn simple_staking() {
                 TransactionOutput::new_stake(10, H256::from(greg_pub_key),H256::from(karl_pub_key),vec![2,1]),
                 TransactionOutput::new_pubkey(90,H256::from(karl_pub_key))
             ]
-        };
-        let karl_sig = crypto::sr25519_sign(SR25519,&karl_pub_key, &tx.encode()).unwrap();
-        tx.inputs[0].witness = karl_sig.0.to_vec();
+        }.sign(&[utxo],0,&karl_pub_key).expect("karl's pub key not found");
         let locked_utxo_hash = tx.outpoint(0);
         let new_utxo_hash = tx.outpoint(1);
 
@@ -53,7 +53,7 @@ fn simple_staking() {
         assert!(LockedUtxos::<Test>::contains_key(locked_utxo_hash));
         assert!(StakingCount::<Test>::contains_key(H256::from(alice_pub_key)));
         assert!(StakingCount::<Test>::contains_key(H256::from(karl_pub_key)));
-        assert_eq!(StakingCount::<Test>::get(H256::from(karl_pub_key)), (1,10));
+        assert_eq!(StakingCount::<Test>::get(H256::from(karl_pub_key)), Some((1,10)));
     })
 }
 
@@ -90,7 +90,8 @@ fn staker_staking_again() {
     test_ext.execute_with(|| {
         let (alice_pub_key, alice_genesis) = keys_and_hashes[0];
         let (greg_pub_key, _) = keys_and_hashes[2];
-        let mut tx = Transaction {
+        let utxo = UtxoStore::<Test>::get(alice_genesis).expect("alice's utxo does not exist");
+        let tx = Transaction {
             inputs: vec![
                 TransactionInput::new_empty(alice_genesis)
             ],
@@ -99,9 +100,7 @@ fn staker_staking_again() {
                 TransactionOutput::new_stake(10, H256::from(greg_pub_key),H256::from(alice_pub_key),vec![2,0]),
                 TransactionOutput::new_pubkey(90,H256::from(alice_pub_key))
             ]
-        };
-        let alice_sig = crypto::sr25519_sign(SR25519,&alice_pub_key, &tx.encode()).unwrap();
-        tx.inputs[0].witness = alice_sig.0.to_vec();
+        }.sign(&[utxo],0, &alice_pub_key).expect(" alice's pub key not found");
 
         assert_err!(Utxo::spend(Origin::signed(H256::zero()), tx), Error::<Test>::StakingAlreadyExists);
     })
@@ -113,7 +112,9 @@ fn stash_account_is_staking() {
     test_ext.execute_with(|| {
         let (tom_pub_key, tom_genesis) = keys_and_hashes[3];
         let(greg_pub_key, _) = keys_and_hashes[2];
-        let mut tx = Transaction {
+
+        let utxo = UtxoStore::<Test>::get(tom_genesis).expect("tom's utxo does not exist");
+        let tx = Transaction {
             inputs: vec![
                 TransactionInput::new_empty(tom_genesis)
             ],
@@ -122,9 +123,7 @@ fn stash_account_is_staking() {
                 TransactionOutput::new_stake(10, H256::from(greg_pub_key),H256::from(tom_pub_key),vec![2,3]),
                 TransactionOutput::new_pubkey(90,H256::from(tom_pub_key))
             ]
-        };
-        let tom_sig = crypto::sr25519_sign(SR25519,&tom_pub_key, &tx.encode()).unwrap();
-        tx.inputs[0].witness = tom_sig.0.to_vec();
+        }.sign(&[utxo.clone()],0,&tom_pub_key).expect("tom's public key not found");
 
         assert_err!(Utxo::spend(Origin::signed(H256::zero()), tx), "CANNOT STAKE. CONTROLLER ACCOUNT IS ACTUALLY A STASH ACCOUNT");
     })
@@ -135,7 +134,8 @@ fn simple_staking_extra() {
     let (mut test_ext, keys_and_hashes) = multiple_keys_test_ext();
     test_ext.execute_with(|| {
         let (alice_pub_key, alice_genesis) = keys_and_hashes[0];
-        let mut tx = Transaction {
+        let utxo = UtxoStore::<Test>::get(alice_genesis).expect("alice's utxo does not exist");
+        let tx = Transaction {
             inputs: vec![
                 TransactionInput::new_empty(alice_genesis)
             ],
@@ -144,9 +144,8 @@ fn simple_staking_extra() {
                 TransactionOutput::new_stake_extra(20, H256::from(alice_pub_key)),
                 TransactionOutput::new_pubkey(70,H256::from(alice_pub_key))
             ]
-        };
-        let alice_sig = crypto::sr25519_sign(SR25519,&alice_pub_key, &tx.encode()).unwrap();
-        tx.inputs[0].witness = alice_sig.0.to_vec();
+        }.sign(&[utxo],0,&alice_pub_key).expect(" alice's pub key not found");
+
         let locked_utxo_hash = tx.outpoint(0);
         let new_utxo_hash = tx.outpoint(1);
 
@@ -154,7 +153,7 @@ fn simple_staking_extra() {
         assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx));
         assert!(UtxoStore::<Test>::contains_key(new_utxo_hash));
         assert!(LockedUtxos::<Test>::contains_key(locked_utxo_hash));
-        assert_eq!(StakingCount::<Test>::get(H256::from(alice_pub_key)), (2,30));
+        assert_eq!(StakingCount::<Test>::get(H256::from(alice_pub_key)), Some((2,30)));
     })
 }
 
@@ -163,7 +162,10 @@ fn non_validator_staking_extra() {
     let (mut test_ext, keys_and_hashes) = multiple_keys_test_ext();
     test_ext.execute_with(|| {
         let (greg_pub_key, greg_genesis) = keys_and_hashes[2];
-        let mut tx = Transaction {
+
+        let utxo = UtxoStore::<Test>::get(greg_genesis).expect("tom's utxo does not exist");
+
+        let tx = Transaction {
             inputs: vec![
                 TransactionInput::new_empty(greg_genesis)
             ],
@@ -172,9 +174,7 @@ fn non_validator_staking_extra() {
                 TransactionOutput::new_stake_extra(20, H256::from(greg_pub_key)),
                 TransactionOutput::new_pubkey(100,H256::from(greg_pub_key))
             ]
-        };
-        let greg_sig = crypto::sr25519_sign(SR25519,&greg_pub_key, &tx.encode()).unwrap();
-        tx.inputs[0].witness = greg_sig.0.to_vec();
+        }.sign(&[utxo],0,&greg_pub_key).expect("greg's pub key not found");
 
         assert_err!(Utxo::spend(Origin::signed(H256::zero()), tx), Error::<Test>::NoStakingRecordFound);
     })
