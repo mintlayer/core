@@ -102,8 +102,6 @@ pub(super) fn reward_block_author<T:Config>(block_number: T::BlockNumber) {
         }
 
         <MLTCoinsAvailable<T>>::put(coins_available);
-    } else {
-        log::warn!("no coins available for rewarding");
     }
 
 }
