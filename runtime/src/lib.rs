@@ -589,6 +589,7 @@ impl_runtime_apis! {
                     }
                 }
             }
+            //TODO: add `validate_withdrawal`, when withdrawing locked utxos.
 
             Executive::validate_transaction(source, tx, block_hash)
         }

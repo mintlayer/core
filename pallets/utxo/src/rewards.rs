@@ -95,8 +95,6 @@ pub(super) fn reward_block_author<T:Config>(block_number: T::BlockNumber) {
                     <MLTCoinsAvailable<T>>::put(coins_available - reward_amount);
 
                     <Pallet<T>>::deposit_event(Event::<T>::BlockAuthorRewarded { value: utxo.value, destination: block_author});
-
-                    return;
                 }
             }
         } else {

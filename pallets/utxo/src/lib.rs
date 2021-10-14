@@ -81,6 +81,9 @@ pub mod pallet {
     pub type Value = u128;
     pub type String = Vec<u8>;
     pub const MLT_UNIT: Value = 1_000 * 100_000_000;
+    // TODO: I don't know where this should reside exactly.
+    /// The initial supply of mlt coins
+    pub const MLT_ORIG_SUPPLY: Value = 400_000_000 * MLT_UNIT;
 
     pub struct Mlt(Value);
     impl Mlt {
@@ -180,8 +183,6 @@ pub mod pallet {
         fn send_to_address(u: u32) -> Weight;
         fn unlock_stake(u: u32) -> Weight;
         fn withdraw_stake(u: u32) -> Weight;
-        fn stake_using_account_id(u: u32) -> Weight;
-        fn stake_extra(u: u32) -> Weight;
     }
 
     /// Transaction input
@@ -845,8 +846,12 @@ pub mod pallet {
                     log::debug!("inserting to LockedUtxos {:?} as key {:?}", output, hash);
 
                     let (mut num_of_utxos, mut total) = <StakingCount<T>>::get(&controller_pubkey).ok_or("cannot find the public key inside the stakingcount.")?;
-                    total += output.value;
-                    num_of_utxos +=1;
+
+                    // update the total locked utxo values
+                    total = total.saturating_add(output.value);
+
+                    // increase the number of utxos being locked.
+                    num_of_utxos = num_of_utxos.saturating_add(1);
 
                     <LockedUtxos<T>>::insert(hash, Some(output));
                     <StakingCount<T>>::insert(controller_pubkey,Some((num_of_utxos, total)));
@@ -1093,34 +1098,6 @@ pub mod pallet {
             staking::withdraw::<T>(controller_pubkey,outpoints)?;
             Ok(().into())
         }
-
-        /// TODO: This does not work yet, because of the sign() thing
-        #[pallet::weight(T::WeightInfo::stake_using_account_id(1 as u32))]
-        pub fn stake_using_account_id(
-            origin: OriginFor<T>,
-            stash_account:T::AccountId,
-            session_key:Vec<u8>,
-            outpoint: H256,
-            stake_value:Value
-        ) -> DispatchResultWithPostInfo {
-            let signer = ensure_signed(origin)?;
-            staking::calls::stake::<T>(signer,stash_account,session_key,outpoint,stake_value)?;
-
-            Ok(().into())
-        }
-
-        /// TODO: This does not work yet, because of the sign() thing
-        #[pallet::weight(T::WeightInfo::stake_extra(1 as u32))]
-        pub fn stake_extra(
-            origin: OriginFor<T>,
-            outpoint: H256,
-            stake_value:Value
-        ) -> DispatchResultWithPostInfo {
-            let controller = ensure_signed(origin)?;
-            staking::calls::stake_extra::<T>(controller,outpoint,stake_value)?;
-
-            Ok(().into())
-        }
     }
 
     #[pallet::genesis_config]
@@ -1154,6 +1131,7 @@ pub mod pallet {
             <BlockAuthorRewardAmount<T>>::put(self.initial_reward_amount);
 
             self.genesis_utxos.iter().cloned().enumerate().for_each(|(index,u)| {
+                // added the index and the `genesis` on the hashing, to indicate that these utxos are from the beginning of the chain.
                 UtxoStore::<T>::insert(BlakeTwo256::hash_of(&(&u, index as u64, "genesis")), Some(u));
             });
 
@@ -1161,6 +1139,8 @@ pub mod pallet {
                 if let Destination::Stake { stash_pubkey:_, controller_pubkey, session_key:_ } =  &u.destination {
                     <StakingCount<T>>::insert(controller_pubkey.clone(),Some((1, u.value)));
                 }
+
+                // added the index and the `genesis` on the hashing, to indicate that these utxos are from the beginning of the chain.
                 LockedUtxos::<T>::insert(BlakeTwo256::hash_of(&(&u, index as u64, "genesis")), Some(u));
             });
         }

@@ -301,3 +301,5 @@ fn reward_reduced() {
         assert_eq!(BlockAuthorRewardAmount::<Test>::get(), reward_amount);
     })
 }
+
+//TODO: add more test scenarios

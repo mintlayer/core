@@ -10,7 +10,7 @@ use sp_core::H256;
 use sp_core::{sr25519, Pair, Public};
 use sp_finality_grandpa::AuthorityId as GrandpaId;
 use sp_runtime::traits::{IdentifyAccount, Verify};
-use node_template_runtime::pallet_utxo::MLT_UNIT;
+use node_template_runtime::pallet_utxo::{MLT_UNIT, MLT_ORIG_SUPPLY};
 
 // The URL for the telemetry server.
 // const STAGING_TELEMETRY_URL: &str = "wss://telemetry.polkadot.io/submit/";
@@ -188,7 +188,7 @@ fn testnet_genesis(
             let x_stash_h256= H256::from(x.stash.clone());
 
             let num_of_utxos = 5;
-            let value = (400_000_000 * MLT_UNIT) / num_of_utxos;
+            let value = MLT_ORIG_SUPPLY / num_of_utxos;
 
             let mut initial_utxos = vec![];
 
@@ -240,7 +240,7 @@ fn testnet_genesis(
             changes_trie_config: Default::default(),
         },
         balances: BalancesConfig {
-            // Configure endowed accounts with initial balance of 1 << 60.
+            // Configure endowed accounts with initial balance of 1 << 80.
             balances: endowed_accounts.iter().cloned().map(|k| (k, ENDOWMENT)).collect(),
         },
         // This has been initialized from the session config
@@ -257,7 +257,7 @@ fn testnet_genesis(
             // Currently forcing only 1 INITIAL AUTHORITY (Alice), hence only 1 locked-genesis.
             // This means only ALICE has staked her utxo.
             locked_utxos: vec![locked_genesis],
-            extra_mlt_coins: 200_000  * MLT_UNIT,
+            extra_mlt_coins: 200_000_000  * MLT_UNIT,
             initial_reward_amount: 100 * MLT_UNIT,
             _marker: Default::default(),
         },
@@ -268,11 +268,13 @@ fn testnet_genesis(
             keys: session_keys
         },
         staking: StakingConfig {
-            validator_count: initial_authorities.len() as u32 + 5u32, // provide 5 more slots
+            // provide 5 more slots. TODO: what's the max slots?
+            validator_count: initial_authorities.len() as u32 + 5u32,
+            // TODO: what's the actual count?
             // The # of validators set should be the same number of locked_utxos specified in UtxoConfig.
             minimum_validator_count: initial_authorities.len() as u32,
             invulnerables: initial_authorities.iter().map(|x| x.controller_account_id()).collect(),
-            slash_reward_fraction: sp_runtime::Perbill::from_percent(10),
+            slash_reward_fraction: sp_runtime::Perbill::from_percent(0), // nothing, since we're not using this at all.
             stakers,
             .. Default::default()
         }

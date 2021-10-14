@@ -25,6 +25,9 @@ use frame_support::traits::ValidatorSet;
 pub struct FindAccountFromAuthorIndex<T,Inner,Validators>(core::marker::PhantomData<(T,Inner,Validators)>);
 
 
+/// The inner `FindAuthor` will point to the BlockAuthor's index position, given the digest.
+/// That index position points to an index of a list of validators, which this pallet doesn't have.
+/// The `Validators` is a list that can be used to retrieve the account Id.
 impl<T: Config, Inner: FindAuthor<u32>, Validators:ValidatorSet<T::AccountId>>
 FindAuthor<Validators::ValidatorId> for FindAccountFromAuthorIndex<T,Inner, Validators>
 {
