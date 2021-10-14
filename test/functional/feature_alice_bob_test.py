@@ -62,12 +62,12 @@ class ExampleTest(MintlayerTestFramework):
         bob = Keypair.create_from_uri('//Bob')
 
         # fetch the genesis utxo from storage
-        utxos = [h for (h, o) in client.utxos_for(alice)]
+        utxos = list(client.utxos_for(alice))
 
-        tx = utxo.Transaction(
+        tx1 = utxo.Transaction(
             client,
             inputs=[
-                utxo.Input(utxos[0]),
+                utxo.Input(utxos[0][0]),
             ],
             outputs=[
                 utxo.Output(
@@ -76,13 +76,13 @@ class ExampleTest(MintlayerTestFramework):
                     destination=utxo.DestPubkey(bob.public_key)
                 ),
             ]
-        ).sign(alice)
-        client.submit(alice, tx)
+        ).sign(alice, [utxos[0][1]])
+        client.submit(alice, tx1)
 
-        tx = utxo.Transaction(
+        tx2 = utxo.Transaction(
             client,
             inputs=[
-                utxo.Input(tx.outpoint(0)),
+                utxo.Input(tx1.outpoint(0)),
             ],
             outputs=[
                 utxo.Output(
@@ -96,8 +96,8 @@ class ExampleTest(MintlayerTestFramework):
                     destination=utxo.DestPubkey(bob.public_key)
                 ),
             ]
-        ).sign(bob)
-        client.submit(bob, tx)
+        ).sign(bob, tx1.outputs)
+        client.submit(bob, tx2)
 
 
 if __name__ == '__main__':
