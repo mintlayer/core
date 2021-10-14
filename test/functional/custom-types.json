@@ -1,0 +1,67 @@
+{
+    "runtime_id": 2,
+    "types": {
+        "DestinationCreatePP": {
+            "type": "struct",
+            "type_mapping": [
+                [ "code", "Vec<u8>" ],
+                [ "data", "Vec<u8>" ]
+            ]
+        },
+        "DestinationCallPP": {
+            "type": "struct",
+            "type_mapping": [
+                [ "dest_account", "AccountId" ],
+                [ "input_data", "Vec<u8>" ]
+            ]
+        },
+        "Destination": {
+            "type": "enum",
+            "type_mapping": [
+                [ "Pubkey", "H256" ],
+                [ "CreatePP", "DestinationCreatePP" ],
+                [ "CallPP", "DestinationCallPP" ],
+                [ "ScriptHash", "H256" ],
+                [ "PubkeyHash", "Vec<u8>" ]
+            ]
+        },
+        "TransactionInput": {
+            "type": "struct",
+            "type_mapping": [
+                [ "outpoint", "H256" ],
+                [ "lock", "Vec<u8>" ],
+                [ "witness", "Vec<u8>" ]
+            ]
+        },
+        "TransactionOutput": {
+            "type": "struct",
+            "type_mapping": [
+                [ "value", "Value" ],
+                [ "header", "TXOutputHeader"],
+                [ "destination", "Destination" ]
+            ]
+        },
+        "Transaction": {
+            "type": "struct",
+            "type_mapping": [
+                [ "inputs", "Vec<TransactionInput>" ],
+                [ "outputs", "Vec<TransactionOutput<AccountId>>" ]
+            ]
+        },
+        "Outpoint": {
+            "type": "struct",
+            "type_mapping": [
+                [ "transaction", "Transaction" ],
+                [ "index", "u64" ]
+            ]
+        },
+        "TransactionOutputFor": "TransactionOutput<AccountId>",
+        "TransactionFor": "Transaction",
+        "Address": "MultiAddress",
+        "Value": "u128",
+        "TXOutputHeader": "u128",
+        "header": "TXOutputHeader",
+        "Public": "H256"
+    },
+    "versioning": [ ]
+}
