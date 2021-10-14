@@ -18,7 +18,7 @@
 //! Chain script interpreter
 
 use crate::{
-    context::Context,
+    context::{Context, ParseResult},
     error::Error,
     opcodes,
     script::{self, Instruction, Script},
@@ -205,6 +205,7 @@ pub fn run_pushdata<'a, Ctx: Context>(ctx: &Ctx, script: &'a Script) -> crate::R
                 }
             }
         }
+        ensure!(stack.len() <= Ctx::MAX_STACK_ELEMENTS, Error::StackSize);
     }
 
     Ok(stack)
@@ -224,6 +225,8 @@ pub fn run_script<'a, Ctx: Context>(
 
     let mut instr_iter = script.instructions_iter(ctx.enforce_minimal_push());
     let mut subscript: &[u8] = instr_iter.subscript();
+    let mut cur_instr_num = 0u32;
+    let mut codesep_idx = u32::MAX;
     let mut exec_stack = ExecStack::default();
     let mut alt_stack = Stack::<'a>::default();
 
@@ -264,6 +267,7 @@ pub fn run_script<'a, Ctx: Context>(
                                 core::iter::once(sig.as_ref()),
                                 core::iter::once(pubkey.as_ref()),
                                 subscript,
+                                codesep_idx,
                             )?;
                             stack.push_bool(result);
                         }
@@ -285,13 +289,11 @@ pub fn run_script<'a, Ctx: Context>(
                             let sigs = stack.top_slice(sig_range)?.iter().map(AsRef::as_ref);
 
                             // Verify
-                            let result = check_multisig(ctx, sigs, keys, subscript)?;
+                            let result = check_multisig(ctx, sigs, keys, subscript, codesep_idx)?;
 
                             // Clean up stack, ensure! dummy 0.
                             stack.drop(nsig + nkey + 1)?;
-                            if !stack.pop()?.is_empty() {
-                                return Err(Error::NullDummy);
-                            }
+                            ensure!(stack.pop()?.is_empty(), Error::NullDummy);
                             stack.push_bool(result);
                         }
                     }
@@ -303,6 +305,7 @@ pub fn run_script<'a, Ctx: Context>(
                 opcodes::Class::ControlFlow(cf) => match cf {
                     opcodes::ControlFlow::OP_CODESEPARATOR => {
                         subscript = instr_iter.subscript();
+                        codesep_idx = cur_instr_num;
                     }
                     opcodes::ControlFlow::OP_IF | opcodes::ControlFlow::OP_NOTIF => {
                         let cond = executing && {
@@ -330,6 +333,9 @@ pub fn run_script<'a, Ctx: Context>(
                 _ => (),
             },
         }
+
+        ensure!((stack.len() + alt_stack.len()) <= Ctx::MAX_STACK_ELEMENTS, Error::StackSize);
+        cur_instr_num = cur_instr_num.saturating_add(1);
     }
 
     // Check OP_IF/OP_NOTIF has been closed properly wiht OP_ENDIF.
@@ -347,11 +353,10 @@ fn check_multisig<'a, Ctx: Context>(
     mut sigs: impl Iterator<Item = &'a [u8]> + ExactSizeIterator,
     mut pubkeys: impl Iterator<Item = &'a [u8]> + ExactSizeIterator,
     subscript: &[u8],
+    codesep_idx: u32,
 ) -> crate::Result<bool> {
     // Check each signature has its corresponding pubkey.
     while let Some(sig) = sigs.next() {
-        let sig = ctx.parse_signature(sig).ok_or(Error::SignatureFormat)?;
-        // Find pubkey matching this signature.
         loop {
             if pubkeys.len() < sigs.len() + 1 {
                 // Not enough pubkeys to cover all the remaining signatures.
@@ -359,9 +364,19 @@ fn check_multisig<'a, Ctx: Context>(
                 // signature being processed that has just been taken out of the iterator.
                 return Ok(false);
             }
-            let pubkey = ctx.parse_pubkey(pubkeys.next().unwrap()).ok_or(Error::PubkeyFormat)?;
-            if ctx.verify_signature(&sig, &pubkey, subscript) {
-                break;
+            match ctx.parse_pubkey(pubkeys.next().unwrap()) {
+                // error -> quit immediately
+                ParseResult::Err => return Err(Error::PubkeyFormat),
+                // unrecognized pubkey type -> accept and continue
+                ParseResult::Reserved => break,
+                // parsed a pubkey -> check signature
+                ParseResult::Ok(pubkey) => {
+                    if let Some(sigdata) = ctx.parse_signature(pubkey, sig) {
+                        if ctx.verify_signature(&sigdata, subscript, codesep_idx) {
+                            break;
+                        }
+                    }
+                }
             }
         }
     }
@@ -622,6 +637,7 @@ mod test {
                 sigs.iter().map(AsRef::as_ref),
                 keys.iter().map(AsRef::as_ref),
                 &[],
+                0,
             );
             assert_eq!(result, expected);
         };
@@ -806,6 +822,20 @@ mod test {
             prop_assert!(stack0.is_ok());
             prop_assert_eq!(&stack0, &stack1);
             prop_assert_eq!(stack0.unwrap().0, data);
+        }
+
+        #[test]
+        fn prop_stack_limit(use_alt in gen_vec(prop::bool::ANY, 499)) {
+            let mut builder = Builder::new().push_int(0).push_int(0).push_int(0);
+            for alt in use_alt {
+                builder = builder.push_opcode(opcodes::all::OP_2DUP);
+                if alt {
+                    builder = builder.push_opcode(opcodes::all::OP_TOALTSTACK);
+                }
+            }
+            let script = builder.into_script();
+            let result = run_script(&TestContext::default(), &script, vec![].into());
+            prop_assert_eq!(result, Err(Error::StackSize));
         }
     }
 }

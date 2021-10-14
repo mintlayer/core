@@ -43,11 +43,12 @@ pub type Block = frame_system::mocking::MockBlock<Test>;
 pub const ALICE_PHRASE: &str =
     "news slush supreme milk chapter athlete soap sausage put clutch what kitten";
 
-pub fn genesis_utxo() -> [u8; 32] {
+pub fn genesis_utxo() -> (TransactionOutput<H256>, H256) {
     let keystore = KeyStore::new();
     let alice_pub_key = create_pub_key(&keystore, ALICE_PHRASE);
-    let output = TransactionOutput::<u64>::new_pubkey(100, H256::from(alice_pub_key));
-    BlakeTwo256::hash_of(&output).into()
+    let output = TransactionOutput::<H256>::new_pubkey(100, H256::from(alice_pub_key));
+    let hash = BlakeTwo256::hash_of(&output);
+    (output, hash)
 }
 
 // Dummy programmable pool for testing
