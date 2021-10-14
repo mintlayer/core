@@ -5,8 +5,6 @@ import scalecodec
 import os
 
 """ Client. A thin wrapper over SubstrateInterface """
-
-
 class Client:
     def __init__(self, url="ws://127.0.0.1", port=9944):
         source_dir = os.path.dirname(os.path.abspath(__file__))
@@ -20,13 +18,20 @@ class Client:
             type_registry=custom_type_registry
         )
 
-    """ SCALE-encode given object """
+    """ SCALE-encode given object in JSON format """
+    def encode_obj(self, ty, obj):
+        return self.substrate.encode_scale(ty, obj)
 
+    """ SCALE-encode given object """
     def encode(self, obj):
-        return self.substrate.encode_scale(obj.type_string(), obj.json())
+        return self.encode_obj(obj.type_string(), obj.json())
+
+    """ Hash of a SCALE-encoded version of given JSON object """
+    def hash_of(self, ty, obj):
+        encoded = self.encode_obj(ty, obj).data
+        return '0x' + str(substrateinterface.utils.hasher.blake2_256(encoded))
 
     """ Query the node for the list of utxos """
-
     def utxos(self):
         query = self.substrate.query_map(
             module="Utxo",
@@ -37,28 +42,28 @@ class Client:
         return ((h, Output.load(o.value)) for (h, o) in query)
 
     """ Get UTXOs for given key """
-
     def utxos_for(self, keypair):
         matching = lambda e: e[1].destination.get_pubkey() == keypair.public_key
         return filter(matching, self.utxos())
 
     """ Submit a transaction onto the blockchain """
-
     def submit(self, keypair, tx):
         call = self.substrate.compose_call(
-            call_module='Utxo',
-            call_function='spend',
-            call_params={'tx': tx.json()},
+            call_module = 'Utxo',
+            call_function = 'spend',
+            call_params = { 'tx': tx.json() },
         )
         extrinsic = self.substrate.create_signed_extrinsic(call=call, keypair=keypair)
-        return extrinsic
+        print("extrinsic submitted...")
 
-    def get_receipt(self, extrinsic, wait_for_inclusion):
-        receipt = self.substrate.submit_extrinsic(extrinsic, wait_for_inclusion=wait_for_inclusion)
-        return receipt.extrinsic_hash, receipt.block_hash
+        try:
+            receipt = self.substrate.submit_extrinsic(extrinsic, wait_for_inclusion=True)
+            print("Extrinsic '{}' sent and included in block '{}'".format(receipt.extrinsic_hash, receipt.block_hash))
+            return (receipt.extrinsic_hash, receipt.block_hash)
+        except SubstrateRequestException as e:
+            print("Failed to send: {}".format(e))
 
-
-class Destination:
+class Destination():
     @staticmethod
     def load(obj):
         if 'Pubkey' in obj:
@@ -75,7 +80,7 @@ class Destination:
     def get_pubkey(self):
         return None
 
-
+# Only Schnorr pubkey type supported now.
 class DestPubkey(Destination):
     def __init__(self, pubkey):
         self.pubkey = pubkey
@@ -85,11 +90,10 @@ class DestPubkey(Destination):
         return DestPubkey(obj)
 
     def json(self):
-        return {'Pubkey': self.pubkey}
+        return { 'Pubkey': self.pubkey }
 
     def get_pubkey(self):
         return self.pubkey
-
 
 class DestCreatePP(Destination):
     def __init__(self, code, data):
@@ -104,8 +108,7 @@ class DestCreatePP(Destination):
         return DestCreatePP(obj['code'], obj['data'])
 
     def json(self):
-        return {'CreatePP': {'code': self.code, 'data': self.data}}
-
+        return { 'CreatePP': { 'code': self.code, 'data': self.data } }
 
 class DestCallPP(Destination):
     def __init__(self, dest_account, input_data):
@@ -117,8 +120,7 @@ class DestCallPP(Destination):
         return DestCallPP(obj['dest_account'], obj['input_data'])
 
     def json(self):
-        return {'CallPP': {'dest_account': self.acct, 'input_data': self.data}}
-
+        return { 'CallPP': { 'dest_account': self.acct, 'input_data': self.data } }
 
 class Output():
     def __init__(self, value, header, destination):
@@ -143,7 +145,7 @@ class Output():
 
 
 class Input():
-    def __init__(self, outpoint, lock='0x', witness='0x'):
+    def __init__(self, outpoint, lock = '0x', witness = '0x'):
         self.outpoint = outpoint
         self.lock = lock
         self.witness = witness
@@ -158,7 +160,6 @@ class Input():
             'witness': self.witness,
         }
 
-
 class Transaction():
     def __init__(self, client, inputs, outputs):
         self.client = client
@@ -170,29 +171,38 @@ class Transaction():
 
     def json(self):
         return {
-            'inputs': [i.json() for i in self.inputs],
-            'outputs': [o.json() for o in self.outputs],
+            'inputs': [ i.json() for i in self.inputs ],
+            'outputs': [ o.json() for o in self.outputs ],
         }
 
     """ Get data to be signed for this transaction """
+    def signature_data(self, spent_utxos, idx):
+        # Create the signature message. Only the default sighash supported for now.
+        utxos_hash = self.client.hash_of('Vec<TransactionOutput>',
+                [ u.json() for u in spent_utxos ])
+        outpoints_hash = self.client.hash_of('Vec<H256>',
+                [ str(i.outpoint) for i in self.inputs ])
+        outputs_hash = self.client.hash_of('Vec<TransactionOutput>',
+                [ o.json() for o in self.outputs ])
 
-    def signature_data(self):
-        # Create another transaction with no witness fields in inputs.
-        inputs = [Input(i.outpoint, i.lock) for i in self.inputs]
-        tx = Transaction(self.client, inputs, self.outputs)
-        return self.client.encode(tx)
+        sigdata = {
+            'sighash': 0,
+            'inputs': { 'SpecifiedPay': (outpoints_hash, utxos_hash, idx) },
+            'outputs': { 'All': outputs_hash },
+            'codesep_pos': 0xffffffff
+        }
+        return self.client.encode_obj('SignatureData', sigdata)
 
     """ Sigh the transaction inputs listed in input_idxs (all if missing) """
-
-    def sign(self, keypair, input_idxs=None):
+    def sign(self, keypair, spent_utxos, input_idxs = None):
+        assert len(self.inputs) == len(spent_utxos), "1 utxo per input required"
         input_idxs = input_idxs or range(len(self.inputs))
-        signature = keypair.sign(self.signature_data())
         for idx in input_idxs:
+            signature = keypair.sign(self.signature_data(spent_utxos, idx))
             self.inputs[idx].witness = signature
         return self
 
     """ Get UTXO ID of n-th output of this transaction """
-
     def outpoint(self, n):
         outpt = {
             'transaction': self.json(),
