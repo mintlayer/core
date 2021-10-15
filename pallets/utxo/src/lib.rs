@@ -81,9 +81,7 @@ pub mod pallet {
     pub type Value = u128;
     pub type String = Vec<u8>;
     pub const MLT_UNIT: Value = 1_000 * 100_000_000;
-    // TODO: I don't know where this should reside exactly.
-    /// The initial supply of mlt coins
-    pub const MLT_ORIG_SUPPLY: Value = 400_000_000 * MLT_UNIT;
+
 
     pub struct Mlt(Value);
     impl Mlt {

@@ -140,6 +140,10 @@ pub const MILLICENTS: Balance = 1_000_000_000;
 pub const CENTS: Balance = 1_000 * MILLICENTS;
 pub const DOLLARS: Balance = 100 * CENTS;
 
+/// The initial supply of mlt coins
+pub const MLT_ORIG_SUPPLY: Balance = 400_000_000 * MLT_UNIT;
+pub const MINIMUM_STAKE: Balance = 40_000 * MLT_UNIT;
+
 const fn deposit(items: u32, bytes: u32) -> Balance {
     items as Balance * 15 * CENTS + (bytes as Balance) * 6 * CENTS
 }
@@ -265,7 +269,7 @@ impl pallet_timestamp::Config for Runtime {
 }
 
 parameter_types! {
-    pub const ExistentialDeposit: u128 = 40_000;
+    pub const ExistentialDeposit: u128 = MINIMUM_STAKE;
     pub const MaxLocks: u32 = 50;
 }
 
@@ -305,7 +309,7 @@ impl pallet_template::Config for Runtime {
 }
 
 parameter_types!{
-    pub const MinimumStake: u128 = 40_000 * MLT_UNIT;
+    pub const MinimumStake: u128 = MINIMUM_STAKE;
     pub const StakeWithdrawalFee: u128 =  1 * MLT_UNIT;
     pub const RewardReductionPeriod: BlockNumber = MINUTES * 60 * 24 * 365;
 	pub const RewardReductionFraction: Percent = Percent::from_percent(25);
@@ -393,6 +397,7 @@ impl pallet_contracts::Config for Runtime {
 
 parameter_types! {
     pub const DisabledValidatorsThreshold: Perbill = Perbill::from_percent(17);
+    //TODO how many blocks should it be, per period?
     pub const Period: u32 = 2;
     pub const Offset: u32 = 0;
 }
@@ -423,10 +428,16 @@ impl onchain::Config for Runtime {
 }
 
 parameter_types! {
+    // TODO: how many sessions is in 1 era?
+    // Note: an era is when the change of validator set happens.
     pub const SessionsPerEra: sp_staking::SessionIndex = 2;
+
+    // Note: upon unlocking funds, it doesn't mean withdrawal is activated.
+    // TODO: How long should the stake stay "bonded" or "locked", until it's allowed to withdraw?
     pub const BondingDuration: pallet_staking::EraIndex = 2;
-    pub const SlashDeferDuration: pallet_staking::EraIndex = 1;
-    pub const MaxNominatorRewardedPerValidator: u32 = 5;
+
+    pub const SlashDeferDuration: pallet_staking::EraIndex = 0;
+    pub const MaxNominatorRewardedPerValidator: u32 = 0;
     pub OffchainRepeat: BlockNumber = 5;
 }
 
@@ -436,7 +447,7 @@ impl pallet_staking::Config for Runtime {
     type CurrencyToVote = U128CurrencyToVote;
     type ElectionProvider = onchain::OnChainSequentialPhragmen<Self>;
     type GenesisElectionProvider = Self::ElectionProvider;
-    const MAX_NOMINATIONS: u32 = 5;
+    const MAX_NOMINATIONS: u32 = 0;
     type RewardRemainder = (); // Treasury, or something similar
     type Event = Event;
     type Slash = (); // Treasury, or something similar
