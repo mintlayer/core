@@ -7,7 +7,7 @@ We cannot sign transactions on the node side, all transactions must be signed on
 Each transaction output must carry a `data` field. This field is the designation of the purpose of the transaction, we must highlight the following at the moment:
 
 * Transfer Tokens or NFT
-* Token issueance
+* Token Issuance
 * Burning token
 * NFT creation
 
@@ -28,9 +28,9 @@ And there is a requirement for testing, each version must be covered with tests 
 
     #[derive(Encode, Decode...)]
     pub enum TxData {
-        // TransferToken data to another user. If it is a token, then the token data must also be transferred to the recipient. 
+        // TokenTransfer data to another user. If it is a token, then the token data must also be transferred to the recipient. 
         #[codec(index = 1)]
-        TransferTokenV1(..),
+        TokenTransferV1(..),
         // A new token creation
         #[codec(index = 2)]
         TokenIssuanceV1(..),
@@ -41,22 +41,22 @@ And there is a requirement for testing, each version must be covered with tests 
         #[codec(index = 4)]
         NftMintV1(..),
         ...
-        // We do not change the data in TransferTokenV1, we just create a new version 
+        // We do not change the data in TokenTransferV1, we just create a new version 
         #[codec(index = 5)]
-        TransferTokenV2(..),
+        TokenTransferV2(..),
     }
 ```
 
 ## Detailed description of Enum TxData fields
 
-### TransferTokenV1
+### TokenTransferV1
 ---
 
 Transfer funds to another person in a given UTXO. To send MLT we will use `TokenID :: MLT`, which is actually zero. If the `token_id` is equal to the ID of the MLS-01 token, then the amount of token is transferred to the recipient. The commission is taken only in MLT. If the `token_id` is equal to the id of any NFT, then the data of this NFT should be transferred to the recipient without changing the creator field. The UTXO model itself allows you to determine the owner of the NFT. 
 
 ```rust
     pub enum TxData {
-        TransferTokenV1{
+        TokenTransferV1{
             token_id: TokenID,
             amount: Value,
         }
@@ -70,10 +70,10 @@ Transfer funds to another person in a given UTXO. To send MLT we will use `Token
 When issuing a new token, we specify the data for creating a new token in the transaction input, where the `token_id` is: 
 
 ```rust
-    let token_id = hash(&(inputs[0].hash, inputs[0].index));
+    let token_id = BlakeTwo256::hash_of(&(&tx.inputs[0], &tx.inputs[0].index));
 ```
 
-`token_ticker` - might be not unique. Should be limited to 10 chars. In fact, it's an ASCII string.
+`token_ticker` - might be not unique. Should be limited to 5 chars. In fact, it's an ASCII string.
 
 ```rust
     pub enum TxData {
@@ -93,12 +93,11 @@ See the `metada_URI` format below.
 ### TokenBurnV1
 ---
 
-Burning a token, as an input is used by UTXO containing tokens, and as an output of BurnV1, in this case, you can burn any number of tokens. After this operation, you can use UTXO for the remaining amount of tokens. 
-
+A token burning - as an input is used by UTXO that containing tokens. As an output, the data field should contain the TokenBurnV1 arm. If the amount in burning the output is less than in the input then should exist at least one output for returning the funds change. In this case, you can burn any existing number of tokens. After this operation, you can use UTXO for the remaining amount of tokens.
 ```rust
     type String = Vec<u8>;
     pub enum TxData {
-        BurnV1{
+        TokenBurnV1{
             token_id: TokenID,
             amount_to_burn: Value,
         }
@@ -111,14 +110,14 @@ Burning a token, as an input is used by UTXO containing tokens, and as an output
 When minting a new NFT token, we specify the data for creating a new token in the transaction input, where the `token_id` is: 
 
 ```rust
-    let token_id = hash(&(inputs[0].hash, inputs[0].index));
+    let token_id = BlakeTwo256::hash_of(&(&tx.inputs[0], &tx.inputs[0].index));
 ```
 
 For the seek a creation UTXO, we should make a new Storage where:
 * Key - token_id
 * Value - hash of UTXO
 
-It allows us to find the information about the `creator`, and it won't be changed. It is suitable for the MLS-01 tokens too.
+It allows us to find the whole information about the NFT including `creator`, and it won't be changed. It is suitable for the MLS-01 tokens too.
 
 The `data_hash` field is a hash of external data, which should be taken from the digital data for which the NFT is being created. This field should also not be changed when sent to a new owner.
 
@@ -168,8 +167,8 @@ Anyway, the correctness of decoded data we should check additionally.
 
 Adding a new version of data is in fact adding a new field to the enum, if the names match, add the version number at the end, for example:
 
-* TransferTokenV1
-* TransferTokenV2
+* TokenTransferV1
+* TokenTransferV2
 * etc
 
 The order of the fields is not important, but each field must be marked with a unique codec index - `# [codec (index = your index)]`. Example:
@@ -204,8 +203,8 @@ Transaction data will be correctly read and, depending on the blockchain logic, 
 
 ```rust
 match data {
-    TransferTokenV1(...) => pallet::transfer_v1(...),
-    TransferTokenV2(...) => pallet::transfer_v2(...),
+    TokenTransferV1(...) => pallet::transfer_v1(...),
+    TokenTransferV2(...) => pallet::transfer_v2(...),
 }
 ```
 
