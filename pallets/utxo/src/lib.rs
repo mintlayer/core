@@ -205,7 +205,7 @@ pub mod pallet {
     ///   * `witness` is a script that generates the input to the `lock` script
     #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
     #[derive(
-    Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, RuntimeDebug, Hash, Default,
+        Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, RuntimeDebug, Hash, Default,
     )]
     pub struct TransactionInput {
         /// The output being spent
@@ -1182,8 +1182,8 @@ use sp_runtime::sp_std::vec;
 use utxo_api::UtxoApi;
 
 impl<T: Config> UtxoApi for Pallet<T>
-    where
-        T::AccountId: UncheckedFrom<T::Hash> + AsRef<[u8]>,
+where
+    T::AccountId: UncheckedFrom<T::Hash> + AsRef<[u8]>,
 {
     type AccountId = T::AccountId;
 

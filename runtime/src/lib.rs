@@ -441,7 +441,9 @@ parameter_types! {
     pub OffchainRepeat: BlockNumber = 5;
 }
 
+// The actual pallet with the logic for staking.
 impl pallet_staking::Config for Runtime {
+    // uses pallet-balances as its method to charge fees, to bond stakes, and to do rewards.
     type Currency = Balances;
     type UnixTime = Timestamp;
     type CurrencyToVote = U128CurrencyToVote;
@@ -467,6 +469,8 @@ parameter_types! {
     pub const UncleGenerations: BlockNumber = 4;
 }
 
+// This config is to determine the block author.
+// Helpful when rewarding block authors.
 impl pallet_authorship::Config for Runtime {
     type FindAuthor = pallet_utxo::FindAccountFromAuthorIndex<Self, Aura, Session>;
     type UncleGenerations = UncleGenerations;
