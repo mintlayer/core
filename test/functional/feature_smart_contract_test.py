@@ -109,10 +109,10 @@ class ExampleTest(MintlayerTestFramework):
 
         # read the value of the flipper contract
         result = contractInstance.read(alice, "get")
-        print('Current value of "get":', result.contract_result_data)
+        assert_equal(result.contract_result_data.value, False)
 
         msg_data = contractInstance.generate_message_data("flip", {})
-        print(ss58, acc_id, msg_data)
+        self.log.info("Contract msg_data: {}, {}, {}".format(ss58, acc_id, msg_data))
 
         tx1 = utxo.Transaction(
             client,
@@ -138,7 +138,7 @@ class ExampleTest(MintlayerTestFramework):
         (ext_hash, blk_hash) = client.submit(alice, tx1)
 
         result = contractInstance.read(alice, "get")
-        print('Current value of "get":', result.contract_result_data)
+        assert_equal(result.contract_result_data.value, True)
 
 
 if __name__ == '__main__':
