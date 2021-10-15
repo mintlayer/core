@@ -35,8 +35,8 @@ fn tx_input_gen_no_signature() -> (TransactionOutput<H256>, TransactionInput) {
 }
 
 fn execute_with_alice<F>(mut execute: F)
-    where
-        F: FnMut(Public),
+where
+    F: FnMut(Public),
 {
     alice_test_ext().execute_with(|| {
         let alice_pub_key = crypto::sr25519_public_keys(SR25519)[0];
@@ -81,7 +81,7 @@ fn test_script_preimage() {
             inputs: vec![input0],
             outputs: vec![TransactionOutput::new_script_hash(50, script_hash)],
         }
-            .sign_unchecked(&[utxo0], 0, &alice_pub_key);
+        .sign_unchecked(&[utxo0], 0, &alice_pub_key);
 
         let tx2 = Transaction {
             inputs: vec![TransactionInput::new_script(tx1.outpoint(0), script, witness_script)],
@@ -105,7 +105,7 @@ fn test_unchecked_2nd_output() {
                 TransactionOutput::new_pubkey(50, H256::from(alice_pub_key)),
             ],
         }
-            .sign_unchecked(&[utxo0], 0, &alice_pub_key);
+        .sign_unchecked(&[utxo0], 0, &alice_pub_key);
 
         // Calculate output 1 hash.
         let utxo1_hash = tx1.outpoint(1);
@@ -128,7 +128,7 @@ fn test_simple_tx() {
             inputs: vec![input0],
             outputs: vec![TransactionOutput::new_pubkey(50, H256::from(alice_pub_key))],
         }
-            .sign_unchecked(&[utxo0], 0, &alice_pub_key);
+        .sign_unchecked(&[utxo0], 0, &alice_pub_key);
 
         let new_utxo_hash = tx.outpoint(0);
 
@@ -192,8 +192,8 @@ fn attack_by_double_counting_input() {
             inputs: vec![input0.clone(), input0],
             outputs: vec![TransactionOutput::new_pubkey(100, H256::from(alice_pub_key))],
         }
-            .sign_unchecked(&utxos[..], 0, &alice_pub_key)
-            .sign_unchecked(&utxos[..], 1, &alice_pub_key);
+        .sign_unchecked(&utxos[..], 0, &alice_pub_key)
+        .sign_unchecked(&utxos[..], 1, &alice_pub_key);
 
         assert_err!(
             Utxo::spend(Origin::signed(H256::zero()), tx),
@@ -228,7 +228,7 @@ fn attack_by_permanently_sinking_outputs() {
             //A 0 value output burns this output forever!
             outputs: vec![TransactionOutput::new_pubkey(0, H256::from(alice_pub_key))],
         }
-            .sign_unchecked(&[utxo0], 0, &alice_pub_key);
+        .sign_unchecked(&[utxo0], 0, &alice_pub_key);
 
         assert_noop!(
             Utxo::spend(Origin::signed(H256::zero()), tx),
@@ -249,7 +249,7 @@ fn attack_by_overflowing_value() {
                 TransactionOutput::new_pubkey(10, H256::from(alice_pub_key)),
             ],
         }
-            .sign_unchecked(&[utxo0], 0, &alice_pub_key);
+        .sign_unchecked(&[utxo0], 0, &alice_pub_key);
 
         assert_err!(
             Utxo::spend(Origin::signed(H256::zero()), tx),
@@ -270,7 +270,7 @@ fn attack_by_overspending() {
                 TransactionOutput::new_pubkey(2, H256::from(alice_pub_key)),
             ],
         }
-            .sign_unchecked(&[utxo0], 0, &alice_pub_key);
+        .sign_unchecked(&[utxo0], 0, &alice_pub_key);
 
         assert_noop!(
             Utxo::spend(Origin::signed(H256::zero()), tx),
@@ -294,7 +294,7 @@ fn tx_from_alice_to_karl() {
                 TransactionOutput::new_pubkey(90, H256::from(alice_pub_key)),
             ],
         }
-            .sign_unchecked(&[utxo0], 0, &alice_pub_key);
+        .sign_unchecked(&[utxo0], 0, &alice_pub_key);
 
         assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx.clone()));
         let new_utxo_hash = tx.outpoint(1);
@@ -305,7 +305,7 @@ fn tx_from_alice_to_karl() {
             inputs: vec![TransactionInput::new_empty(new_utxo_hash)],
             outputs: vec![TransactionOutput::new_pubkey(90, H256::from(karl_pub_key))],
         }
-            .sign_unchecked(&[new_utxo], 0, &alice_pub_key);
+        .sign_unchecked(&[new_utxo], 0, &alice_pub_key);
 
         assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx));
     });
@@ -320,7 +320,7 @@ fn test_reward() {
             inputs: vec![input0],
             outputs: vec![TransactionOutput::new_pubkey(90, H256::from(alice_pub_key))],
         }
-            .sign_unchecked(&[utxo0], 0, &alice_pub_key);
+        .sign_unchecked(&[utxo0], 0, &alice_pub_key);
 
         assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx.clone()));
 
@@ -342,7 +342,7 @@ fn test_script() {
             inputs: vec![input0],
             outputs: vec![TransactionOutput::new_pubkey(90, H256::from(alice_pub_key))],
         }
-            .sign_unchecked(&[utxo0], 0, &alice_pub_key);
+        .sign_unchecked(&[utxo0], 0, &alice_pub_key);
 
         assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx));
     })
@@ -375,7 +375,7 @@ fn test_tokens() {
                 TransactionOutput::new_pubkey(80, H256::from(alice_pub_key)),
             ],
         }
-            .sign_unchecked(&[utxo0], 0, &alice_pub_key);
+        .sign_unchecked(&[utxo0], 0, &alice_pub_key);
         assert_ok!(Utxo::spend(Origin::signed(H256::zero()), first_tx.clone()));
 
         // Store a new TokenInstance to the Storage
@@ -400,8 +400,8 @@ fn test_tokens() {
             ],
             outputs: vec![TransactionOutput::new_token(token_id, 10, H256::from(karl_pub_key))],
         }
-            .sign_unchecked(&prev_utxos, 0, &alice_pub_key)
-            .sign_unchecked(&prev_utxos, 1, &alice_pub_key);
+        .sign_unchecked(&prev_utxos, 0, &alice_pub_key)
+        .sign_unchecked(&prev_utxos, 1, &alice_pub_key);
 
         assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx.clone()));
     });
@@ -418,7 +418,7 @@ fn attack_double_spend_by_tweaking_input() {
             inputs: vec![input0],
             outputs: vec![TransactionOutput::new_script_hash(50, drop_script_hash)],
         }
-            .sign_unchecked(&[utxo0], 0, &alice_pub_key);
+        .sign_unchecked(&[utxo0], 0, &alice_pub_key);
         assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx0.clone()));
 
         // Create a transaction that spends the same input 10 times by slightly modifying the

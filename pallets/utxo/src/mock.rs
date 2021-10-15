@@ -300,8 +300,8 @@ pub fn alice_test_ext() -> TestExternalities {
         initial_reward_amount: 100,
         _marker: Default::default(),
     }
-        .assimilate_storage(&mut t)
-        .unwrap();
+    .assimilate_storage(&mut t)
+    .unwrap();
 
     let mut ext = TestExternalities::from(t);
     ext.register_extension(KeystoreExt(std::sync::Arc::new(keystore)));
@@ -325,8 +325,8 @@ pub fn alice_test_ext_and_keys() -> (TestExternalities, Public, Public) {
         initial_reward_amount: 100,
         _marker: Default::default(),
     }
-        .assimilate_storage(&mut t)
-        .unwrap();
+    .assimilate_storage(&mut t)
+    .unwrap();
 
     let mut ext = TestExternalities::from(t);
     ext.register_extension(KeystoreExt(std::sync::Arc::new(keystore)));
