@@ -57,4 +57,23 @@ impl<T: frame_system::Config> crate::WeightInfo for WeightInfo<T> {
             .saturating_add(T::DbWeight::get().reads(3 as Weight))
             .saturating_add(T::DbWeight::get().writes(3 as Weight))
     }
+
+    //TODO this needs a benchmark
+    fn unlock_stake(s: u32) -> Weight {
+        (548_270_000 as Weight)
+            //TODO: literally just copying from substrate's
+            .saturating_add((1_146_000 as Weight).saturating_mul(s as Weight))
+            .saturating_add(T::DbWeight::get().reads(3 as Weight))
+            .saturating_add(T::DbWeight::get().writes(3 as Weight))
+    }
+
+    //TODO this needs a benchmark
+    fn withdraw_stake(s: u32) -> Weight {
+        (548_270_000 as Weight)
+            //TODO: literally just copying from substrate's
+            .saturating_add((1_146_000 as Weight).saturating_mul(s as Weight))
+            .saturating_add(T::DbWeight::get().reads(3 as Weight))
+            .saturating_add(T::DbWeight::get().writes(3 as Weight))
+    }
+
 }

@@ -10,71 +10,87 @@ To run the test cases, just run command `cargo test`.
 1. After running the core, declare the custom datatypes. GO to **Settings** > **Developer** tab and paste in the ff. JSON and then save:
 ```json
 {
-  "Value": "u128",
-  "Destination": {
-    "_enum": {
-      "Pubkey": "Pubkey",
-      "CreatePP": "DestinationCreatePP",
-      "CallPP": "DestinationCallPP",
-      "ScriptHash": "H256"
-    }
-  },
-  "DestinationCreatePP": {
-    "code": "Vec<u8>",
-    "data": "Vec<u8>"
-  },
-  "DestinationCallPP": {
-    "dest_account": "AccountId",
-    "input_data": "Vec<u8>"
-  },
-  "TransactionInput": {
-    "outpoint": "Hash",
-    "lock": "Vec<u8>",
-    "witness": "Vec<u8>"
-  },
-  "TransactionOutput": {
-    "value": "Value",
-    "header": "TXOutputHeader",
-    "destination": "Destination"
-  },
-  "TransactionOutputFor": "TransactionOutput",
-  "Transaction": {
-    "inputs": "Vec<TransactionInput>",
-    "outputs": "Vec<TransactionOutput>"
-  },
-  "TransactionFor": "Transaction",
-  "Address": "MultiAddress",
-  "LookupSource": "MultiAddress",
-  "TXOutputHeader": "u128",
-  "Difficulty": "U256",
-  "DifficultyAndTimestamp": {
-    "difficulty": "Difficulty",
-    "timestamp": "Moment"
-  },
-  "Pubkey": "H256",
-  "Public": "H256"
+   "Value": "u128",
+   "Destination": {
+      "_enum": {
+         "Pubkey": "Pubkey",
+         "CreatePP": "DestinationCreatePP",
+         "CallPP": "DestinationCallPP",
+         "ScriptHash": "H256",
+         "Stake": "DestinationStake",
+         "StakeExtra": "Public"
+      }
+   },
+   "DestinationStake": {
+      "stash_pubkey": "Public",
+      "controller_pubkey": "Public",
+      "session_key": "Vec<u8>"
+   },
+   "DestinationCreatePP": {
+      "code": "Vec<u8>",
+      "data": "Vec<u8>"
+   },
+   "DestinationCallPP": {
+      "dest_account": "AccountId",
+      "input_data": "Vec<u8>"
+   },
+   "TransactionInput": {
+      "outpoint": "Hash",
+      "lock": "Vec<u8>",
+      "witness": "Vec<u8>"
+   },
+   "TransactionOutput": {
+      "value": "Value",
+      "header": "TXOutputHeader",
+      "destination": "Destination"
+   },
+   "TransactionOutputFor": "TransactionOutput",
+   "Transaction": {
+      "inputs": "Vec<TransactionInput>",
+      "outputs": "Vec<TransactionOutput>"
+   },
+   "TransactionFor": "Transaction",
+   "Address": "MultiAddress",
+   "LookupSource": "MultiAddress",
+   "TXOutputHeader": "u128",
+   "Difficulty": "U256",
+   "DifficultyAndTimestamp": {
+      "difficulty": "Difficulty",
+      "timestamp": "Moment"
+   },
+   "Pubkey": "H256",
+   "Public": "H256",
+   "String": "Vec<u8>",
+   "TokenID": "u64",
+   "TokenInstance": {
+      "id": "u64",
+      "name": "String",
+      "ticker": "String",
+      "supply": "u128"
+   },
+   "TokenListData": "Vec<TokenInstance>"
 }
 ```
 2. To confirm that Alice already has UTXO at genesis, go to **Developer** > **Chain state** > **Storage**.  
-For _selected state query_, choose `utxo`, and `utxoStore(H256): Option<TransactionOutput>` beside it.  
-The _Option<H256>_ input box should be empty by disabling the **include option**.
-Click the **+** button on the right. It should show:
+   For _selected state query_, choose `utxo`, and `utxoStore(H256): Option<TransactionOutput>` beside it.  
+   The _Option<H256>_ input box should be empty by disabling the **include option**.
+   Click the **+** button on the right. It should show:
 ```json
 {
-  value: 40,000,000,000,000,000,000,
-  pub_key: 0xd43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d,
-  header: 0
+   value: 40,000,000,000,000,000,000,
+   pub_key: 0xd43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d,
+   header: 0
 }
 ```
 3. Let's spend 50 of Alice's utxo to Bob. Go to **Developer** > **Extrinsics**.
    Choose `utxo` for _submit the following extrinsic_ dropdown.
    Input the following parameters (and then submit transaction):
-    * outpoint: `0xe9ea4ce6bf71396302db8d08e7924b5be6a5b0913798bd38741c6c6e9811e864`
-    * lock: `0x` (empty byte string)
-    * witness (signature): `0x2821de9fb1c50ff0e6f7177f64026c8e21fda53629c6df14374ec00759a95672e5a398c99d3be228a98b64192f09c567927d22eb55c9155d59a7e9d6ee71c988`
-    * value: `50`
-    * destination: Pubkey: `0x8eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a48`
-4. Wait for the upper right corner to change from 
+   * outpoint: `0xe9ea4ce6bf71396302db8d08e7924b5be6a5b0913798bd38741c6c6e9811e864`
+   * lock: `0x` (empty byte string)
+   * witness (signature): `0x2821de9fb1c50ff0e6f7177f64026c8e21fda53629c6df14374ec00759a95672e5a398c99d3be228a98b64192f09c567927d22eb55c9155d59a7e9d6ee71c988`
+   * value: `50`
+   * destination: Pubkey: `0x8eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a48`
+4. Wait for the upper right corner to change from
 ```
 utxo.spend
 ready
@@ -91,53 +107,53 @@ extrinsic event
 ```
 
 4. To verify, go back to **Developer** > **Chain state** > **Storage**, `utxo` and `utxoStore(H256): Option<TransactionOutput>`.  
-Make sure the _Option<H256>_ input box is still empty, then click the **+** button. It should now show:
+   Make sure the _Option<H256>_ input box is still empty, then click the **+** button. It should now show:
 ```json
 [
-  [
-    [
-      0x2699481f13b275dcc4e384fb513ba5472bd94d5ef288ffa5eaac9b95508d836d
-    ],
-    {
-      value: 3,106,511,852,580,896,718,
-      pub_key: 0xd43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d,
-      header: 0
-    }
-  ],
-  [
-    [
-      0xdd22d722dade7f07b0becd3585cac0cdd17c62959229dc8d83d64b05633a60bc
-    ],
-    {
-      value: 50,
-      pub_key: 0x8eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a48,
-      header: 0
-    }
-  ]
+   [
+      [
+         0x2699481f13b275dcc4e384fb513ba5472bd94d5ef288ffa5eaac9b95508d836d
+      ],
+      {
+         value: 3,106,511,852,580,896,718,
+         pub_key: 0xd43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d,
+         header: 0
+      }
+   ],
+   [
+      [
+         0xdd22d722dade7f07b0becd3585cac0cdd17c62959229dc8d83d64b05633a60bc
+      ],
+      {
+         value: 50,
+         pub_key: 0x8eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a48,
+         header: 0
+      }
+   ]
 ]
 ```
 
 
 
 ### How to run the benchmark in [mintlayer-node](https://github.com/mintlayer/mintlayer-node):
-1. Insert this pallet-utxo crate in [pallets directory](https://github.com/mintlayer/mintlayer-node/tree/master/pallets).  
+1. Insert this pallet-utxo crate in [pallets directory](https://github.com/mintlayer/mintlayer-node/tree/master/pallets).
 
 2. At runtime's [Cargo.toml](https://github.com/mintlayer/mintlayer-node/blob/master/runtime/Cargo.toml):  
-  2.1. add to local dependencies:
+   2.1. add to local dependencies:
    ```toml
    pallet-utxo = { default-features = false, path = "../pallets/utxo" }
    ```  
-   2.2. add to __runtime-benchmarks__ features: 
+   2.2. add to __runtime-benchmarks__ features:
    ```toml
    'pallet-utxo/runtime-benchmarks'
    ```  
-   2.3. add to __std__ features: 
+   2.3. add to __std__ features:
    ```toml
    'pallet-utxo/std'
    ```
-   
+
 3. At runtime's [lib.rs](https://github.com/mintlayer/mintlayer-node/blob/master/runtime/src/lib.rs):  
-3.1. Import the following:
+   3.1. Import the following:
    ```rust
    pub use pallet_utxo;
    use sp_runtime::transaction_validity::{TransactionValidityError, InvalidTransaction};
@@ -162,7 +178,7 @@ Make sure the _Option<H256>_ input box is still empty, then click the **+** butt
        }
    }
     ```
-   3.3. Add into `construct_runtime!` this line: 
+   3.3. Add into `construct_runtime!` this line:
    ```rust
    Utxo: pallet_utxo::{Pallet, Call, Config<T>, Storage, Event<T>},
    ```
@@ -178,17 +194,17 @@ Make sure the _Option<H256>_ input box is still empty, then click the **+** butt
             }
         }
    ```
-   3.5. In the function `fn dispatch_benchmark()`, add another line: 
+   3.5. In the function `fn dispatch_benchmark()`, add another line:
    ```rust
    add_benchmark!(params, batches, pallet_utxo, Utxo);
    ```  
 4. In node's [chain_spec.rs](https://github.com/mintlayer/mintlayer-node/blob/master/node/src/chain_spec.rs):  
-4.1. Import the ff:
+   4.1. Import the ff:
    ```rust 
    use node_template_runtime::{UtxoConfig, pallet_utxo};
    use sp_core:H256;
    ```
-   4.2. add one more param on function `testnet_genesis()`: 
+   4.2. add one more param on function `testnet_genesis()`:
    ```rust
    endowed_utxos: Vec<sr25519::Public>
    ```
