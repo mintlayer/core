@@ -175,13 +175,6 @@ git = 'https://github.com/paritytech/substrate.git'
 version = '4.0.0-dev'
 branch = "master"
 
-## This might be needed during voting.
-#[dependencies.sp-npos-elections]
-#default-features = false
-#git = 'https://github.com/paritytech/substrate.git'
-#version = '4.0.0-dev'
-#branch = "master"
-
 [dependencies.sp-offchain]
 default-features = false
 git = 'https://github.com/paritytech/substrate.git'
@@ -294,14 +287,13 @@ std = [
     'pallet-transaction-payment/std',
     'pallet-utxo-rpc-runtime-api/std',
     'pallet-utxo/std',
-    'pallet-contracts/std',
-    'pallet-contracts-primitives/std',
+	'pallet-contracts/std',
+	'pallet-contracts-primitives/std',
     'sp-api/std',
     'sp-block-builder/std',
     'sp-consensus-aura/std',
     'sp-core/std',
     'sp-inherents/std',
-    #    'sp-npos-elections/std',
     'sp-offchain/std',
     'sp-runtime/std',
     'sp-session/std',

@@ -127,14 +127,14 @@ Make sure the _Option<H256>_ input box is still empty, then click the **+** butt
 
 
 ### How to run the benchmark in [mintlayer-node](https://github.com/mintlayer/mintlayer-node):
-1. Insert this pallet-utxo crate in [pallets directory](https://github.com/mintlayer/mintlayer-node/tree/master/pallets).
+1. Insert this pallet-utxo crate in [pallets directory](https://github.com/mintlayer/mintlayer-node/tree/master/pallets).  
 
 2. At runtime's [Cargo.toml](https://github.com/mintlayer/mintlayer-node/blob/master/runtime/Cargo.toml):  
-   2.1. add to local dependencies:
+  2.1. add to local dependencies:
    ```toml
    pallet-utxo = { default-features = false, path = "../pallets/utxo" }
    ```  
-   2.2. add to __runtime-benchmarks__ features:
+   2.2. add to __runtime-benchmarks__ features: 
    ```toml
    'pallet-utxo/runtime-benchmarks'
    ```  
