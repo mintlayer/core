@@ -34,11 +34,20 @@ FindAuthor<Validators::ValidatorId> for FindAccountFromAuthorIndex<T,Inner, Vali
     fn find_author<'a, I>(digests: I) -> Option<Validators::ValidatorId>
         where
             I: 'a + IntoIterator<Item=(ConsensusEngineId, &'a [u8])> {
+
+        // here the inner `FindAuthor` determines the block author.
+        // An example would be Aura's `FindAuthor` implementation.
         let i = Inner::find_author(digests)?;
+
+        // we use a list of authorities to get the H256 equivalent of the author.
+        // An example would be Aura's list of authorities.
         if let Some(authority) = T::authorities().get(i as usize) {
             <BlockAuthor::<T>>::put(Some(*authority));
         }
 
+        // As Block authors need to be validators as well, This validator set will determine the
+        // accountId using the same index provided by the inner `FindAuthor`.
+        // An example of validators set is found in pallet-session.
         let validators = Validators::validators();
         validators.get(i as usize).map(|k| k.clone())
     }

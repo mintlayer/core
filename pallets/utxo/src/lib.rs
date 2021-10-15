@@ -163,10 +163,6 @@ pub mod pallet {
         #[pallet::constant]
         type RewardReductionPeriod:Get<Self::BlockNumber>;
 
-        fn authorities() -> Vec<H256>;
-
-        type StakingHelper: StakingHelper<Self::AccountId>;
-
         /// the minimum value for initial staking.
         #[pallet::constant]
         type MinimumStake:Get<Value>;
@@ -174,6 +170,13 @@ pub mod pallet {
         /// how much are we charging for withdrawing the unlocked stake.
         #[pallet::constant]
         type StakeWithdrawalFee:Get<Value>;
+
+        /// helps in dealing with staking, using the logic outside of this pallet.
+        /// An example is the `pallet-staking`, where it deals with multiple operations
+        /// that utxo will convert with only a few. see the trait at pallet-utxo's `staking.rs`.
+        type StakingHelper: StakingHelper<Self::AccountId>;
+
+        fn authorities() -> Vec<H256>;
 
     }
 
@@ -312,6 +315,17 @@ pub mod pallet {
             }
         }
 
+        /// Create a new stake for the first time.
+        /// This is assumed, that an entity staking its funds also means playing the role of a `Validator`.
+        /// # Arguments
+        /// * `value` - This is assuming that the value is received in a format that's already `x * 1_000, * 1_000_000`
+        /// * `stash_pubkey` - public key of the stash account. This is considered as the "bank", which holds the funds.
+        /// The full meaning is found in `pallet-staking`.
+        /// * `controller_pubkey` = public key of the controller account, or can be considered as the "manager".
+        /// The full meaning is found in `pallet-staking`.
+        /// * `session_key` - for every new validator candidate, you want to link it to a session key.
+        /// Generation of `session_key` is done through an rpc call `author_rotateKeys`.
+        /// See https://docs.substrate.io/v3/concepts/session-keys/
         pub fn new_stake(value: Value, stash_pubkey:H256, controller_pubkey:H256, session_key:Vec<u8>) -> Self {
             Self {
                 value,
@@ -320,6 +334,7 @@ pub mod pallet {
             }
         }
 
+        /// Create a staking extra of an existing validator.
         pub fn new_stake_extra(value: Value, controller_pubkey: H256) -> Self {
             Self {
                 value,
@@ -1103,6 +1118,7 @@ pub mod pallet {
     #[pallet::genesis_config]
     pub struct GenesisConfig<T: Config> {
         pub genesis_utxos: Vec<TransactionOutputFor<T>>,
+        /// initially staked utxos of the initial validators.
         pub locked_utxos: Vec<TransactionOutputFor<T>>,
         /// number of coins available for rewarding, esp. to block authors/producers.
         pub extra_mlt_coins:Value,

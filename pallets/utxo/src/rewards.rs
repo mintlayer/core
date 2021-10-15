@@ -36,14 +36,17 @@ pub(crate) fn period_elapsed<T:Config>(time_now: T::BlockNumber) -> bool {
 
 /// Returns the newly reduced reward amount for a Block Author.
 /// How much a reward is reduced, is based on the config's`RewardReductionFraction`.
+/// Note, this function is under the assumption that the coins_available is NOT 0.
 pub(super) fn update_reward_amount<T:Config>(coins_available:u128) -> u128 {
     let reduction_fraction = T::RewardReductionFraction::get();
 
     let reward_amount = <BlockAuthorRewardAmount<T>>::take();
     log::info!("current reward amount: {}", reward_amount);
     let reward_amount_deducted = reduction_fraction.mul_ceil(reward_amount);
+
     if let Some(reward_amount) = reward_amount.checked_sub(reward_amount_deducted) {
 
+        // if the percentage drop of a reward, makes the current reward_amount 0, and
         // as long as there is still coins available, set the reward to 1.
         return if reward_amount.is_zero() {
             <BlockAuthorRewardAmount<T>>::put(1);
@@ -57,6 +60,9 @@ pub(super) fn update_reward_amount<T:Config>(coins_available:u128) -> u128 {
             coins_available
         };
     }
+
+    // In the weird case when at such time a computed percentage drop of reward
+    // becomes more than the current reward_amount.
     0
 }
 

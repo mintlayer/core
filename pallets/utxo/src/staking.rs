@@ -15,7 +15,7 @@
 //
 // Author(s): C. Yap
 
-use crate::{Config, StakingCount, Error, Event, Pallet, TransactionOutput, Destination, LockedUtxos, Value, UtxoStore, MLT_UNIT, MLTCoinsAvailable};
+use crate::{Config, StakingCount, Error, Event, Pallet, TransactionOutput, Destination, LockedUtxos, Value, UtxoStore, MLTCoinsAvailable};
 use frame_support::{dispatch::{DispatchResultWithPostInfo, Vec}, ensure, traits::Get};
 use sp_core::H256;
 use sp_std::vec;
@@ -72,8 +72,7 @@ pub(crate) fn stake<T: Config>(
     let stash_account = T::StakingHelper::get_account_id(stash_pubkey);
     let controller_account = T::StakingHelper::get_account_id(controller_pubkey);
 
-    let non_mlt_value = value.checked_div(MLT_UNIT).ok_or("could not convert to a non mlt value.")?;
-    T::StakingHelper::stake(&stash_account, &controller_account, &mut session_key,non_mlt_value)
+    T::StakingHelper::stake(&stash_account, &controller_account, &mut session_key,value)
 }
 
 /// stake more values. This is only for existing validators.
@@ -83,8 +82,7 @@ pub(crate) fn stake_extra<T: Config>(controller_pubkey: &H256, value:Value) -> D
 
     let controller_account= T::StakingHelper::get_account_id(controller_pubkey);
 
-    let non_mlt_value = value.checked_div(MLT_UNIT).ok_or("could not convert to a non mlt value.")?;
-    T::StakingHelper::stake_extra(&controller_account,non_mlt_value)
+    T::StakingHelper::stake_extra(&controller_account,value)
 }
 
 /// unlocking the staked funds outside of the `pallet-utxo`.
@@ -124,10 +122,10 @@ pub(crate) fn withdraw<T: Config>(controller_pubkey: H256, outpoints: Vec<H256>)
     let hash = BlakeTwo256::hash_of(&hashes);
 
     let utxo = TransactionOutput::new_pubkey(total, controller_pubkey);
-
     <UtxoStore<T>>::insert(hash, Some(utxo));
 
-    // move fee back to the rewards
+    // TODO: currently moving fee back to the rewards. Should this be distributed to
+    // a list of authorites
     let coins_available = <MLTCoinsAvailable<T>>::take();
     <MLTCoinsAvailable<T>>::put(coins_available + fee);
 
