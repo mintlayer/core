@@ -20,6 +20,8 @@ from test_framework.util import (
     wait_until,
 )
 
+import os
+
 
 class ExampleTest(MintlayerTestFramework):
     # Each functional test is a subclass of the MintlayerTestFramework class.
@@ -81,7 +83,7 @@ class ExampleTest(MintlayerTestFramework):
                     value=0,
                     header=0,
                     destination=utxo.DestCreatePP(
-                        code="code.wasm",
+                        code=os.path.join(os.path.dirname(__file__), "code.wasm"),
                         data=[0xed, 0x4b, 0x9d, 0x1b],  # default() constructor selector
                     )
                 ),
@@ -100,7 +102,7 @@ class ExampleTest(MintlayerTestFramework):
         # with the instantiated contract
         contractInstance = contract.ContractInstance(
             ss58,
-            "metadata.json",
+            os.path.join(os.path.dirname(__file__), "metadata.json"),
             substrate
         )
 
