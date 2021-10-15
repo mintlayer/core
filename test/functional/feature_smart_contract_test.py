@@ -3,12 +3,8 @@
 # Copyright (c) 2017 The Bitcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
-"""An example functional test
+"""Smart contract test
 
-The module-level docstring should include a high-level description of
-what the test is doing. It's the first thing people see when they open
-the file and should give the reader information about *what* the test
-is testing and *how* it's being tested
 """
 # Imports should be in PEP8 ordering (std library first, then third party
 # libraries then local imports).
@@ -16,24 +12,16 @@ from collections import defaultdict
 
 from substrateinterface import Keypair
 import test_framework.mintlayer.utxo as utxo
+import test_framework.mintlayer.contract as contract
 
-# Avoid wildcard * imports if possible
-# from test_framework.blocktools import (create_block, create_coinbase)
-# from test_framework.mininode import (
-#     CInv,
-#     P2PInterface,
-#     mininode_lock,
-#     msg_block,
-#     msg_getdata,
-#     network_thread_join,
-#     network_thread_start,
-# )
 from test_framework.test_framework import MintlayerTestFramework
 from test_framework.util import (
     assert_equal,
     connect_nodes,
     wait_until,
 )
+
+import os
 
 
 class ExampleTest(MintlayerTestFramework):
@@ -53,18 +41,6 @@ class ExampleTest(MintlayerTestFramework):
 
         # self.log.info("I've finished set_test_params")  # Oops! Can't run self.log before run_test()
 
-    # Use add_options() to add specific command-line options for your test.
-    # In practice this is not used very much, since the tests are mostly written
-    # to be run in automated environments without command-line options.
-    # def add_options()
-    #     pass
-
-    # Use setup_chain() to customize the node data directories. In practice
-    # this is not used very much since the default behaviour is almost always
-    # fine
-    # def setup_chain():
-    #     pass
-
     def setup_network(self):
         """Setup the test network topology
 
@@ -82,33 +58,21 @@ class ExampleTest(MintlayerTestFramework):
         connect_nodes(self.nodes[0], self.nodes[1])
         # self.sync_all([self.nodes[0:1]])
 
-    # Use setup_nodes() to customize the node start behaviour (for example if
-    # you don't want to start all nodes at the start of the test).
-    # def setup_nodes():
-    #     pass
-
-    def custom_method(self):
-        """Do some custom behaviour for this test
-
-        Define it in a method here because you're going to use it repeatedly.
-        If you think it's useful in general, consider moving it to the base
-        MintlayerTestFramework class so other tests can use it."""
-
-        self.log.info("Running custom_method")
-
     def run_test(self):
         """Main test logic"""
         client = self.nodes[0].rpc_client
 
+        substrate = client.substrate
+
         alice = Keypair.create_from_uri('//Alice')
 
-        # Find an utxo with enough funds
-        utxos = [u for u in client.utxos_for(alice) if u[1].value >= 150]
+        # Find a suitable UTXO
+        initial_utxo = [x for x in client.utxos_for(alice) if x[1].value >= 50][0]
 
-        tx1 = utxo.Transaction(
+        tx0 = utxo.Transaction(
             client,
             inputs=[
-                utxo.Input(utxos[0][0]),
+                utxo.Input(initial_utxo[0]),
             ],
             outputs=[
                 utxo.Output(
@@ -117,30 +81,64 @@ class ExampleTest(MintlayerTestFramework):
                     destination=utxo.DestPubkey(alice.public_key)
                 ),
                 utxo.Output(
-                    value=100,
+                    value=0,
                     header=0,
-                    destination=utxo.DestPubkey(alice.public_key)
+                    destination=utxo.DestCreatePP(
+                        code=os.path.join(os.path.dirname(__file__), "code.wasm"),
+                        data=[0xed, 0x4b, 0x9d, 0x1b],  # default() constructor selector
+                    )
                 ),
-
             ]
-        ).sign(alice, [utxos[0][1]])
-        client.submit(alice, tx1)
+        ).sign(alice, [initial_utxo[1]])
 
-        tx2 = utxo.Transaction(
+        # submit transaction and get the extrinsic and block hashes
+        (ext, blk) = client.submit(alice, tx0)
+
+        # each new smart contract instantiation creates a new account
+        # fetch this SS58-formatted account address and return it
+        # and the hex-encoded account id
+        (ss58, acc_id) = contract.getContractAddresses(substrate, blk)
+
+        # create new contract instance which can be used to interact
+        # with the instantiated contract
+        contractInstance = contract.ContractInstance(
+            ss58,
+            os.path.join(os.path.dirname(__file__), "metadata.json"),
+            substrate
+        )
+
+        # read the value of the flipper contract
+        result = contractInstance.read(alice, "get")
+        assert_equal(result.contract_result_data.value, False)
+
+        msg_data = contractInstance.generate_message_data("flip", {})
+        self.log.info("Contract msg_data: {}, {}, {}".format(ss58, acc_id, msg_data))
+
+        tx1 = utxo.Transaction(
             client,
             inputs=[
-                # spend the 100 utxo output (index 1)
-                utxo.Input(tx1.outpoint(1)),
+                utxo.Input(tx0.outpoint(0)),
             ],
             outputs=[
                 utxo.Output(
-                    value=60,
+                    value=49,
                     header=0,
                     destination=utxo.DestPubkey(alice.public_key)
                 ),
+                utxo.Output(
+                    value=0,
+                    header=0,
+                    destination=utxo.DestCallPP(
+                        dest_account=acc_id,
+                        input_data=bytes.fromhex(msg_data.to_hex()[2:]),
+                    )
+                ),
             ]
-        ).sign(alice, [tx1.outputs[1]])
-        client.submit(alice, tx2)
+        ).sign(alice, [tx0.outputs[0]], [0])
+        (ext_hash, blk_hash) = client.submit(alice, tx1)
+
+        result = contractInstance.read(alice, "get")
+        assert_equal(result.contract_result_data.value, True)
 
 
 if __name__ == '__main__':

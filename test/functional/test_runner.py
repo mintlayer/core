@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Copyright (c) 2021 RBB S.r.l
 # Copyright (c) 2014-2017 The Bitcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
@@ -55,6 +56,7 @@ TEST_EXIT_SKIPPED = 77
 BASE_SCRIPTS= [
     'example_test.py',
     'feature_alice_bob_test.py',
+    'feature_smart_contract_test.py',
     # Don't append tests at the end to avoid merge conflicts
     # Put them in a random line within the section that fits their approximate run-time
 ]

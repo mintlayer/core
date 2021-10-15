@@ -1,3 +1,5 @@
+# Copyright (c) 2021 RBB S.r.l
+
 import substrateinterface
 from substrateinterface import SubstrateInterface, Keypair
 from substrateinterface.exceptions import SubstrateRequestException
