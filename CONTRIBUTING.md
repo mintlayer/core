@@ -1,7 +1,6 @@
 # Mintlayer core contributing guide
 
-We are happy to take contributions to the project in any form: if you find a bug feel free to create an issue, if you fix a bug feel free to create a pr to merge you fix
-, if you want to add a totally new feature go ahead a do so.
+We are happy to take contributions to the project in any form: if you find a bug feel free to create an issue, if you fix a bug feel free to create a pr to merge you fix, if you want to add a totally new feature go ahead and do so.
 
 
 ## Setup
