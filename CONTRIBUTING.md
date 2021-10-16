@@ -68,8 +68,8 @@ community. If you think you've got a snazzy new idea for a feature, open an issu
 Whatever it is you're working on you'll want to create a branch for you bug fix or feature from staging
  
  
-   git checkout staging
-   git checkout -b my_new_branch
+    git checkout staging
+    git checkout -b my_new_branch
    
    
 I'd suggest you pick a better name than that though, something which makes it obvious what you're working on is preferred. Once you're done the first step is to make
