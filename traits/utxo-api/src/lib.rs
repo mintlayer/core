@@ -39,14 +39,14 @@ pub trait UtxoApi {
 
     fn withdraw_stake(stash_account_caller: &Self::AccountId) -> DispatchResultWithPostInfo;
 
-    fn send_conscrit_p2pk(
+    fn submit_c2pk_tx(
         caller: &Self::AccountId,
         destination: &Self::AccountId,
         value: u128,
         outpoints: &Vec<H256>,
     ) -> Result<(), DispatchError>;
 
-    fn send_conscrit_c2c(
+    fn submit_c2c_tx(
         caller: &Self::AccountId,
         destination: &Self::AccountId,
         value: u128,
