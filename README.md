@@ -6,6 +6,13 @@ For a more technical introduction to Mintlayer visit [our docs](https://docs.min
 
 A draft of the consensus paper can be found [here](https://www.mintlayer.org/docs/DSA-consensus-paper-draft.pdf).
 
+## Security issues
+If you find an issue related to the security of Mintlayer then please contact us at security@mintlayer.org so we can address the issue. Mintlayer has a [bug bounty program](www.mintlayer.org) so if your security issue is valid you are elligble for a reward paid in MLT. Do not disclose the security issue publicly until the core Mintlayer team has agreed the issue can be disclosed. See [SECURITY.md](https://github.com/mintlayer/core/blob/master/SECURITY.md) for more info.
+
+## Bugs
+Non-security related bugs should be opened as [issues](https://github.com/mintlayer/core/issues/new) in the core Mintlayer repo. Give as much detail as possible. If you want to fix a bug then see our guidelines for [contributing](https://github.com/mintlayer/core/blob/master/CONTRIBUTING.md).
+
+## How to build and run Mintlayer
 
 ### Rust Setup
 
@@ -31,7 +38,7 @@ or
 
 `cargo build` to build a debug version
 
-to pure the local chain run `./target/release/mintlayer-core purge-chain --dev`
+to purge the local chain run `./target/release/mintlayer-core purge-chain --dev`
 
 ### Docs
 
@@ -93,15 +100,18 @@ If you want to see the multi-node consensus algorithm in action, refer to
 ### Runtime
 
 For more information on what a [runtime](https://substrate.dev/docs/en/knowledgebase/getting-started/glossary#runtime) is follow the link.
+Code in the runtime must be written in `no_std` Rust since it compiles to Wasm.
 
-Most of Mintlayer's staking code exists in the runtime, see `staking.rs` and `lib.rs` to see that code. Other things that exist here are bits related to block production such as the block production period. The runtime must be written in no_std rust since it compiles to wasm.
+- lib.rs: The main file in Mintlayer's runtime. Here you'll find the Mintlayer specific code for block production such as the block production period.
+- staking.rs: Here you'll find Mintlayer's staking implementation.
+
 
 ### Pallets
 
 Mintlayer relies on a host of Substrate pallets and a few Mintlayer specific pallets.
 
 -   pp: The implementation of programmable pools on Mintlayer. Essentially wasm smart contracts
--   utxo: Mintlayer's utxo system
+-   utxo: Mintlayer's UTXO system
     
 ### Libs
 
@@ -121,7 +131,7 @@ As it stands Mintlayer uses Schnorr for all crypto-related things. There is a pl
 [See this guide](https://github.com/mintlayer/core/CONTRIBUTING.md)
 
 ### Branches
-The key branches are master and staging. Master is used for fully tested code, staging is used as the development branch. Fixes or features should be created on new branches branched from staging. A pr is then created to merge the branch into staging where it will require a review from a member of the Mintlayer team. To merge into master create a pr to merge staging to master, a review is required and CI will run. Only select people have push access to master.
+The key branches are master and staging. Master is used for fully tested code, staging is used as the development branch. Fixes or features should be created on new branches branched from staging. A PR is then created to merge the branch into staging where it will require a review from a member of the Mintlayer team. To merge into master create a PR to merge staging to master, a review is required and CI will run. Only select people have push access to master.
 
 ### Firewall rules
 
