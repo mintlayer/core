@@ -87,8 +87,6 @@ A pull request should try and deal with a single issue be it a new feature or a 
 
 ## A quick guide to Mintlayer
 
-Where to find the key bits of the code base...
-
 In the libs dir you'll find the chainscript and bech32 code. Chainscript is Mintlayer's implementation of bitcoinscript, they're not quite identical but they are
 pretty similar. You'll find some links to docs on chainscript [here](https://github.com/mintlayer/core/tree/master/libs/chainscript).
 
