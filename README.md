@@ -82,9 +82,9 @@ If you want to see the multi-node consensus algorithm in action, refer to
 
 ### Node
 
-- Networking: Mintlayer uses [libp2p](https://libp2p.io/) as its native netwokring stack for all inter-node communication.
+- Networking: Mintlayer uses [libp2p](https://libp2p.io/) as its native networking stack for all inter-node communication.
 - Bootnodes: Mintlayer has [bootnodes](https://github.com/mintlayer/core/blob/master/assets/bootnodes.json) that a new node will attempt to boot to unless a specific node is specified by the user
-- Consensus: Mintlayer uses [AURA](https://docs.rs/sc-consensus-aura/0.9.0/sc_consensus_aura/) as it's base consensus algorithm for the time being. There will be an update to introduce [DSA](https://www.mintlayer.org/docs/DSA-consensus-paper-draft.pdf) in the future but DSA is still in development. 
+- Consensus: Mintlayer uses [AURA](https://docs.rs/sc-consensus-aura/0.9.0/sc_consensus_aura/) as its base consensus algorithm for the time being. There will be an update to introduce [DSA](https://www.mintlayer.org/docs/DSA-consensus-paper-draft.pdf) in the future but DSA is still in development. 
 - Finality: Since we are using AURA for our consensus we currently rely on [GRANDPA](https://docs.rs/sc-finality-grandpa/0.9.0/sc_finality_grandpa/) for finality.
 - Chain Spec: You can find our chain specification in [chain_spec.rs](https://github.com/mintlayer/core/blob/master/node/src/chain_spec.rs). It defines the basics of the chain such as the genesis block and the bootnodes.
 - Services: [service.rs](https://github.com/mintlayer/core/blob/master/node/src/service.rs) defines the node implementation itself. It is here you'll find the consensus setup.
@@ -112,16 +112,16 @@ Libs is home to code that is code that Mintlayer relies on but isn't technically
 
 ### Testing
 
-You'll find unit tests littered throughout the code base but the test directory is home to the functional test framework which is heavily based on Bitcoin's functional test framework. 
+You'll find unit tests littered throughout the codebase but the test directory is home to the functional test framework which is heavily based on Bitcoin's functional test framework. 
 
 ### Crypto
-As it stands Mintlayer uses Schnorr for all of crypto related things. There is a plan to move to our BLS implementation in the near future but this, as it stands, is a work in progress.
+As it stands Mintlayer uses Schnorr for all crypto-related things. There is a plan to move to our BLS implementation in the near future but this, as it stands, is a work in progress.
 
 ### Contributing
 [See this guide](https://github.com/mintlayer/core/CONTRIBUTING.md)
 
 ### Branches
-They key branches are master and staging. Master is used for fully tested code, staging is used as the development branch. Fixes or features should be created on new branches branched from staging. A pr is then created to merge the branch in to staging where it will require a review from a member of the Mintlayer team. To merge into master create a pr to merge staging to master, a review is required and CI will run. Only select people have push access to master.
+The key branches are master and staging. Master is used for fully tested code, staging is used as the development branch. Fixes or features should be created on new branches branched from staging. A pr is then created to merge the branch into staging where it will require a review from a member of the Mintlayer team. To merge into master create a pr to merge staging to master, a review is required and CI will run. Only select people have push access to master.
 
 ### Firewall rules
 
