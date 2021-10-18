@@ -94,7 +94,7 @@ If you want to see the multi-node consensus algorithm in action, refer to
 
 For more information on what a [runtime](https://substrate.dev/docs/en/knowledgebase/getting-started/glossary#runtime) is follow the link.
 
-Most of Mintlayer's staking code exists in the runtime, see `staking.rs` and `lib.rs` to see that code. 
+Most of Mintlayer's staking code exists in the runtime, see `staking.rs` and `lib.rs` to see that code. Other things that exist here are bits related to block production such as the block production period. The runtime must be written in no_std rust since it compiles to wasm.
 
 ### Pallets
 
@@ -118,7 +118,7 @@ You'll find unit tests littered throughout the code base but the test directory 
 As it stands Mintlayer uses Schnorr for all of crypto related things. There is a plan to move to our BLS implementation in the near future but this, as it stands, is a work in progress.
 
 ### Contributing
-[See this guide](
+[See this guide](https://github.com/mintlayer/core/CONTRIBUTING.md)
 
 ### Branches
 They key branches are master and staging. Master is used for fully tested code, staging is used as the development branch. Fixes or features should be created on new branches branched from staging. A pr is then created to merge the branch in to staging where it will require a review from a member of the Mintlayer team. To merge into master create a pr to merge staging to master, a review is required and CI will run. Only select people have push access to master.
