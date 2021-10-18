@@ -13,6 +13,7 @@
 			"type": "struct",
 			"type_mapping": [
 				[ "dest_account", "AccountId" ],
+				[ "fund", "bool" ],
 				[ "input_data", "Vec<u8>" ]
 			]
 		},

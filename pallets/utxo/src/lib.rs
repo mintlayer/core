@@ -603,12 +603,12 @@ pub mod pallet {
 
             match output.destination {
                 Destination::CreatePP(_, _) => {
-                    log::info!("TODO validate OP_CREATE as output");
+                    log::info!("TODO validate CreatePP as output");
                 }
                 Destination::CallPP(_, _, _) => {
-                    log::info!("TODO validate OP_CALL as output");
+                    log::info!("TODO validate CallPP as output");
                 }
-                _ => {}
+                Destination::Pubkey(_) | Destination::ScriptHash(_) => {}
             }
         }
 
@@ -666,7 +666,7 @@ pub mod pallet {
                         ensure!(ok, "signature must be valid");
                     }
                     Destination::CreatePP(_, _) => {
-                        log::info!("TODO validate spending of OP_CREATE");
+                        log::info!("TODO validate spending of CreatePP");
                     }
                     Destination::CallPP(_, _, _) => {
                         let spend =
@@ -1004,7 +1004,7 @@ fn coin_picker<T: Config>(outpoints: &Vec<H256>) -> Result<Vec<TransactionInput>
                 ));
             }
             _ => {
-                return Err(DispatchError::Other("Only OP_CALL vouts can be spent!"));
+                return Err(DispatchError::Other("Only CallPP vouts can be spent!"));
             }
         }
     }

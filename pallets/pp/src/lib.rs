@@ -152,9 +152,9 @@ fn send_p2pk_tx<T: Config>(
 ///
 /// UTXO system converts this high-level transaction request from
 /// `caller` to `dest` to an actual transaction, uses OP_SPEND
-/// to unlock the OP_CALL funds that the `caller` has acquired
-/// and creates a new OP_CALL vout with `data` that calls `dest`
-/// and transfers all funds of `caller` to this smart contract
+/// to unlock the funds of the UTXOs that the `caller` has
+/// acquired and creates a new vout with `data` that
+/// calls `dest` and transfers all funds of `caller` to this smart contract
 ///
 /// * `caller` -  Smart contract that is doing the calling
 /// * `dest` - Smart contract that is to be called
@@ -189,7 +189,7 @@ where
         let code = pallet_contracts_primitives::Code::Upload(Bytes(code.to_vec()));
         let endowment = pallet_contracts::Pallet::<T>::subsistence_threshold();
 
-        let res = match pallet_contracts::Pallet::<T>::bare_instantiate(
+        let res = pallet_contracts::Pallet::<T>::bare_instantiate(
             caller.clone(),
             endowment * 100_u32.into(), // TODO
             gas_limit,
@@ -199,13 +199,10 @@ where
             true, // enable debugging
         )
         .result
-        {
-            Ok(res) => res,
-            Err(e) => {
-                log::error!("Failed to instantiate contract: {:?}", e);
-                return Err("Failed to instantiate contract");
-            }
-        };
+        .map_err(|e| {
+            log::error!("Instantation failed: {:?}", e);
+            "Failed to instantiate smart contract"
+        })?;
 
         // Create balance entry for the smart contract
         <ContractBalances<T>>::insert(
@@ -248,10 +245,21 @@ where
             gas_limit,
             input_data.to_vec(),
             true, // enable debugging
-        );
+        )
+        .result
+        .map_err(|e| {
+            log::error!("Call failed: {:?}", e);
+            "Failed to call smart contract"
+        })?;
 
         Ok(())
     }
+}
+
+enum ChainExtensionCall {
+    Transfer = 1000,
+    Balance = 1001,
+    Call = 1002,
 }
 
 impl<T: pallet_contracts::Config + pallet::Config> ChainExtension<T> for Pallet<T> {
@@ -260,7 +268,7 @@ impl<T: pallet_contracts::Config + pallet::Config> ChainExtension<T> for Pallet<
         <E::T as SysConfig>::AccountId: UncheckedFrom<<E::T as SysConfig>::Hash> + AsRef<[u8]>,
     {
         match func_id {
-            1000 => {
+            x if x == ChainExtensionCall::Transfer as u32 => {
                 let mut env = env.buf_in_buf_out();
                 let (acc_id, dest, value): (T::AccountId, T::AccountId, u128) = env.read_as()?;
 
@@ -272,9 +280,10 @@ impl<T: pallet_contracts::Config + pallet::Config> ChainExtension<T> for Pallet<
 
                 send_p2pk_tx::<T>(&acc_id, &dest, value)?
             }
-            1001 => {
+            x if x == ChainExtensionCall::Balance as u32 => {
                 let mut env = env.buf_in_buf_out();
                 let acc_id: T::AccountId = env.read_as()?;
+
                 let fund_info = <ContractBalances<T>>::get(&acc_id).ok_or(DispatchError::Other(
                     "Contract doesn't own any UTXO or it doesn't exist!",
                 ))?;
@@ -282,7 +291,7 @@ impl<T: pallet_contracts::Config + pallet::Config> ChainExtension<T> for Pallet<
                 env.write(&fund_info.funds.encode(), false, None)
                     .map_err(|_| DispatchError::Other("Failed to return value?"))?;
             }
-            1002 => {
+            x if x == ChainExtensionCall::Call as u32 => {
                 // `read_as_unbounded()` has to be used here because the size of `data`
                 //  is only known during runtime
                 let mut env = env.buf_in_buf_out();

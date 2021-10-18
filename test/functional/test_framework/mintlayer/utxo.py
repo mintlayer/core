@@ -113,16 +113,17 @@ class DestCreatePP(Destination):
         return { 'CreatePP': { 'code': self.code, 'data': self.data } }
 
 class DestCallPP(Destination):
-    def __init__(self, dest_account, input_data):
+    def __init__(self, dest_account, fund, input_data):
         self.acct = dest_account
+        self.fund = fund
         self.data = input_data
 
     @staticmethod
     def load(obj):
-        return DestCallPP(obj['dest_account'], obj['input_data'])
+        return DestCallPP(obj['dest_account'], obj['fund'], obj['input_data'])
 
     def json(self):
-        return { 'CallPP': { 'dest_account': self.acct, 'input_data': self.data } }
+        return { 'CallPP': { 'dest_account': self.acct, 'fund': self.fund, 'input_data': self.data } }
 
 class Output():
     def __init__(self, value, header, destination):
