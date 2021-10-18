@@ -388,6 +388,10 @@ pub mod pallet {
     pub(super) type UtxoStore<T: Config> =
         StorageMap<_, Identity, H256, Option<TransactionOutputFor<T>>, ValueQuery>;
 
+    #[pallet::storage]
+    #[pallet::getter(fn ectl_store)]
+    pub(super) type EctlStore<T: Config> = StorageMap<_, Identity, H256, bool>;
+
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     #[pallet::metadata(T::AccountId = "AccountId")]
@@ -686,13 +690,20 @@ pub mod pallet {
                         log::info!("TODO validate spending of CreatePP");
                     }
                     Destination::CallPP(_, _, _) => {
-                        let spend =
-                            u16::from_le_bytes(input.witness[1..].try_into().or_else(|_| {
-                                Err(DispatchError::Other(
-                                    "Failed to convert witness to an opcode",
-                                ))
-                            })?);
-                        ensure!(spend == 0x1337, "OP_SPEND not found");
+                        // 32-byte hash + 1 byte length
+                        ensure!(
+                            input.witness.len() == 33,
+                            "Witness field doesn't contain valid data"
+                        );
+
+                        let hash: [u8; 32] = input.witness[1..]
+                            .try_into()
+                            .map_err(|_| DispatchError::Other("Failed to convert the slice"))?;
+
+                        ensure!(
+                            !<EctlStore<T>>::get(&H256::from(hash)).is_none(),
+                            "TX trying to spend funds that the smart contract hasn't spent"
+                        );
                     }
                     Destination::ScriptHash(_hash) => {
                         let witness = input.witness.clone();
@@ -1005,10 +1016,11 @@ impl<T: Config> crate::Pallet<T> {
     }
 }
 
-fn coin_picker<T: Config>(outpoints: &Vec<H256>) -> Result<Vec<TransactionInput>, DispatchError> {
+fn construct_inputs<T: Config>(
+    outpoints: &Vec<H256>,
+) -> Result<Vec<TransactionInput>, DispatchError> {
     let mut inputs: Vec<TransactionInput> = Vec::new();
 
-    // consensus-critical sorting function...
     let mut outpoints = outpoints.clone();
     outpoints.sort();
 
@@ -1019,8 +1031,13 @@ fn coin_picker<T: Config>(outpoints: &Vec<H256>) -> Result<Vec<TransactionInput>
                 inputs.push(TransactionInput::new_script(
                     *outpoint,
                     Builder::new().into_script(),
-                    Builder::new().push_int(0x1337).into_script(),
+                    Builder::new().push_slice(&outpoint.encode()).into_script(),
                 ));
+
+                // save the outpoint hash of the input UTXO to ECTL
+                // from which it can be fetched for validation when
+                // the node receives a TX that tries to spend OP_CALLs
+                <EctlStore<T>>::insert(outpoint, true);
             }
             _ => {
                 return Err(DispatchError::Other("Only CallPP vouts can be spent!"));
@@ -1063,15 +1080,13 @@ where
         let pubkey_raw: [u8; 32] =
             dest.encode().try_into().map_err(|_| "Failed to get caller's public key")?;
 
-        spend::<T>(
-            caller,
-            &Transaction {
-                inputs: coin_picker::<T>(outpoints)?,
-                outputs: vec![TransactionOutput::new_pubkey(value, H256::from(pubkey_raw))],
-                time_lock: Default::default(),
-            },
-        )
-        .map_err(|_| "Failed to spend the transaction!")?;
+        let tx = Transaction {
+            inputs: construct_inputs::<T>(outpoints)?,
+            outputs: vec![TransactionOutput::new_pubkey(value, H256::from(pubkey_raw))],
+            time_lock: Default::default(),
+        };
+
+        spend::<T>(caller, &tx).map_err(|_| "Failed to spend the transaction!")?;
         Ok(())
     }
 
@@ -1082,20 +1097,13 @@ where
         data: &Vec<u8>,
         outpoints: &Vec<H256>,
     ) -> Result<(), DispatchError> {
-        spend::<T>(
-            caller,
-            &Transaction {
-                inputs: coin_picker::<T>(outpoints)?,
-                outputs: vec![TransactionOutput::new_call_pp(
-                    value,
-                    dest.clone(),
-                    true,
-                    data.clone(),
-                )],
-                time_lock: Default::default(),
-            },
-        )
-        .map_err(|_| "Failed to spend the transaction!")?;
+        let tx = Transaction {
+            inputs: construct_inputs::<T>(outpoints)?,
+            outputs: vec![TransactionOutput::new_call_pp(value, dest.clone(), true, data.clone())],
+            time_lock: Default::default(),
+        };
+
+        spend::<T>(caller, &tx).map_err(|_| "Failed to spend the transaction!")?;
         Ok(())
     }
 }
