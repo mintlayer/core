@@ -87,6 +87,24 @@ A pull request should try and deal with a single issue be it a new feature or a 
 
 ## A quick guide to Mintlayer
 
+Where to find the key bits of the code base...
 
+In the libs dir you'll find the chainscript and bech32 code. Chainscript is Mintlayer's implementation of bitcoinscript, they're not quite identical but they are
+pretty similar. You'll find some links to docs on chainscript (here)[https://github.com/mintlayer/core/tree/master/libs/chainscript].
+
+Mintlayer uses a UTXO system rather than an account based system you can find the implemenation of the utxo system (here)[https://github.com/mintlayer/core/tree/master/pallets/utxo]. 
+
+Mintlayer has a feature known as programmable pools (or PPs). These are essentially wasm based smart contracts. As it stands PP support is very much a work in progress.
+
+At the moment Mintlayer uses Schnorr signatures for it's base crypto. There is an intention to move to BLS in the near future. We have a BLS implementation ready to go but there is some degree of work to be done to fully integrate it with the exisiting code base, if you create a new feature try to plan it in a cryptographically agnostic way.
     
+
+
+
+
+
+
+
+
+
 
