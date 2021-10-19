@@ -16,7 +16,7 @@ Non-security related bugs should be opened as [issues](https://github.com/mintla
 
 ### Rust Setup
 
-First, complete the [basic Rust setup instructions](./docs/rust-setup.md).
+First, complete the [basic Rust setup instructions](https://github.com/mintlayer/core/blob/master/doc/rust-setup.md).
 
 ### Run
 
@@ -110,7 +110,7 @@ Code in the runtime must be written in `no_std` Rust since it compiles to Wasm.
 
 Mintlayer relies on a host of Substrate pallets and a few Mintlayer specific pallets.
 
--   pp: The implementation of programmable pools on Mintlayer. Essentially wasm smart contracts
+-   pp: The implementation of programmable pools on Mintlayer. Essentially Wasm smart contracts
 -   utxo: Mintlayer's UTXO system
     
 ### Libs
