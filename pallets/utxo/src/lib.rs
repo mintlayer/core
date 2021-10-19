@@ -457,13 +457,10 @@ pub mod pallet {
         utxo_hash: H256,
         utxo_value: u128,
         data: &Vec<u8>,
-    ) {
+    ) -> Result<(), &'static str> {
         let weight: Weight = 6000000000;
 
-        match T::ProgrammablePool::create(caller, weight, code, utxo_hash, utxo_value, data) {
-            Ok(_) => log::info!("success!"),
-            Err(e) => log::error!("failure: {:#?}", e),
-        }
+        T::ProgrammablePool::create(caller, weight, code, utxo_hash, utxo_value, data)
     }
 
     pub fn call<T: Config>(
@@ -473,10 +470,10 @@ pub mod pallet {
         utxo_value: u128,
         fund_contract: bool,
         data: &Vec<u8>,
-    ) {
+    ) -> Result<(), &'static str> {
         let weight: Weight = 6000000000;
 
-        match T::ProgrammablePool::call(
+        T::ProgrammablePool::call(
             caller,
             dest,
             weight,
@@ -484,10 +481,7 @@ pub mod pallet {
             utxo_value,
             fund_contract,
             data,
-        ) {
-            Ok(_) => log::info!("success!"),
-            Err(e) => log::error!("failure: {:#?}", e),
-        }
+        )
     }
 
     pub fn validate_transaction<T: Config>(
@@ -762,10 +756,10 @@ pub mod pallet {
 
             match &output.destination {
                 Destination::CreatePP(script, data) => {
-                    create::<T>(caller, script, hash, output.value, &data);
+                    create::<T>(caller, script, hash, output.value, &data)?;
                 }
                 Destination::CallPP(acct_id, fund, data) => {
-                    call::<T>(caller, acct_id, hash, output.value, *fund, data);
+                    call::<T>(caller, acct_id, hash, output.value, *fund, data)?;
                 }
                 _ => {}
             }
