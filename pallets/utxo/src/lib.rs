@@ -55,8 +55,8 @@ pub mod pallet {
     use serde::{Deserialize, Serialize};
     use sp_core::{
         sp_std::collections::btree_map::BTreeMap,
-        sr25519::{Public as SR25Pub, Signature as SR25Sig},
         sp_std::{convert::TryInto, str, vec},
+        sr25519::{Public as SR25Pub, Signature as SR25Sig},
         testing::SR25519,
         H256, H512,
     };
@@ -202,7 +202,7 @@ pub mod pallet {
     #[derive(Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, RuntimeDebug)]
     pub enum Destination<AccountId> {
         /// Plain pay-to-pubkey
-        Pubkey(sr25519::Public),
+        Pubkey(SR25Pub),
         /// Pay to fund a new programmable pool. Takes code and data.
         CreatePP(Vec<u8>, Vec<u8>),
         /// Pay to an existing contract. Takes a destination account and input data.
@@ -287,7 +287,6 @@ pub mod pallet {
             Self {
                 header: TxHeaderAndExtraData::NormalTx { id: H256::zero() },
                 value,
-                destination: Destination::Pubkey(pub_key),
                 destination: Destination::Pubkey(pubkey.into()),
             }
         }
@@ -310,15 +309,17 @@ pub mod pallet {
             }
         }
 
-        pub fn new_token(id: TokenId, value: Value, pub_key: H256) -> Self {
+        pub fn new_token(id: TokenId, value: Value, pubkey: H256) -> Self {
+            let pubkey = sp_core::sr25519::Public::from_h256(pubkey);
             Self {
                 value,
                 header: TxHeaderAndExtraData::NormalTx { id },
-                destination: Destination::Pubkey(pub_key),
+                destination: Destination::Pubkey(pubkey),
             }
         }
 
         pub fn new_nft(id: TokenId, data: Vec<u8>, data_url: String, creator: H256) -> Self {
+            let pubkey = sp_core::sr25519::Public::from_h256(creator);
             Self {
                 value: 0,
                 header: TxHeaderAndExtraData::Nft {
@@ -327,7 +328,7 @@ pub mod pallet {
                     creator_pkh: creator.clone(),
                     data_url,
                 },
-                destination: Destination::Pubkey(creator),
+                destination: Destination::Pubkey(pubkey),
             }
         }
 
@@ -337,15 +338,6 @@ pub mod pallet {
                 header: TxHeaderAndExtraData::NormalTx { id: H256::zero() },
                 value,
                 destination: Destination::ScriptHash(hash),
-            }
-        }
-
-        /// Create a new output to given pubkey hash
-        pub fn new_pubkey_hash(value: Value, script: Script) -> Self {
-            Self {
-                header: TxHeaderAndExtraData::NormalTx { id: H256::zero() },
-                value,
-                destination: Destination::PubkeyHash(script.into_bytes()),
             }
         }
     }
@@ -368,7 +360,7 @@ pub mod pallet {
             mut self,
             utxos: &[TransactionOutput<AccountId>],
             index: usize,
-            pk: &sr25519::Public,
+            pk: &SR25Pub,
         ) -> Option<Self> {
             let msg = crate::sign::TransactionSigMsg::construct(
                 Default::default(),
@@ -522,6 +514,32 @@ pub mod pallet {
                 "each output should be used once"
             );
         }
+        let simple_tx = get_simple_transaction(tx);
+        let mut reward = 0;
+        // Resolve the transaction inputs by looking up UTXOs being spent by them.
+        //
+        // This will cointain one of the following:
+        // * Ok(utxos): a vector of UTXOs each input spends.
+        // * Err(missing): a vector of outputs missing from the store
+        let input_utxos = {
+            let mut missing = Vec::new();
+            let mut resolved: Vec<TransactionOutputFor<T>> = Vec::new();
+
+            for input in &tx.inputs {
+                if let Some(input_utxo) = <UtxoStore<T>>::get(&input.outpoint) {
+                    let lock_commitment = input_utxo.destination.lock_commitment();
+                    ensure!(
+                        input.lock_hash() == *lock_commitment,
+                        "Lock hash does not match"
+                    );
+                    resolved.push(input_utxo);
+                } else {
+                    missing.push(input.outpoint.clone().as_fixed_bytes().to_vec());
+                }
+            }
+
+            missing.is_empty().then(|| resolved).ok_or(missing)
+        };
 
         let full_inputs: Vec<(TokenId, TransactionOutputFor<T>)> = tx
             .inputs
@@ -570,62 +588,10 @@ pub mod pallet {
         }
 
         let mut new_utxos = Vec::new();
-        let mut reward = 0;
-
-        // Check that inputs are valid
-        for input in tx.inputs.iter() {
-            if let Some(input_utxo) = <UtxoStore<T>>::get(&input.outpoint) {
-                let lock_commitment = input_utxo.destination.lock_commitment();
-                ensure!(
-                    input.lock_hash() == *lock_commitment,
-                    "Lock hash does not match"
-                );
-
-                match input_utxo.destination {
-                    Destination::Pubkey(pubkey) => {
-                        let sig = (&input.witness[..])
-                            .try_into()
-                            .map_err(|_| "signature length incorrect")?;
-                        ensure!(
-                            crypto::sr25519_verify(
-                                &SR25Sig::from_raw(sig),
-                                &simple_tx,
-                                &SR25Pub::from_h256(pubkey)
-                            ),
-                            "signature must be valid"
-                        );
-                    }
-                    Destination::CreatePP(_, _) => {
-                        log::info!("TODO validate spending of OP_CREATE");
-                    }
-                    Destination::CallPP(_, _) => {
-                        log::info!("TODO validate spending of OP_CALL");
-                    }
-                    Destination::ScriptHash(_hash) => {
-                        use crate::script::verify;
-                        ensure!(
-                            verify(&simple_tx, input.witness.clone(), input.lock.clone()).is_ok(),
-                            "script verification failed"
-                        );
-                    }
-                    Destination::PubkeyHash(script) => {
-                        use crate::script::verify;
-                        ensure!(
-                            verify(&simple_tx, input.witness.clone(), script).is_ok(),
-                            "pubkeyhash verification failed"
-                        );
-                    }
-                }
-            } else {
-                missing_utxos.push(input.outpoint.clone().as_fixed_bytes().to_vec());
-            }
-        }
-
         // Check that outputs are valid
-        for (output_index, output) in tx.enumerate_outputs()? {
+        for (output_index, output) in tx.outputs.iter().enumerate() {
             match output.destination {
-                Destination::Pubkey(_)
-                | Destination::ScriptHash(_) => {
+                Destination::Pubkey(_) | Destination::ScriptHash(_) => {
                     ensure!(output.value > 0, "output value must be nonzero");
                     let hash = tx.outpoint(output_index as u64);
                     ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
@@ -717,7 +683,7 @@ pub mod pallet {
                     .ok_or("reward underflow")?
             } else {
                 *inputs_sum.get(&(H256::zero() as TokenId)).ok_or("fee doesn't exist")?
-            }
+            };
         }
 
         Ok(ValidTransaction {
@@ -849,52 +815,55 @@ pub mod pallet {
         data_url: String,
         data: Vec<u8>,
     ) -> Result<TokenId, DispatchErrorWithPostInfo<PostDispatchInfo>> {
-        let (fee, inputs_hashes) = pick_utxo::<T>(caller, Mlt(100).to_munit());
-        ensure!(fee >= Mlt(100).to_munit(), Error::<T>::Unapproved);
-        ensure!(data_url.len() <= 50, Error::<T>::Unapproved);
+        /*        let (fee, inputs_hashes) = pick_utxo::<T>(caller, Mlt(100).to_munit());
+               ensure!(fee >= Mlt(100).to_munit(), Error::<T>::Unapproved);
+               ensure!(data_url.len() <= 50, Error::<T>::Unapproved);
 
-        let instance = TokenInstance::new_nft(
-            BlakeTwo256::hash_of(&data),
-            data.clone(),
-            data_url.clone(),
-            creator_pubkey.to_vec(),
-        );
+               let instance = TokenInstance::new_nft(
+                   BlakeTwo256::hash_of(&data),
+                   data.clone(),
+                   data_url.clone(),
+                   creator_pubkey.to_vec(),
+               );
 
-        let inputs_for_fee = inputs_hashes
-            .iter()
-            .filter_map(|x| <UtxoStore<T>>::get(&x))
-            .map(|output| TransactionInput::new_empty(BlakeTwo256::hash_of(&(&output, 0 as u64))))
-            .collect();
+               let inputs_for_fee = inputs_hashes
+                   .iter()
+                   .filter_map(|x| <UtxoStore<T>>::get(&x))
+                   .map(|output| TransactionInput::new_empty(BlakeTwo256::hash_of(&(&output, 0 as u64))))
+                   .collect();
 
-        ensure!(
-            !TokenList::<T>::contains_key(instance.id()),
-            Error::<T>::NftCollectionExists
-        );
+               ensure!(
+                   !TokenList::<T>::contains_key(instance.id()),
+                   Error::<T>::NftCollectionExists
+               );
 
-        let mut tx = Transaction {
-            inputs: inputs_for_fee,
-            outputs: crate::vec![
-                // Output a new tokens
-                TransactionOutput::new_nft(
-                    *instance.id(),
-                    data,
-                    data_url,
-                    H256::from(creator_pubkey)
-                ),
-            ],
-        };
+               let mut tx = Transaction {
+                   inputs: inputs_for_fee,
+                   outputs: crate::vec![
+                       // Output a new tokens
+                       TransactionOutput::new_nft(
+                           *instance.id(),
+                           data,
+                           data_url,
+                           H256::from(creator_pubkey)
+                       ),
+                   ],
+               };
 
-        let sig = crypto::sr25519_sign(SR25519, &creator_pubkey, &tx.encode())
-            .ok_or(DispatchError::Token(sp_runtime::TokenError::CannotCreate))?;
-        for i in 0..tx.inputs.len() {
-            tx.inputs[i].witness = sig.0.to_vec();
-        }
-        // Success
-        spend::<T>(caller, &tx)?;
+               let sig = crypto::sr25519_sign(SR25519, &creator_pubkey, &tx.encode())
+                   .ok_or(DispatchError::Token(sp_runtime::TokenError::CannotCreate))?;
+               for i in 0..tx.inputs.len() {
+                   tx.inputs[i].witness = sig.0.to_vec();
+               }
+               // Success
+               spend::<T>(caller, &tx)?;
 
-        // Save in Store
-        TokenList::<T>::insert(instance.id(), Some(instance.clone()));
-        Ok(*instance.id())
+               // Save in Store
+               TokenList::<T>::insert(instance.id(), Some(instance.clone()));
+               Ok(*instance.id())
+
+        */
+        unimplemented!()
     }
 
     /// Pick the UTXOs of `caller` from UtxoStore that satisfy request `value`
@@ -927,8 +896,8 @@ pub mod pallet {
                             break;
                         }
                     }
-                    _ => {}
                 }
+                _ => {}
             }
         }
 
@@ -1035,7 +1004,8 @@ pub mod pallet {
                     TransactionOutput {
                         value,
                         destination: dest,
-                        header: Default::default(),
+                        // todo: We need to check what kind of token over here
+                        header: TxHeaderAndExtraData::NormalTx { id: H256::zero() },
                     },
                     TransactionOutput::new_pubkey(total - value, H256::from(pubkey_raw)),
                 ],
@@ -1043,7 +1013,7 @@ pub mod pallet {
 
             for i in 0..tx.inputs.len() {
                 tx = tx
-                    .sign(&utxos, i, &sr25519::Public(pubkey_raw))
+                    .sign(&utxos, i, &SR25Pub(pubkey_raw))
                     .ok_or(DispatchError::Other("Failed to sign the transaction"))?;
             }
 
