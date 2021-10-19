@@ -51,11 +51,12 @@
 #[macro_use]
 mod util;
 
-mod context;
+pub mod context;
 mod error;
 mod interpreter;
 pub mod opcodes;
 pub mod script;
+pub mod sighash;
 
 #[cfg(feature = "testcontext")]
 pub use context::testcontext::TestContext;

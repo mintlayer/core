@@ -10,6 +10,12 @@
 .idea/
 *.iml
 
+# VSCode
+.vscode/
+
+# Test Python cache
+test/**/__pycache__
+
 # The cache for docker container dependency
 .cargo
 
