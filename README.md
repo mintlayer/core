@@ -128,7 +128,7 @@ You'll find unit tests littered throughout the codebase but the test directory i
 As it stands Mintlayer uses Schnorr for all crypto-related things. There is a plan to move to our BLS implementation in the near future but this, as it stands, is a work in progress.
 
 ### Contributing
-[See this guide](https://github.com/mintlayer/core/CONTRIBUTING.md)
+[See this guide](https://github.com/mintlayer/core/blob/master/CONTRIBUTING.md)
 
 ### Branches
 The key branches are master and staging. Master is used for fully tested code, staging is used as the development branch. Fixes or features should be created on new branches branched from staging. A PR is then created to merge the branch into staging where it will require a review from a member of the Mintlayer team. To merge into master create a PR to merge staging to master, a review is required and CI will run. Only select people have push access to master.
