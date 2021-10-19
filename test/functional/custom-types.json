@@ -16,12 +16,23 @@
 				[ "input_data", "Vec<u8>" ]
 			]
 		},
+		"DestinationStake": {
+			"type": "struct",
+			"type_mapping": [
+				[ "stash_pubkey", "Public" ],
+				[ "controller_pubkey", "Public" ],
+				[ "session_key", "Vec<u8>" ]
+			]
+		},
 		"Destination": {
 			"type": "enum",
 			"type_mapping": [
 				[ "Pubkey", "Pubkey" ],
 				[ "CreatePP", "DestinationCreatePP" ],
-				[ "CallPP", "DestinationCallPP" ]
+				[ "CallPP", "DestinationCallPP" ],
+				[ "ScriptHash", "H256"],
+				[ "Stake", "DestinationStake" ],
+				[ "StakeExtra", "Public" ]
 			]
 		},
 		"TransactionInput": {
@@ -72,6 +83,7 @@
 			]
 		},
 		"Pubkey": "H256",
+		"Public": "H256",
 		"SignatureData": {
 			"type": "struct",
 			"type_mapping": [

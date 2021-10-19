@@ -46,6 +46,17 @@ class Client:
         matching = lambda e: e[1].destination.get_pubkey() == keypair.public_key
         return filter(matching, self.utxos())
 
+    """ Query the node for the list of public keys with staking """
+    def staking_count(self):
+        query = self.substrate.query_map(
+            module="Utxo",
+            storage_function="StakingCount",
+            ignore_decoding_errors=False
+        )
+
+        return ((h, tuple(map(int,str(obj)[1:-1].split(', ')))) for (h, obj) in query)
+
+
     """ Submit a transaction onto the blockchain """
     def submit(self, keypair, tx):
         call = self.substrate.compose_call(
@@ -72,6 +83,10 @@ class Destination():
             return DestCreatePP.load(obj['CreatePP'])
         if 'CallPP' in obj:
             return DestCallPP.load(obj['CallPP'])
+        if 'Stake' in obj:
+            return DestStake.load(obj['Stake'])
+        if 'StakeExtra' in obj:
+            return DestStakeExtra.load(obj['StakeExtra'])
         return None
 
     def type_string(self):
@@ -121,6 +136,34 @@ class DestCallPP(Destination):
 
     def json(self):
         return { 'CallPP': { 'dest_account': self.acct, 'input_data': self.data } }
+
+class DestStake(Destination):
+    def __init__(self, stash_account, controller_account, session_key):
+        self.stash = stash_account
+        self.controller = controller_account
+        self.sesh = session_key
+
+    @staticmethod
+    def load(obj):
+        return DestStake(obj['stash_pubkey'], obj['controller_pubkey'], ['session_key'])
+
+    def json(self):
+        return { 'Stake': { 'stash_pubkey': self.stash, 'controller_pubkey': self.controller, 'session_key': self.sesh } }
+
+
+class DestStakeExtra(Destination):
+    def __init__(self, public):
+        self.public = public
+
+    @staticmethod
+    def load(obj):
+        return DestStakeExtra(obj)
+
+    def json(self):
+        return { 'StakeExtra': self.public }
+
+    def get_public(self):
+        return self.public
 
 class Output():
     def __init__(self, value, header, destination):

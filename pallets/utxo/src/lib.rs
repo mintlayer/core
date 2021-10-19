@@ -488,13 +488,9 @@ pub mod pallet {
         TransactionSuccess(TransactionFor<T>),
 
         /// The block author has been rewarded with MLT Coins.
-        /// \[amount_paid, block_author_destination\]
-        //TODO: how to change this to TransactionOutput?
-        //TODO: currently the polkadot.js ui cannot translate Value and TransactionOutput
-        BlockAuthorRewarded{
-            value:u128,
-            destination:H256
-        },
+        /// \[utxo_for_block_author\]
+        BlockAuthorRewarded(TransactionOutput<T::AccountId>),
+
 
         /// Unstaking is enabled after the end of bonding duration, as set in pallet-staking.
         /// \[controller_account_H256_address\]
@@ -1146,7 +1142,9 @@ pub mod pallet {
 
             self.genesis_utxos.iter().cloned().enumerate().for_each(|(index,u)| {
                 // added the index and the `genesis` on the hashing, to indicate that these utxos are from the beginning of the chain.
-                UtxoStore::<T>::insert(BlakeTwo256::hash_of(&(&u, index as u64, "genesis")), Some(u));
+                let x = BlakeTwo256::hash_of(&(&u, index as u64, "genesis"));
+                log::info!("genesis insert: {:?}",x);
+                UtxoStore::<T>::insert(x, Some(u));
             });
 
             self.locked_utxos.iter().cloned().enumerate().for_each(|(index, u)| {

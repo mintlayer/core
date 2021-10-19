@@ -87,7 +87,7 @@ pub fn development_config() -> Result<ChainSpec, String> {
         move || {
             testnet_genesis(
                 wasm_binary,
-                // Initial PoA authorities
+                // Initial PoA authorities. only Alice!!
                 vec![authority_keys_from_seed("Alice")],
                 // Sudo account
                 get_account_id_from_seed::<sr25519::Public>("Alice"),
@@ -179,41 +179,38 @@ fn testnet_genesis(
     // minimum balance set in the runtime. check `lib.rs` of runtime module.
     const STASH: u128 = MINIMUM_STAKE;
 
-    // only Alice contains 400 million coins.
-    let (genesis_utxos, locked_genesis) = initial_authorities
-        .first()
-        .map(|x| {
-            let x_h256 = H256::from(x.controller.clone());
-            let x_stash_h256= H256::from(x.stash.clone());
 
-            let num_of_utxos = 5;
-            let value = MLT_ORIG_SUPPLY / num_of_utxos;
+   let (genesis_utxos, locked_utxos) = initial_authorities.iter()
+       .fold( (vec![], vec![]), | (mut genesis_utxos, mut locked_utxos), auth_keys| {
+           let x_h256 = H256::from(auth_keys.controller.clone());
+           let x_stash_h256 = H256::from(auth_keys.stash.clone());
 
-            let mut initial_utxos = vec![];
+           let num_of_utxos = 5;
+           let value = MLT_ORIG_SUPPLY / num_of_utxos;
 
-            for _ in 0 .. num_of_utxos {
-                //TODO the 5 split utxos are to be distributed by different public keys...
-                // but who are these public keys?
-                // currently just setting Alice as the owner for all of these.
-                initial_utxos.push( pallet_utxo::TransactionOutput::<AccountId>::new_pubkey(
-                    value,
-                    x_h256.clone(),
-                ));
-            }
+           for _ in 0..num_of_utxos {
+               //TODO the 5 split utxos are to be distributed by different public keys...
+               // but who are these public keys?
+               // currently just setting Alice as the owner for all of these.
+               genesis_utxos.push(pallet_utxo::TransactionOutput::<AccountId>::new_pubkey(
+                   value,
+                   x_h256,
+               ));
+           }
 
-            // initial authorities meaning they're also validators.
-            // locking some values as a stake from validators
-            let locked = pallet_utxo::TransactionOutput::<AccountId>::new_stake(
-                // this is the minimum stake amount
-                MINIMUM_STAKE,
-                x_stash_h256,
-                x_h256,
-                vec![]
-            );
+           // initial authorities meaning they're also validators.
+           // locking some values as a stake from validators
+           locked_utxos.push(pallet_utxo::TransactionOutput::<AccountId>::new_stake(
+               // this is the minimum stake amount
+               MINIMUM_STAKE,
+               x_stash_h256,
+               x_h256,
+               vec![]
+           ));
 
-            (initial_utxos, locked)
-        })
-        .unwrap();
+           (genesis_utxos, locked_utxos)
+       });
+
 
     // initial_authorities also mean the starting validators in the chain.
     let stakers = initial_authorities.iter()
@@ -256,9 +253,8 @@ fn testnet_genesis(
         utxo: UtxoConfig {
             genesis_utxos,
             // The # of validators set should also be the same here.
-            // Currently forcing only 1 INITIAL AUTHORITY (Alice), hence only 1 locked-genesis.
-            // This means only ALICE has staked her utxo.
-            locked_utxos: vec![locked_genesis],
+            // This should be the same as what's set as the initial authorities
+            locked_utxos,
             extra_mlt_coins: 200_000_000  * MLT_UNIT,
             initial_reward_amount: 100 * MLT_UNIT,
             _marker: Default::default(),

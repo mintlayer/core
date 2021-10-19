@@ -100,7 +100,7 @@ pub(super) fn reward_block_author<T:Config>(block_number: T::BlockNumber) {
                     // deduct the coins transferred to the block author
                     <MLTCoinsAvailable<T>>::put(coins_available - reward_amount);
 
-                    <Pallet<T>>::deposit_event(Event::<T>::BlockAuthorRewarded { value: utxo.value, destination: block_author});
+                    <Pallet<T>>::deposit_event(Event::<T>::BlockAuthorRewarded(utxo));
                 }
             }
         } else {

@@ -495,7 +495,6 @@ construct_runtime!(
         System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
         RandomnessCollectiveFlip: pallet_randomness_collective_flip::{Pallet, Storage},
         Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent},
-        Aura: pallet_aura::{Pallet, Config<T>},
         Grandpa: pallet_grandpa::{Pallet, Call, Storage, Config, Event},
         Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
         TransactionPayment: pallet_transaction_payment::{Pallet, Storage},
@@ -506,8 +505,9 @@ construct_runtime!(
         Pp: pallet_pp::{Pallet, Call, Config<T>, Storage, Event<T>},
         Contracts: pallet_contracts::{Pallet, Call, Storage, Event<T>},
         Authorship: pallet_authorship::{Pallet, Call, Storage, Inherent},
-        Session: pallet_session::{Pallet, Call, Config<T>, Storage, Event},
         Staking: pallet_staking::{Pallet, Call, Config<T>, Storage, Event<T>},
+        Session: pallet_session::{Pallet, Call, Config<T>, Storage, Event},
+        Aura: pallet_aura::{Pallet, Config<T>},
         Historical: pallet_session_historical::{Pallet},
     }
 );
@@ -593,7 +593,7 @@ impl_runtime_apis! {
             tx: <Block as BlockT>::Extrinsic,
             block_hash: <Block as BlockT>::Hash,
         ) -> TransactionValidity {
-            log::debug!("transaction to validate: {:?}",tx);
+            log::info!("transaction to validate: {:?}",tx);
             if let Some(pallet_utxo::Call::spend(ref tx)) =
             IsSubType::<pallet_utxo::Call::<Runtime>>::is_sub_type(&tx.function) {
                 match pallet_utxo::validate_transaction::<Runtime>(&tx) {
