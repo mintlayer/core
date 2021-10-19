@@ -565,42 +565,36 @@ pub mod pallet {
     }
 
     pub fn create<T: Config>(
-        _caller: &T::AccountId,
-        _code: &Vec<u8>,
-        _utxo_hash: H256,
-        _utxo_value: u128,
-        _data: &Vec<u8>,
-    ) {
-        // let weight: Weight = 6000000000;
+        caller: &T::AccountId,
+        code: &Vec<u8>,
+        utxo_hash: H256,
+        utxo_value: u128,
+        data: &Vec<u8>,
+    ) -> Result<(), &'static str> {
+        let weight: Weight = 6000000000;
 
-        // match T::ProgrammablePool::create(caller, weight, code, utxo_hash, utxo_value, data) {
-        //     Ok(_) => log::info!("success!"),
-        //     Err(e) => log::error!("failure: {:#?}", e),
-        // }
+        T::ProgrammablePool::create(caller, weight, code, utxo_hash, utxo_value, data)
     }
 
     pub fn call<T: Config>(
-        _caller: &T::AccountId,
-        _dest: &T::AccountId,
-        _utxo_hash: H256,
-        _utxo_value: u128,
-        _fund_contract: bool,
-        _data: &Vec<u8>,
-    ) {
-        // let weight: Weight = 6000000000;
+        caller: &T::AccountId,
+        dest: &T::AccountId,
+        utxo_hash: H256,
+        utxo_value: u128,
+        fund_contract: bool,
+        data: &Vec<u8>,
+    ) -> Result<(), &'static str> {
+        let weight: Weight = 6000000000;
 
-        // match T::ProgrammablePool::call(
-        //     caller,
-        //     dest,
-        //     weight,
-        //     utxo_hash,
-        //     utxo_value,
-        //     fund_contract,
-        //     data,
-        // ) {
-        //     Ok(_) => log::info!("success!"),
-        //     Err(e) => log::error!("failure: {:#?}", e),
-        // }
+        T::ProgrammablePool::call(
+            caller,
+            dest,
+            weight,
+            utxo_hash,
+            utxo_value,
+            fund_contract,
+            data,
+        )
     }
 
     pub fn validate_transaction<T: Config>(
@@ -1152,12 +1146,12 @@ pub mod pallet {
                 Destination::CreatePP(script, data) => {
                     log::debug!("inserting to UtxoStore {:?} as key {:?}", output, hash);
                     <UtxoStore<T>>::insert(hash, output);
-                    create::<T>(caller, script, hash, output.value, &data);
+                    create::<T>(caller, script, hash, output.value, &data)?;
                 }
                 Destination::CallPP(acct_id, fund, data) => {
                     log::debug!("inserting to UtxoStore {:?} as key {:?}", output, hash);
                     <UtxoStore<T>>::insert(hash, output);
-                    call::<T>(caller, acct_id, hash, output.value, *fund, data);
+                    call::<T>(caller, acct_id, hash, output.value, *fund, data)?;
                 }
                 Destination::LockForStaking { .. } => {
                     staking::lock_for_staking::<T>(hash, output)?;
