@@ -3,6 +3,7 @@
 import substrateinterface
 from substrateinterface import SubstrateInterface, Keypair
 from substrateinterface.exceptions import SubstrateRequestException
+from substrateinterface.utils.ss58 import ss58_decode
 import scalecodec
 import os
 import logging
@@ -47,7 +48,10 @@ class Client:
 
     """ Get UTXOs for given key """
     def utxos_for(self, keypair):
-        matching = lambda e: e[1].destination.get_pubkey() == keypair.public_key
+        if type(keypair) == str:
+            matching = lambda e: e[1].destination.get_pubkey() == keypair
+        else:
+            matching = lambda e: e[1].destination.get_pubkey() == keypair.public_key
         return filter(matching, self.utxos())
 
     """ Submit a transaction onto the blockchain """
@@ -130,10 +134,13 @@ class DestCallPP(Destination):
 
     @staticmethod
     def load(obj):
-        return DestCallPP(obj['dest_account'], obj['fund'], obj['input_data'])
+        return DestCallPP(ss58_decode(obj['dest_account']), obj['fund'], obj['input_data'])
 
     def json(self):
         return { 'CallPP': { 'dest_account': self.acct, 'fund': self.fund, 'input_data': self.data } }
+
+    def get_pubkey(self):
+        return str(self.acct)
 
 class Output():
     def __init__(self, value, header, destination):
