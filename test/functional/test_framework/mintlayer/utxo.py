@@ -107,7 +107,15 @@ class DestCreatePP(Destination):
 
     @staticmethod
     def load(obj):
-        return DestCreatePP(obj['code'], obj['data'])
+        # the type of obj['code'] is str but instead
+        # containing a file path, it contains the bytecode
+        # of the smart contract.
+        # Because it's str the constructor tries to use it a file path
+        # and thus incorrectly constructs the DestCreatePP object
+        #
+        # convert the bytecode str representation to a byte vector
+        code = bytes.fromhex(obj['code'][2:])
+        return DestCreatePP(code, obj['data'])
 
     def json(self):
         return { 'CreatePP': { 'code': self.code, 'data': self.data } }
