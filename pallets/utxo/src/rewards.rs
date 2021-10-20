@@ -18,20 +18,22 @@
 use crate::{Config, Pallet, Event, BlockAuthorRewardAmount, BlockAuthor, MLTCoinsAvailable, TransactionOutput, UtxoStore, StartingPeriod};
 
 use frame_support::traits::Get;
-use sp_runtime::traits::{SaturatedConversion, Saturating, BlakeTwo256, Hash, Zero};
+use sp_runtime::traits::{CheckedSub, SaturatedConversion, BlakeTwo256, Hash, Zero};
 
 
 /// Returns `true` if reward reduction period has passed; and if a new period has to be created.
 pub(crate) fn period_elapsed<T:Config>(time_now: T::BlockNumber) -> bool {
     let starting_period =  <StartingPeriod<T>>::get();
-    let time_elapsed = time_now.saturating_sub(starting_period);
-    let has_elapse = time_elapsed > T::RewardReductionPeriod::get();
+    if let Ok(time_elapsed) = time_now.checked_sub(&starting_period).ok_or("subtraction operation invalid") {
+        let has_elapse = time_elapsed > T::RewardReductionPeriod::get();
 
-    if has_elapse {
-        log::debug!("period has elapsed. Updating the start of period to now");
-        <StartingPeriod<T>>::put(time_now);
+        if has_elapse {
+            log::debug!("period has elapsed. Updating the start of period to now");
+            <StartingPeriod<T>>::put(time_now);
+        }
+        return has_elapse
     }
-    has_elapse
+    false
 }
 
 /// Returns the newly reduced reward amount for a Block Author.

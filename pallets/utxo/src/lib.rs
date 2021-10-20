@@ -117,7 +117,7 @@ pub mod pallet {
         /// The source account would not survive the transfer and it needs to stay alive.
         WouldDie,
 
-        /// When occurs during StakeExtra, use Destination::Stake for first time staking.
+        /// When occurs during StakeExtra, use Destination::LockForStaking for first time staking.
         /// When occurs during unstaking, it means there's no coordination with pallet-staking
         NoStakingRecordFound,
 
@@ -264,13 +264,13 @@ pub mod pallet {
         ScriptHash(H256),
         /// First attempt of staking.
         /// Must assign a controller, in order to bond and validate. see pallet-staking
-        Stake{
-            stash_pubkey:H256,
-            controller_pubkey:H256,
+        LockForStaking{
+            stash_account:AccountId, //TODO: change back to Public/H256 or something, after UI testing.
+            controller_account:AccountId, //TODO: change back to Public/H256 or something, after UI testing.
             session_key: Vec<u8>
         },
         /// lock more funds
-        StakeExtra(H256)
+        StakeExtra(AccountId) //TODO: change back to Public/H256 or something, after UI testing.
     }
 
     impl<AccountId> Destination<AccountId> {
@@ -313,31 +313,31 @@ pub mod pallet {
             }
         }
 
+        /// TODO: change back to Public/H256 or something, after UI Testing.
         /// Create a new stake for the first time.
         /// This is assumed, that an entity staking its funds also means playing the role of a `Validator`.
         /// # Arguments
         /// * `value` - This is assuming that the value is received in a format that's already `x * 1_000, * 1_000_000`
-        /// * `stash_pubkey` - public key of the stash account. This is considered as the "bank", which holds the funds.
-        /// The full meaning is found in `pallet-staking`.
-        /// * `controller_pubkey` = public key of the controller account, or can be considered as the "manager".
-        /// The full meaning is found in `pallet-staking`.
+        /// * `stash_acount` - This is considered as the "bank", which holds the funds. The full meaning is found in `pallet-staking`.
+        /// * `controller_acount` = can be considered as the "manager". The full meaning is found in `pallet-staking`.
         /// * `session_key` - for every new validator candidate, you want to link it to a session key.
         /// Generation of `session_key` is done through an rpc call `author_rotateKeys`.
         /// See https://docs.substrate.io/v3/concepts/session-keys/
-        pub fn new_stake(value: Value, stash_pubkey:H256, controller_pubkey:H256, session_key:Vec<u8>) -> Self {
+        pub fn new_stake(value: Value, stash_account:AccountId, controller_account:AccountId, session_key:Vec<u8>) -> Self {
             Self {
                 value,
                 header: 0,
-                destination: Destination::Stake { stash_pubkey, controller_pubkey, session_key }
+                destination: Destination::LockForStaking { stash_account, controller_account, session_key }
             }
         }
 
+        /// TODO: change back to Public/H256 or something, after UI Testing.
         /// Create a staking extra of an existing validator.
-        pub fn new_stake_extra(value: Value, controller_pubkey: H256) -> Self {
+        pub fn new_stake_extra(value: Value, controller_account: AccountId) -> Self {
             Self {
                 value,
                 header: 0,
-                destination: Destination::StakeExtra(controller_pubkey)
+                destination: Destination::StakeExtra(controller_account)
             }
         }
 
@@ -390,6 +390,16 @@ pub mod pallet {
                 .then(|| ())
                 .ok_or("Incorrect header")
         }
+    }
+
+
+    pub fn convert_to_h256<T: Config>(account:&T::AccountId) -> Result<H256,DispatchError> {
+        let pubkey_raw: [u8; 32] = account
+            .encode()
+            .try_into()
+            .map_err(|_| DispatchError::Other("Failed to get account's public key"))?;
+
+        Ok(H256::from(pubkey_raw))
     }
 
     #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
@@ -707,7 +717,7 @@ pub mod pallet {
                     new_utxos.push(hash.as_fixed_bytes().to_vec());
                     ensure!(!<LockedUtxos<T>>::contains_key(hash), "output already exists");
                 }
-                Destination::Stake {..} => {
+                Destination::LockForStaking {..} => {
                     ensure!(output.value >= T::MinimumStake::get(), "output value must be equal or more than the set minimum stake");
                     let hash = tx.outpoint(output_index as u64);
                     new_utxos.push(hash.as_fixed_bytes().to_vec());
@@ -787,7 +797,7 @@ pub mod pallet {
                         crate::script::verify(&tx, &input_utxos, index as u64, witness, lock)
                             .map_err(|_| "script verification failed")?;
                     }
-                    _ => {
+                    Destination::LockForStaking {..} | Destination::StakeExtra(_) => {
                         log::info!("TODO validate STAKE spending");
                     }
                 }
@@ -840,16 +850,22 @@ pub mod pallet {
                     log::debug!("inserting to UtxoStore {:?} as key {:?}", output, hash);
                     <UtxoStore<T>>::insert(hash, Some(output));
                 }
-                Destination::Stake{ stash_pubkey, controller_pubkey, session_key } => {
-                    staking::stake::<T>(stash_pubkey,controller_pubkey,session_key, output.value)?;
+
+                //TODO: change back to Public/H256 or something, after UI testing.
+                Destination::LockForStaking { stash_account, controller_account, session_key } => {
+                    let stash_pubkey = convert_to_h256::<T>(stash_account)?;
+                    let controller_pubkey = convert_to_h256::<T>(controller_account)?;
+                    staking::stake::<T>(&stash_pubkey, &controller_pubkey, session_key, output.value)?;
 
                     let hash = tx.outpoint(index as u64);
                     log::debug!("inserting to LockedUtxos {:?} as key {:?}", output, hash);
                     <LockedUtxos<T>>::insert(hash, Some(output));
                     <StakingCount<T>>::insert(controller_pubkey, Some((1,output.value)));
                 }
-                Destination::StakeExtra(controller_pubkey) => {
-                    staking::stake_extra::<T>(controller_pubkey, output.value)?;
+                //TODO: change back to Public/H256 or something, after UI testing.
+                Destination::StakeExtra(controller_account) => {
+                    let controller_pubkey = convert_to_h256::<T>(controller_account)?;
+                    staking::stake_extra::<T>(&controller_pubkey, output.value)?;
 
                     let hash = tx.outpoint(index as u64);
                     log::debug!("inserting to LockedUtxos {:?} as key {:?}", output, hash);
@@ -857,10 +873,10 @@ pub mod pallet {
                     let (mut num_of_utxos, mut total) = <StakingCount<T>>::get(&controller_pubkey).ok_or("cannot find the public key inside the stakingcount.")?;
 
                     // update the total locked utxo values
-                    total = total.saturating_add(output.value);
+                    total = total.checked_add(output.value).ok_or("exceeded limit of total amount to stake.")?;
 
                     // increase the number of utxos being locked.
-                    num_of_utxos = num_of_utxos.saturating_add(1);
+                    num_of_utxos = num_of_utxos.checked_add(1).ok_or("exceeded limit of number of utxos to stake.")?;
 
                     <LockedUtxos<T>>::insert(hash, Some(output));
                     <StakingCount<T>>::insert(controller_pubkey,Some((num_of_utxos, total)));
@@ -1148,8 +1164,11 @@ pub mod pallet {
             });
 
             self.locked_utxos.iter().cloned().enumerate().for_each(|(index, u)| {
-                if let Destination::Stake { stash_pubkey:_, controller_pubkey, session_key:_ } =  &u.destination {
-                    <StakingCount<T>>::insert(controller_pubkey.clone(),Some((1, u.value)));
+                //TODO: change back to Public/H256 or something, after UI testing.
+                if let Destination::LockForStaking { stash_account:_, controller_account, session_key:_ } =  &u.destination {
+                    if let Ok(controller_pubkey) = convert_to_h256::<T>(controller_account){
+                        <StakingCount<T>>::insert(controller_pubkey,Some((1, u.value)));
+                    }
                 }
 
                 // added the index and the `genesis` on the hashing, to indicate that these utxos are from the beginning of the chain.

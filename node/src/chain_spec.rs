@@ -182,8 +182,9 @@ fn testnet_genesis(
 
    let (genesis_utxos, locked_utxos) = initial_authorities.iter()
        .fold( (vec![], vec![]), | (mut genesis_utxos, mut locked_utxos), auth_keys| {
-           let x_h256 = H256::from(auth_keys.controller.clone());
-           let x_stash_h256 = H256::from(auth_keys.stash.clone());
+           //TODO: change back to Public/H256 or something, after UI testing.
+            let x_h256 = H256::from(auth_keys.controller.clone());
+           // let x_stash_h256 = H256::from(auth_keys.stash.clone());
 
            let num_of_utxos = 5;
            let value = MLT_ORIG_SUPPLY / num_of_utxos;
@@ -200,11 +201,12 @@ fn testnet_genesis(
 
            // initial authorities meaning they're also validators.
            // locking some values as a stake from validators
+           //TODO: change back to Public/H256 or something, after UI testing.
            locked_utxos.push(pallet_utxo::TransactionOutput::<AccountId>::new_stake(
                // this is the minimum stake amount
                MINIMUM_STAKE,
-               x_stash_h256,
-               x_h256,
+               auth_keys.stash_account_id(),
+               auth_keys.controller_account_id(),
                vec![]
            ));
 

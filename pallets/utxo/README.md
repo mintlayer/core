@@ -17,13 +17,13 @@ To run the test cases, just run command `cargo test`.
       "CreatePP": "DestinationCreatePP",
       "CallPP": "DestinationCallPP",
       "ScriptHash": "H256",
-      "Stake": "DestinationStake",
-         "StakeExtra": "Public"
+      "LockForStaking": "DestinationStake", 
+       "StakeExtra": "AccountId"
       }
    },
    "DestinationStake": {
-      "stash_pubkey": "Public",
-      "controller_pubkey": "Public",
+      "stash_account": "AccountId",
+      "controller_account": "AccountId",
       "session_key": "Vec<u8>"
    },
   "DestinationCreatePP": {

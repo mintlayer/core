@@ -83,8 +83,8 @@ class Destination():
             return DestCreatePP.load(obj['CreatePP'])
         if 'CallPP' in obj:
             return DestCallPP.load(obj['CallPP'])
-        if 'Stake' in obj:
-            return DestStake.load(obj['Stake'])
+        if 'LockForStaking' in obj:
+            return DestStake.load(obj['LockForStaking'])
         if 'StakeExtra' in obj:
             return DestStakeExtra.load(obj['StakeExtra'])
         return None
@@ -145,22 +145,22 @@ class DestStake(Destination):
 
     @staticmethod
     def load(obj):
-        return DestStake(obj['stash_pubkey'], obj['controller_pubkey'], ['session_key'])
+        return DestStake(obj['stash_account'], obj['controller_account'], ['session_key'])
 
     def json(self):
-        return { 'Stake': { 'stash_pubkey': self.stash, 'controller_pubkey': self.controller, 'session_key': self.sesh } }
+        return { 'LockForStaking': { 'stash_account': self.stash, 'controller_account': self.controller, 'session_key': self.sesh } }
 
 
 class DestStakeExtra(Destination):
-    def __init__(self, public):
-        self.public = public
+    def __init__(self, account):
+        self.account = account
 
     @staticmethod
     def load(obj):
         return DestStakeExtra(obj)
 
     def json(self):
-        return { 'StakeExtra': self.public }
+        return { 'StakeExtra': self.account }
 
     def get_public(self):
         return self.public

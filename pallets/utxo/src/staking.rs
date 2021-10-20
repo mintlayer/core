@@ -15,7 +15,7 @@
 //
 // Author(s): C. Yap
 
-use crate::{Config, StakingCount, Error, Event, Pallet, TransactionOutput, Destination, LockedUtxos, Value, UtxoStore, MLTCoinsAvailable};
+use crate::{Config, StakingCount, Error, Event, Pallet, TransactionOutput, Destination, LockedUtxos, Value, UtxoStore, MLTCoinsAvailable, convert_to_h256};
 use frame_support::{dispatch::{DispatchResultWithPostInfo, Vec}, ensure, traits::Get};
 use sp_core::H256;
 use sp_std::vec;
@@ -136,11 +136,15 @@ pub(crate) fn withdraw<T: Config>(controller_pubkey: H256, outpoints: Vec<H256>)
 
 pub(crate) fn is_owned_locked_utxo<T:Config>(utxo:&TransactionOutput<T::AccountId>, ctrl_pubkey: &H256) -> Result<(), &'static str> {
     match &utxo.destination {
-        Destination::Stake { stash_pubkey:_, controller_pubkey, session_key:_ } => {
-            ensure!(controller_pubkey == ctrl_pubkey, "hash of stake not owned");
+        //TODO: change back to Public/H256 or something, after UI testing.
+        Destination::LockForStaking { stash_account:_, controller_account, session_key:_ } => {
+            let controller_pubkey = convert_to_h256::<T>(controller_account)?;
+            ensure!(&controller_pubkey == ctrl_pubkey, "hash of stake not owned");
         }
-        Destination::StakeExtra(controller_pubkey) => {
-            ensure!(controller_pubkey == ctrl_pubkey, "hash of extra stake not owned");
+        //TODO: change back to Public/H256 or something, after UI testing.
+        Destination::StakeExtra(controller_account) => {
+            let controller_pubkey = convert_to_h256::<T>(controller_account)?;
+            ensure!(&controller_pubkey == ctrl_pubkey, "hash of extra stake not owned");
         }
         _ => {
             log::error!("For locked utxos, only with destinations `Stake` and `StakeExtra` are allowed.");

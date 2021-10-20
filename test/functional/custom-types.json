@@ -19,8 +19,8 @@
 		"DestinationStake": {
 			"type": "struct",
 			"type_mapping": [
-				[ "stash_pubkey", "Public" ],
-				[ "controller_pubkey", "Public" ],
+				[ "stash_account", "AccountId" ],
+				[ "controller_account", "AccountId" ],
 				[ "session_key", "Vec<u8>" ]
 			]
 		},
@@ -31,8 +31,8 @@
 				[ "CreatePP", "DestinationCreatePP" ],
 				[ "CallPP", "DestinationCallPP" ],
 				[ "ScriptHash", "H256"],
-				[ "Stake", "DestinationStake" ],
-				[ "StakeExtra", "Public" ]
+				[ "LockForStaking", "DestinationStake" ],
+				[ "StakeExtra", "AccountId" ]
 			]
 		},
 		"TransactionInput": {
