@@ -124,7 +124,7 @@ class ExampleTest(MintlayerTestFramework):
 
             ]
         ).sign(alice, [utxos[0][1]])
-        client.submit(alice, tx1)
+        res = client.submit(alice, tx1)
 
         tx2 = utxo.Transaction(
             client,

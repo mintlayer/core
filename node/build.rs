@@ -5,8 +5,7 @@ use std::ffi::OsStr;
 use std::fs;
 use std::path::Path;
 
-fn write_functional_tests_config_file()
-{
+fn write_functional_tests_config_file() {
     let cargo_manifest_dir = env!("CARGO_MANIFEST_DIR");
     let profile = env::var("PROFILE").unwrap();
     let bin_name = env::var("CARGO_PKG_NAME").unwrap_or("mintlayer-core".to_owned());
@@ -43,7 +42,12 @@ fn write_functional_tests_config_file()
     let template_config_file_content = str::replace(
         template_config_file_content.as_str(),
         "@EXEEXT@",
-        exe_path.extension().unwrap_or(OsStr::new("")).to_string_lossy().to_string().as_str(),
+        exe_path
+            .extension()
+            .unwrap_or(OsStr::new(""))
+            .to_string_lossy()
+            .to_string()
+            .as_str(),
     );
 
     // write the config file

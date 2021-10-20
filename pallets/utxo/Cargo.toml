@@ -13,6 +13,7 @@ std = [
     'frame-system/std',
     'frame-benchmarking/std',
     'chainscript/std',
+    'pallet-timestamp/std',
     'sp-core/std',
     'sp-std/std',
 ]
@@ -67,6 +68,12 @@ git = 'https://github.com/paritytech/substrate.git'
 version = '4.0.0-dev'
 branch = "master"
 
+[dependencies.pallet-timestamp]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+branch = "master"
+version = '4.0.0-dev'
+
 [dependencies.sp-core]
 default-features = false
 git = 'https://github.com/paritytech/substrate.git'
@@ -99,8 +106,3 @@ branch = "master"
 git = 'https://github.com/paritytech/substrate.git'
 version = '0.10.0-dev'
 branch = "master"
-
-[dev-dependencies.pallet-timestamp]
-git = 'https://github.com/paritytech/substrate.git'
-branch = "master"
-version = '4.0.0-dev'

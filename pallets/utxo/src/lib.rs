@@ -47,6 +47,7 @@ use utxo_api::UtxoApi;
 
 #[frame_support::pallet]
 pub mod pallet {
+    pub use crate::script::{BlockTime, RawBlockTime};
     use crate::sign::{self, Scheme};
     use crate::{OutputHeaderData, OutputHeaderHelper, TXOutputHeader, TokenID, TokenType};
     use bech32;
@@ -59,7 +60,7 @@ pub mod pallet {
         pallet_prelude::*,
         sp_io::crypto,
         sp_runtime::traits::{BlakeTwo256, Dispatchable, Hash, SaturatedConversion},
-        traits::IsSubType,
+        traits::{IsSubType, UnixTime},
     };
     use frame_system::pallet_prelude::*;
     use hex_literal::hex;
@@ -74,9 +75,7 @@ pub mod pallet {
         testing::SR25519,
         H256, H512,
     };
-    use sp_runtime::traits::{
-        AtLeast32Bit, Zero, /*, StaticLookup , AtLeast32BitUnsigned, Member, One */
-    };
+    use sp_runtime::traits::{AtLeast32Bit, Zero};
     use sp_runtime::DispatchErrorWithPostInfo;
 
     pub type Value = u128;
@@ -123,7 +122,7 @@ pub mod pallet {
 
     /// runtime configuration
     #[pallet::config]
-    pub trait Config: frame_system::Config {
+    pub trait Config: frame_system::Config + pallet_timestamp::Config {
         type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 
         type AssetId: Parameter + AtLeast32Bit + Default + Copy;
@@ -324,6 +323,7 @@ pub mod pallet {
     pub struct Transaction<AccountId> {
         pub(crate) inputs: Vec<TransactionInput>,
         pub(crate) outputs: Vec<TransactionOutput<AccountId>>,
+        pub(crate) time_lock: RawBlockTime,
     }
 
     impl<AccountId: Encode> Transaction<AccountId> {
@@ -349,6 +349,17 @@ pub mod pallet {
             self.inputs[index].witness =
                 crypto::sr25519_sign(SR25519, pk, &msg.encode())?.0.to_vec();
             Some(self)
+        }
+
+        pub fn check_time_lock<T: Config>(&self) -> bool {
+            match self.time_lock.time() {
+                BlockTime::Blocks(lock_block_num) => {
+                    <frame_system::Pallet<T>>::block_number() >= lock_block_num.into()
+                }
+                BlockTime::Timestamp(lock_time) => {
+                    <pallet_timestamp::Pallet<T> as UnixTime>::now() >= lock_time
+                }
+            }
         }
     }
 
@@ -514,6 +525,12 @@ pub mod pallet {
                 "each output should be used once"
             );
         }
+
+        // Verify absolute time lock
+        ensure!(
+            tx.check_time_lock::<T>(),
+            "Time lock restrictions not satisfied"
+        );
 
         // In order to avoid race condition in network we maintain a list of required utxos for a tx
         // Example of race condition:
@@ -786,6 +803,7 @@ pub mod pallet {
                 // Output a new tokens
                 TransactionOutput::new_token(token_id, supply, public),
             ],
+            time_lock: Default::default(),
         };
 
         // We shall make an output to return odd funds
@@ -850,7 +868,7 @@ pub mod pallet {
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
-        #[pallet::weight(T::WeightInfo::spend(tx.inputs.len().saturating_add(tx.outputs.len()) as u32))]
+        #[pallet::weight(<T as Config>::WeightInfo::spend(tx.inputs.len().saturating_add(tx.outputs.len()) as u32))]
         pub fn spend(
             origin: OriginFor<T>,
             tx: Transaction<T::AccountId>,
@@ -860,7 +878,7 @@ pub mod pallet {
             Ok(().into())
         }
 
-        #[pallet::weight(T::WeightInfo::token_create(768_usize.saturating_add(token_name.len()) as u32))]
+        #[pallet::weight(<T as Config>::WeightInfo::token_create(768_usize.saturating_add(token_name.len()) as u32))]
         pub fn token_create(
             origin: OriginFor<T>,
             public: H256,
@@ -882,7 +900,7 @@ pub mod pallet {
             Ok(().into())
         }
 
-        #[pallet::weight(T::WeightInfo::send_to_address(16_u32.saturating_add(address.len() as u32)))]
+        #[pallet::weight(<T as Config>::WeightInfo::send_to_address(16_u32.saturating_add(address.len() as u32)))]
         pub fn send_to_address(
             origin: OriginFor<T>,
             value: Value,
@@ -936,6 +954,7 @@ pub mod pallet {
                     },
                     TransactionOutput::new_pubkey(total - value, H256::from(pubkey_raw)),
                 ],
+                time_lock: Default::default(),
             };
 
             for i in 0..tx.inputs.len() {
@@ -1030,6 +1049,7 @@ where
             &Transaction {
                 inputs: vec![TransactionInput::new_with_signature(utxo, sig)],
                 outputs: vec![TransactionOutputFor::<T>::new_pubkey(value, address)],
+                time_lock: Default::default(),
             },
         )
     }
@@ -1048,6 +1068,7 @@ where
             &Transaction {
                 inputs: coin_picker::<T>(outpoints)?,
                 outputs: vec![TransactionOutput::new_pubkey(value, H256::from(pubkey_raw))],
+                time_lock: Default::default(),
             },
         )
         .map_err(|_| "Failed to spend the transaction!")?;
@@ -1071,6 +1092,7 @@ where
                     true,
                     data.clone(),
                 )],
+                time_lock: Default::default(),
             },
         )
         .map_err(|_| "Failed to spend the transaction!")?;

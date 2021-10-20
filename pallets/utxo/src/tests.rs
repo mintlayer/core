@@ -16,8 +16,8 @@
 // Author(s): C. Yap
 
 use crate::{
-    mock::*, Destination, RewardTotal, TokenList, Transaction, TransactionInput, TransactionOutput,
-    UtxoStore, Value,
+    mock::*, BlockTime, Destination, RewardTotal, TokenList, Transaction, TransactionInput,
+    TransactionOutput, UtxoStore, Value,
 };
 use chainscript::{opcodes::all as opc, Builder};
 use codec::Encode;
@@ -80,12 +80,14 @@ fn test_script_preimage() {
         let tx1 = Transaction {
             inputs: vec![input0],
             outputs: vec![TransactionOutput::new_script_hash(50, script_hash)],
+            time_lock: Default::default(),
         }
         .sign_unchecked(&[utxo0], 0, &alice_pub_key);
 
         let tx2 = Transaction {
             inputs: vec![TransactionInput::new_script(tx1.outpoint(0), script, witness_script)],
             outputs: vec![TransactionOutput::new_script_hash(20, H256::zero())],
+            time_lock: Default::default(),
         };
 
         assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx1));
@@ -104,6 +106,7 @@ fn test_unchecked_2nd_output() {
                 TransactionOutput::new_pubkey(30, H256::from(alice_pub_key)),
                 TransactionOutput::new_pubkey(50, H256::from(alice_pub_key)),
             ],
+            time_lock: Default::default(),
         }
         .sign_unchecked(&[utxo0], 0, &alice_pub_key);
 
@@ -127,6 +130,7 @@ fn test_simple_tx() {
         let tx = Transaction {
             inputs: vec![input0],
             outputs: vec![TransactionOutput::new_pubkey(50, H256::from(alice_pub_key))],
+            time_lock: Default::default(),
         }
         .sign_unchecked(&[utxo0], 0, &alice_pub_key);
 
@@ -149,6 +153,7 @@ fn attack_with_sending_to_own_account() {
         let mut tx = Transaction {
             inputs: vec![TransactionInput::new_empty(H256::zero())],
             outputs: vec![TransactionOutput::new_pubkey(50, H256::from(karl_pub_key))],
+            time_lock: Default::default(),
         };
 
         let karl_sig = crypto::sr25519_sign(SR25519, &karl_pub_key, &tx.encode()).unwrap();
@@ -174,7 +179,8 @@ fn attack_with_empty_transactions() {
                 Origin::signed(H256::zero()),
                 Transaction {
                     inputs: vec![TransactionInput::default()], // an empty tx
-                    outputs: vec![]
+                    outputs: vec![],
+                    time_lock: Default::default()
                 }
             ),
             "no outputs"
@@ -191,6 +197,7 @@ fn attack_by_double_counting_input() {
             // a double spend of the same UTXO!
             inputs: vec![input0.clone(), input0],
             outputs: vec![TransactionOutput::new_pubkey(100, H256::from(alice_pub_key))],
+            time_lock: Default::default(),
         }
         .sign_unchecked(&utxos[..], 0, &alice_pub_key)
         .sign_unchecked(&utxos[..], 1, &alice_pub_key);
@@ -210,6 +217,7 @@ fn attack_with_invalid_signature() {
             // Just a random signature!
             inputs: vec![TransactionInput::new_with_signature(input0, H512::random())],
             outputs: vec![TransactionOutput::new_pubkey(100, H256::from(alice_pub_key))],
+            time_lock: Default::default(),
         };
 
         assert_err!(
@@ -227,6 +235,7 @@ fn attack_by_permanently_sinking_outputs() {
             inputs: vec![input0],
             //A 0 value output burns this output forever!
             outputs: vec![TransactionOutput::new_pubkey(0, H256::from(alice_pub_key))],
+            time_lock: Default::default(),
         }
         .sign_unchecked(&[utxo0], 0, &alice_pub_key);
 
@@ -248,6 +257,7 @@ fn attack_by_overflowing_value() {
                 // Attempts to do overflow total output value
                 TransactionOutput::new_pubkey(10, H256::from(alice_pub_key)),
             ],
+            time_lock: Default::default(),
         }
         .sign_unchecked(&[utxo0], 0, &alice_pub_key);
 
@@ -269,6 +279,7 @@ fn attack_by_overspending() {
                 // Creates 2 new utxo out of thin air
                 TransactionOutput::new_pubkey(2, H256::from(alice_pub_key)),
             ],
+            time_lock: Default::default(),
         }
         .sign_unchecked(&[utxo0], 0, &alice_pub_key);
 
@@ -293,6 +304,7 @@ fn tx_from_alice_to_karl() {
                 TransactionOutput::new_pubkey(10, H256::from(karl_pub_key)),
                 TransactionOutput::new_pubkey(90, H256::from(alice_pub_key)),
             ],
+            time_lock: Default::default(),
         }
         .sign_unchecked(&[utxo0], 0, &alice_pub_key);
 
@@ -304,6 +316,7 @@ fn tx_from_alice_to_karl() {
         let tx = Transaction {
             inputs: vec![TransactionInput::new_empty(new_utxo_hash)],
             outputs: vec![TransactionOutput::new_pubkey(90, H256::from(karl_pub_key))],
+            time_lock: Default::default(),
         }
         .sign_unchecked(&[new_utxo], 0, &alice_pub_key);
 
@@ -319,6 +332,7 @@ fn test_reward() {
         let tx = Transaction {
             inputs: vec![input0],
             outputs: vec![TransactionOutput::new_pubkey(90, H256::from(alice_pub_key))],
+            time_lock: Default::default(),
         }
         .sign_unchecked(&[utxo0], 0, &alice_pub_key);
 
@@ -341,10 +355,57 @@ fn test_script() {
         let tx = Transaction {
             inputs: vec![input0],
             outputs: vec![TransactionOutput::new_pubkey(90, H256::from(alice_pub_key))],
+            time_lock: Default::default(),
         }
         .sign_unchecked(&[utxo0], 0, &alice_pub_key);
 
         assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx));
+    })
+}
+
+#[test]
+fn test_time_lock_tx() {
+    execute_with_alice(|alice_pub_key| {
+        let (utxo0, input0) = tx_input_gen_no_signature();
+        let tx = Transaction {
+            inputs: vec![input0],
+            outputs: vec![TransactionOutput::new_pubkey(90, H256::from(alice_pub_key))],
+            time_lock: BlockTime::Blocks(10).as_raw().unwrap(),
+        }
+        .sign_unchecked(&[utxo0], 0, &alice_pub_key);
+        assert_err!(
+            Utxo::spend(Origin::signed(H256::zero()), tx),
+            "Time lock restrictions not satisfied",
+        );
+    })
+}
+
+#[test]
+fn test_time_lock_script_fail() {
+    execute_with_alice(|alice_pub_key| {
+        let (utxo0, input0) = tx_input_gen_no_signature();
+        let script = Builder::new().push_int(10).push_opcode(opc::OP_CLTV).into_script();
+        let script_hash: H256 = BlakeTwo256::hash(script.as_ref());
+        let tx1 = Transaction {
+            inputs: vec![input0],
+            outputs: vec![TransactionOutput::new_script_hash(90, script_hash)],
+            time_lock: Default::default(),
+        }
+        .sign_unchecked(&[utxo0], 0, &alice_pub_key);
+        let outpoint = tx1.outpoint(0);
+        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx1));
+
+        // The following should fail because the transaction-level time lock does not conform to
+        // the time lock restrictions imposed by the scripting system.
+        let tx2 = Transaction {
+            inputs: vec![TransactionInput::new_script(outpoint, script, Default::default())],
+            outputs: vec![TransactionOutput::new_pubkey(50, H256::from(alice_pub_key))],
+            time_lock: Default::default(),
+        };
+        assert_err!(
+            Utxo::spend(Origin::signed(H256::zero()), tx2),
+            "script verification failed"
+        );
     })
 }
 
@@ -374,6 +435,7 @@ fn test_tokens() {
                 // 20 MLT to be paid as a fee, 80 MLT returning
                 TransactionOutput::new_pubkey(80, H256::from(alice_pub_key)),
             ],
+            time_lock: Default::default(),
         }
         .sign_unchecked(&[utxo0], 0, &alice_pub_key);
         assert_ok!(Utxo::spend(Origin::signed(H256::zero()), first_tx.clone()));
@@ -399,6 +461,7 @@ fn test_tokens() {
                 TransactionInput::new_empty(utxo_hash_token),
             ],
             outputs: vec![TransactionOutput::new_token(token_id, 10, H256::from(karl_pub_key))],
+            time_lock: Default::default(),
         }
         .sign_unchecked(&prev_utxos, 0, &alice_pub_key)
         .sign_unchecked(&prev_utxos, 1, &alice_pub_key);
@@ -417,6 +480,7 @@ fn attack_double_spend_by_tweaking_input() {
         let tx0 = Transaction {
             inputs: vec![input0],
             outputs: vec![TransactionOutput::new_script_hash(50, drop_script_hash)],
+            time_lock: Default::default(),
         }
         .sign_unchecked(&[utxo0], 0, &alice_pub_key);
         assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx0.clone()));
@@ -432,6 +496,7 @@ fn attack_double_spend_by_tweaking_input() {
         let tx1 = Transaction {
             inputs: inputs,
             outputs: vec![TransactionOutput::new_pubkey(500, H256::from(alice_pub_key))],
+            time_lock: Default::default(),
         };
         assert_err!(
             Utxo::spend(Origin::signed(H256::zero()), tx1),

@@ -174,10 +174,11 @@ class Input():
         }
 
 class Transaction():
-    def __init__(self, client, inputs, outputs):
+    def __init__(self, client, inputs, outputs, time_lock = 0):
         self.client = client
         self.inputs = inputs
         self.outputs = outputs
+        self.time_lock = time_lock
 
     def type_string(self):
         return 'Transaction'
@@ -186,6 +187,7 @@ class Transaction():
         return {
             'inputs': [ i.json() for i in self.inputs ],
             'outputs': [ o.json() for o in self.outputs ],
+            'time_lock': self.time_lock
         }
 
     """ Get data to be signed for this transaction """
@@ -202,6 +204,7 @@ class Transaction():
             'sighash': 0,
             'inputs': { 'SpecifiedPay': (outpoints_hash, utxos_hash, idx) },
             'outputs': { 'All': outputs_hash },
+            'time_lock': self.time_lock,
             'codesep_pos': 0xffffffff
         }
         return self.client.encode_obj('SignatureData', sigdata)
