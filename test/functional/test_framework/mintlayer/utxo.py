@@ -5,6 +5,7 @@ from substrateinterface import SubstrateInterface, Keypair
 from substrateinterface.exceptions import SubstrateRequestException
 import scalecodec
 import os
+import logging
 
 """ Client. A thin wrapper over SubstrateInterface """
 class Client:
@@ -12,6 +13,7 @@ class Client:
         source_dir = os.path.dirname(os.path.abspath(__file__))
         types_file = os.path.join(source_dir, "..", "..", "custom-types.json")
         custom_type_registry = scalecodec.type_registry.load_type_registry_file(types_file)
+        self.log = logging.getLogger('TestFramework.client')
 
         self.substrate = SubstrateInterface(
             url=url + ":" + str(port),
@@ -56,14 +58,14 @@ class Client:
             call_params = { 'tx': tx.json() },
         )
         extrinsic = self.substrate.create_signed_extrinsic(call=call, keypair=keypair)
-        print("extrinsic submitted...")
+        self.log.debug("extrinsic submitted...")
 
         try:
             receipt = self.substrate.submit_extrinsic(extrinsic, wait_for_inclusion=True)
-            print("Extrinsic '{}' sent and included in block '{}'".format(receipt.extrinsic_hash, receipt.block_hash))
+            self.log.debug("Extrinsic '{}' sent and included in block '{}'".format(receipt.extrinsic_hash, receipt.block_hash))
             return (receipt.extrinsic_hash, receipt.block_hash)
         except SubstrateRequestException as e:
-            print("Failed to send: {}".format(e))
+            self.log.info("Failed to send: {}".format(e))
 
 class Destination():
     @staticmethod
