@@ -37,7 +37,7 @@ impl <T: pallet_staking::Config + pallet_utxo::Config + pallet_session::Config> 
         pub_key.0.into()
     }
 
-    fn stake(stash_account: &StakeAccountId<T>, controller_account: &StakeAccountId<T>, session_key: &mut Vec<u8>, value: u128) -> DispatchResultWithPostInfo {
+    fn stake(stash_account: &StakeAccountId<T>, controller_account: &StakeAccountId<T>, session_key: &Vec<u8>, value: u128) -> DispatchResultWithPostInfo {
         let controller_lookup: LookupSourceOf<T> = T::Lookup::unlookup(controller_account.clone());
         let reward_destination = pallet_staking::RewardDestination::Staked;
 

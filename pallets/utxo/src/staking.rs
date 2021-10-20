@@ -36,7 +36,7 @@ pub trait StakingHelper<AccountId>{
     /// In `pallet-staking`, its job is like an "accountant" to the stash account.
     /// * `session_key` - to get up-to-date with validators, eras, sessions. see `pallet-session`.
     /// * `value` - the amount to stake/bond/stash
-    fn stake(stash_account:&AccountId, controller_account:&AccountId, session_key:&mut Vec<u8>, value:Value) -> DispatchResultWithPostInfo;
+    fn stake(stash_account:&AccountId, controller_account:&AccountId, session_key:&Vec<u8>, value:Value) -> DispatchResultWithPostInfo;
 
     /// stake more funds for the validator
     fn stake_extra(controller_account:&AccountId, value:Value) -> DispatchResultWithPostInfo;
@@ -67,12 +67,10 @@ pub(crate) fn stake<T: Config>(
     -> DispatchResultWithPostInfo {
     ensure!(!<StakingCount<T>>::contains_key(controller_pubkey),Error::<T>::StakingAlreadyExists);
 
-    let mut session_key = session_key.to_vec();
-
     let stash_account = T::StakingHelper::get_account_id(stash_pubkey);
     let controller_account = T::StakingHelper::get_account_id(controller_pubkey);
 
-    T::StakingHelper::stake(&stash_account, &controller_account, &mut session_key,value)
+    T::StakingHelper::stake(&stash_account, &controller_account, session_key,value)
 }
 
 /// stake more values. This is only for existing validators.
