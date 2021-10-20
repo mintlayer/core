@@ -58,6 +58,8 @@ pub enum Error {
     PubkeyCount,
     /// Incorrect number of signatures for multisig
     SigCount,
+    /// Time lock interval not elapsed yet
+    TimeLock,
     /// Multisig lacks extra 0 dummy.
     NullDummy,
 }
