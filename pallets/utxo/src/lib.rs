@@ -385,8 +385,7 @@ pub mod pallet {
 
     #[pallet::storage]
     #[pallet::getter(fn utxo_store)]
-    pub(super) type UtxoStore<T: Config> =
-        StorageMap<_, Identity, H256, Option<TransactionOutputFor<T>>, ValueQuery>;
+    pub(super) type UtxoStore<T: Config> = StorageMap<_, Identity, H256, TransactionOutputFor<T>>;
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -443,7 +442,7 @@ pub mod pallet {
             };
 
             if !<UtxoStore<T>>::contains_key(hash) {
-                <UtxoStore<T>>::insert(hash, Some(utxo));
+                <UtxoStore<T>>::insert(hash, utxo);
             }
         }
     }
@@ -746,7 +745,7 @@ pub mod pallet {
         for (index, output) in tx.outputs.iter().enumerate() {
             let hash = tx.outpoint(index as u64);
             log::debug!("inserting to UtxoStore {:?} as key {:?}", output, hash);
-            <UtxoStore<T>>::insert(hash, Some(output));
+            <UtxoStore<T>>::insert(hash, output);
 
             match &output.destination {
                 Destination::CreatePP(script, data) => {
@@ -845,8 +844,6 @@ pub mod pallet {
         let mut total = 0;
 
         for (hash, utxo) in UtxoStore::<T>::iter() {
-            let utxo = utxo.unwrap();
-
             match utxo.destination {
                 Destination::Pubkey(pubkey) => {
                     if caller.encode() == pubkey.encode() {
@@ -987,7 +984,7 @@ pub mod pallet {
     impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
         fn build(&self) {
             self.genesis_utxos.iter().cloned().for_each(|u| {
-                UtxoStore::<T>::insert(BlakeTwo256::hash_of(&u), Some(u));
+                UtxoStore::<T>::insert(BlakeTwo256::hash_of(&u), u);
             });
         }
     }
