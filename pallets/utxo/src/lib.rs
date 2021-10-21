@@ -143,6 +143,20 @@ pub mod pallet {
         fn send_to_address(u: u32) -> Weight;
     }
 
+    /// Outpoint refers to an output of a transaction by Transaction ID and index.
+    #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+    #[derive(Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, RuntimeDebug, Hash, Default)]
+    pub struct Outpoint {
+        pub(crate) txid: H256,
+        #[codec(compact)] pub(crate) index: u32,
+    }
+
+    impl Outpoint {
+        fn new(txid: H256, index: u32) -> Self {
+            Outpoint { txid, index }
+        }
+    }
+
     /// Transaction input
     ///
     /// The input contains two pieces of information used to unlock the funds being spent. The
@@ -166,7 +180,7 @@ pub mod pallet {
     )]
     pub struct TransactionInput {
         /// The output being spent
-        pub(crate) outpoint: H256,
+        pub(crate) outpoint: Outpoint,
         /// The lock data
         pub(crate) lock: Vec<u8>,
         /// The witness data
@@ -175,7 +189,7 @@ pub mod pallet {
 
     impl TransactionInput {
         /// New input with a signature in the `witness` field.
-        pub fn new_with_signature(outpoint: H256, sig_script: H512) -> Self {
+        pub fn new_with_signature(outpoint: Outpoint, sig_script: H512) -> Self {
             Self {
                 outpoint,
                 lock: Vec::new(),
@@ -184,7 +198,7 @@ pub mod pallet {
         }
 
         /// New input with empty `lock` and `witness` to be filled later.
-        pub fn new_empty(outpoint: H256) -> Self {
+        pub fn new_empty(outpoint: Outpoint) -> Self {
             Self {
                 outpoint,
                 lock: Vec::new(),
@@ -193,7 +207,7 @@ pub mod pallet {
         }
 
         /// New input with lock script and witness script.
-        pub fn new_script(outpoint: H256, lock: Script, witness: Script) -> Self {
+        pub fn new_script(outpoint: Outpoint, lock: Script, witness: Script) -> Self {
             Self {
                 outpoint,
                 lock: lock.into_bytes(),
@@ -328,8 +342,9 @@ pub mod pallet {
 
     impl<AccountId: Encode> Transaction<AccountId> {
         /// Get hash of output at given index.
-        pub fn outpoint(&self, index: u64) -> H256 {
-            BlakeTwo256::hash_of(&(self, index)).into()
+        pub fn outpoint(&self, index: u32) -> Outpoint {
+            let txid = BlakeTwo256::hash_of(&self).into();
+            Outpoint { txid, index }
         }
 
         // A convenience method to sign a transaction. Only Schnorr supported for now.
@@ -385,7 +400,8 @@ pub mod pallet {
 
     #[pallet::storage]
     #[pallet::getter(fn utxo_store)]
-    pub(super) type UtxoStore<T: Config> = StorageMap<_, Identity, H256, TransactionOutputFor<T>>;
+    pub(super) type UtxoStore<T: Config> =
+        StorageMap<_, Identity, Outpoint, TransactionOutputFor<T>>;
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -441,8 +457,9 @@ pub mod pallet {
                 BlakeTwo256::hash_of(&(&utxo, b_num))
             };
 
-            if !<UtxoStore<T>>::contains_key(hash) {
-                <UtxoStore<T>>::insert(hash, utxo);
+            let outpoint = Outpoint::new(hash, 0);
+            if !<UtxoStore<T>>::contains_key(outpoint) {
+                <UtxoStore<T>>::insert(outpoint, utxo);
             }
         }
     }
@@ -450,13 +467,13 @@ pub mod pallet {
     pub fn create<T: Config>(
         caller: &T::AccountId,
         code: &Vec<u8>,
-        utxo_hash: H256,
+        utxo_outpt: Outpoint,
         utxo_value: u128,
         data: &Vec<u8>,
     ) {
         let weight: Weight = 6000000000;
 
-        match T::ProgrammablePool::create(caller, weight, code, utxo_hash, utxo_value, data) {
+        match T::ProgrammablePool::create(caller, weight, code, utxo_outpt, utxo_value, data) {
             Ok(_) => log::info!("success!"),
             Err(e) => log::error!("failure: {:#?}", e),
         }
@@ -465,7 +482,7 @@ pub mod pallet {
     pub fn call<T: Config>(
         caller: &T::AccountId,
         dest: &T::AccountId,
-        utxo_hash: H256,
+        utxo_outpt: Outpoint,
         utxo_value: u128,
         fund_contract: bool,
         data: &Vec<u8>,
@@ -476,7 +493,7 @@ pub mod pallet {
             caller,
             dest,
             weight,
-            utxo_hash,
+            utxo_outpt,
             utxo_value,
             fund_contract,
             data,
@@ -613,7 +630,7 @@ pub mod pallet {
             }
             ensure!(res.is_ok(), "header error. Please check the logs.");
             ensure!(output.value > 0, "output value must be nonzero");
-            let hash = tx.outpoint(output_index as u64);
+            let hash = tx.outpoint(output_index as u32);
             ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
             new_utxos.push(hash.as_fixed_bytes().to_vec());
 
@@ -743,7 +760,7 @@ pub mod pallet {
         }
 
         for (index, output) in tx.outputs.iter().enumerate() {
-            let hash = tx.outpoint(index as u64);
+            let hash = tx.outpoint(index as u32);
             log::debug!("inserting to UtxoStore {:?} as key {:?}", output, hash);
             <UtxoStore<T>>::insert(hash, output);
 
@@ -838,9 +855,9 @@ pub mod pallet {
     pub fn pick_utxo<T: Config>(
         caller: &T::AccountId,
         value: Value,
-    ) -> (Value, Vec<H256>, Vec<TransactionOutputFor<T>>) {
+    ) -> (Value, Vec<Outpoint>, Vec<TransactionOutputFor<T>>) {
         let mut utxos = Vec::new();
-        let mut hashes = Vec::new();
+        let mut outpts = Vec::new();
         let mut total = 0;
 
         for (hash, utxo) in UtxoStore::<T>::iter() {
@@ -848,7 +865,7 @@ pub mod pallet {
                 Destination::Pubkey(pubkey) => {
                     if caller.encode() == pubkey.encode() {
                         total += utxo.value;
-                        hashes.push(hash);
+                        outpts.push(hash);
                         utxos.push(utxo);
 
                         if total >= value {
@@ -860,7 +877,7 @@ pub mod pallet {
             }
         }
 
-        (total, hashes, utxos)
+        (total, outpts, utxos)
     }
 
     #[pallet::call]
@@ -983,8 +1000,9 @@ pub mod pallet {
     #[pallet::genesis_build]
     impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
         fn build(&self) {
-            self.genesis_utxos.iter().cloned().for_each(|u| {
-                UtxoStore::<T>::insert(BlakeTwo256::hash_of(&u), u);
+            self.genesis_utxos.iter().cloned().for_each(|utxo| {
+                let outpt = Outpoint::new(BlakeTwo256::hash_of(&utxo), 0);
+                UtxoStore::<T>::insert(outpt, utxo);
             });
         }
     }
@@ -1002,7 +1020,7 @@ impl<T: Config> crate::Pallet<T> {
     }
 }
 
-fn coin_picker<T: Config>(outpoints: &Vec<H256>) -> Result<Vec<TransactionInput>, DispatchError> {
+fn coin_picker<T: Config>(outpoints: &Vec<Outpoint>) -> Result<Vec<TransactionInput>, DispatchError> {
     let mut inputs: Vec<TransactionInput> = Vec::new();
 
     // consensus-critical sorting function...
@@ -1033,12 +1051,13 @@ where
     T::AccountId: UncheckedFrom<T::Hash> + AsRef<[u8]>,
 {
     type AccountId = T::AccountId;
+    type Outpoint = Outpoint;
 
     fn spend(
         caller: &T::AccountId,
         value: u128,
         address: H256,
-        utxo: H256,
+        utxo: Outpoint,
         sig: H512,
     ) -> DispatchResultWithPostInfo {
         spend::<T>(
@@ -1055,7 +1074,7 @@ where
         caller: &T::AccountId,
         dest: &T::AccountId,
         value: u128,
-        outpoints: &Vec<H256>,
+        outpoints: &Vec<Outpoint>,
     ) -> Result<(), DispatchError> {
         let pubkey_raw: [u8; 32] =
             dest.encode().try_into().map_err(|_| "Failed to get caller's public key")?;
@@ -1077,7 +1096,7 @@ where
         dest: &Self::AccountId,
         value: u128,
         data: &Vec<u8>,
-        outpoints: &Vec<H256>,
+        outpoints: &Vec<Outpoint>,
     ) -> Result<(), DispatchError> {
         spend::<T>(
             caller,

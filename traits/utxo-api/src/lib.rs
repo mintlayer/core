@@ -24,12 +24,13 @@ use sp_core::{H256, H512};
 
 pub trait UtxoApi {
     type AccountId;
+    type Outpoint;
 
     fn spend(
         caller: &Self::AccountId,
         value: u128,
         address: H256,
-        utxo: H256,
+        utxo: Self::Outpoint,
         sig: H512,
     ) -> DispatchResultWithPostInfo;
 
@@ -37,7 +38,7 @@ pub trait UtxoApi {
         caller: &Self::AccountId,
         destination: &Self::AccountId,
         value: u128,
-        outpoints: &Vec<H256>,
+        outpoints: &Vec<Self::Outpoint>,
     ) -> Result<(), DispatchError>;
 
     fn send_conscrit_c2c(
@@ -45,6 +46,6 @@ pub trait UtxoApi {
         destination: &Self::AccountId,
         value: u128,
         data: &Vec<u8>,
-        outpoints: &Vec<H256>,
+        outpoints: &Vec<Self::Outpoint>,
     ) -> Result<(), DispatchError>;
 }

@@ -23,7 +23,7 @@
 //! 2. Tools to verify signatures using multiple signature schemes.
 //!    See [Public] and [SignatureData].
 
-use crate::{Transaction, TransactionOutput};
+use crate::{Outpoint, Transaction, TransactionOutput};
 
 use chainscript::context::ParseResult;
 pub use chainscript::sighash::SigHash;
@@ -62,7 +62,7 @@ enum TransactionInputSigMsg {
         index: u64,
     },
     /// Commit to this input only
-    AnyoneCanPay { outpoint: H256, spending: H256 },
+    AnyoneCanPay { outpoint: Outpoint, spending: H256 },
 }
 
 /// Transaction output data comitted to in a signature.
@@ -114,7 +114,7 @@ impl TransactionSigMsg {
             inputs: match sighash.input_mode() {
                 InputMode::CommitWhoPays => TransactionInputSigMsg::CommitWhoPays {
                     outpoints: BlakeTwo256::hash_of(
-                        &tx.inputs.iter().map(|i| &i.outpoint).collect::<Vec<&H256>>(),
+                        &tx.inputs.iter().map(|i| &i.outpoint).collect::<Vec<&Outpoint>>(),
                     ),
                     spending: BlakeTwo256::hash_of(&spending),
                     index,
