@@ -306,6 +306,10 @@ impl<T: pallet_contracts::Config + pallet::Config> ChainExtension<T> for Pallet<
                     return Err(DispatchError::Other("Destination doesn't exist"));
                 }
 
+                if acc_id == dest {
+                    return Err(DispatchError::Other("Contract cannot call itself"));
+                }
+
                 // append data to the selector so the final data
                 // passed on to the contract is in correct format
                 let mut selector = selector.to_vec();
