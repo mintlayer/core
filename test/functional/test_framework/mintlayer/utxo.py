@@ -32,10 +32,10 @@ class Client:
         return '0x' + str(substrateinterface.utils.hasher.blake2_256(encoded))
 
     """ Query the node for the list of utxos """
-    def utxos(self):
+    def utxos(self, storage_name):
         query = self.substrate.query_map(
             module="Utxo",
-            storage_function="UtxoStore",
+            storage_function=storage_name,
             ignore_decoding_errors=False
         )
 
@@ -44,7 +44,7 @@ class Client:
     """ Get UTXOs for given key """
     def utxos_for(self, keypair):
         matching = lambda e: e[1].destination.get_pubkey() == keypair.public_key
-        return filter(matching, self.utxos())
+        return filter(matching, self.utxos('UtxoStore'))
 
     """ Query the node for the list of public keys with staking """
     def staking_count(self):
@@ -162,8 +162,6 @@ class DestStakeExtra(Destination):
     def json(self):
         return { 'StakeExtra': self.account }
 
-    def get_public(self):
-        return self.public
 
 class Output():
     def __init__(self, value, header, destination):

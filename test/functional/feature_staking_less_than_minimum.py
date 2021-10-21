@@ -16,6 +16,7 @@ from test_framework.util import (
     connect_nodes,
     wait_until,
 )
+from test_framework.messages import COIN
 
 
 class ExampleTest(MintlayerTestFramework):
@@ -66,7 +67,7 @@ class ExampleTest(MintlayerTestFramework):
         utxos = list(client.utxos_for(alice))
 
         # there's only 1 record of staking, which is alice.
-        assert( len(list(client.staking_count())) == 1 )
+        assert_equal( len(list(client.staking_count())), 1 )
 
         tx1 = utxo.Transaction(
             client,
@@ -75,7 +76,7 @@ class ExampleTest(MintlayerTestFramework):
             ],
             outputs=[
                 utxo.Output(
-                    value=5000000000000000,
+                    value=50000 * COIN,
                     header=0,
                     destination=utxo.DestPubkey(bob.public_key)
                 ),
@@ -90,12 +91,12 @@ class ExampleTest(MintlayerTestFramework):
             ],
             outputs=[
                 utxo.Output(
-                    value=40000000,
+                    value=4000 * COIN,
                     header=0,
                     destination=utxo.DestStake(bob_stash.public_key, bob.public_key,'0xa03bcfaac6ebdc26bb9c256c51b08f9c1c6d4569f48710a42939168d1d7e5b6086b20e145e97158f6a0b5bff2994439d3320543c8ff382d1ab3e5eafffaf1a18')
                 ),
                 utxo.Output(
-                    value=999900000000000,
+                    value=45999 * COIN,
                     header=0,
                     destination=utxo.DestPubkey(bob.public_key)
                 ),
@@ -104,7 +105,7 @@ class ExampleTest(MintlayerTestFramework):
         client.submit(bob, tx2)
 
         # there should only be 1 still, because Bob failed on the staking.
-        assert( len(list(client.staking_count())) == 1 )
+        assert_equal(len(list(client.staking_count())), 1 )
 
 if __name__ == '__main__':
     ExampleTest().main()

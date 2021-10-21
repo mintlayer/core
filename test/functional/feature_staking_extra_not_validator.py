@@ -17,6 +17,7 @@ from test_framework.util import (
     connect_nodes,
     wait_until,
 )
+from test_framework.messages import COIN
 
 
 class ExampleTest(MintlayerTestFramework):
@@ -68,9 +69,9 @@ class ExampleTest(MintlayerTestFramework):
 
         orig_count = list(client.staking_count())[0][1]
         # there should only be 1 count of alice's locked utxo
-        assert(orig_count[0] == 1)
+        assert_equal(orig_count[0], 1)
         # the amount that alice locked is 40_000 * MLT_UNIT
-        assert(orig_count[1] == 4000000000000000)
+        assert_equal(orig_count[1], 40000 * COIN)
 
         tx1 = utxo.Transaction(
             client,
@@ -79,7 +80,7 @@ class ExampleTest(MintlayerTestFramework):
             ],
             outputs=[
                 utxo.Output(
-                    value=4000000000000000,
+                    value=40000 * COIN,
                     header=0,
                     destination=utxo.DestStakeExtra(bob.public_key)
                 ),
@@ -89,12 +90,12 @@ class ExampleTest(MintlayerTestFramework):
 
         new_count = list(client.staking_count())
         # there should only be 1 count of staking, which is Alice
-        assert(len(new_count) == 1 )
+        assert_equal(len(new_count), 1 )
 
         # there should only be 1 count of utxo
-        assert(new_count[0][1][0] == 1 )
+        assert_equal(new_count[0][1][0], 1 )
         # the original stake of alice stays the same.
-        assert(new_count[0][1][1] == 4000000000000000 )
+        assert_equal(new_count[0][1][1], 40000 * COIN )
 
 if __name__ == '__main__':
     ExampleTest().main()

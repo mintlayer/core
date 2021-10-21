@@ -58,7 +58,8 @@ BASE_SCRIPTS= [
     'feature_staking_extra.py',
     'feature_staking_extra_not_validator.py',
     'feature_staking_first_time.py',
-    'feature_staking_less_than_minimum.py'
+    'feature_staking_less_than_minimum.py',
+    'feature_staking_twice.py'
     # Don't append tests at the end to avoid merge conflicts
     # Put them in a random line within the section that fits their approximate run-time
 ]

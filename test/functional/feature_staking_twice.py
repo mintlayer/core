@@ -4,7 +4,7 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """An example functional test
 
-Alice stakes an extra 40_000 utxo
+Send a transaction from Alice to Bob, then Bob stakes for the first time.. and an extra one.
 """
 
 from substrateinterface import Keypair
@@ -60,16 +60,14 @@ class ExampleTest(MintlayerTestFramework):
         client = self.nodes[0].rpc_client
 
         alice = Keypair.create_from_uri('//Alice')
+        bob = Keypair.create_from_uri('//Bob')
+        bob_stash = Keypair.create_from_uri('//Bob//stash')
 
         # fetch the genesis utxo from storage
         utxos = list(client.utxos_for(alice))
 
-
-        orig_count = list(client.staking_count())[0][1]
-        # there should only be 1 count of alice's locked utxo
-        assert_equal(orig_count[0],1)
-        # the amount that alice locked is 40_000 * MLT_UNIT
-        assert_equal(orig_count[1],40000 * COIN)
+        # there's only 1 record of staking, which is alice.
+        assert_equal( len(list(client.staking_count())), 1 )
 
         tx1 = utxo.Transaction(
             client,
@@ -78,19 +76,55 @@ class ExampleTest(MintlayerTestFramework):
             ],
             outputs=[
                 utxo.Output(
-                    value=40000 * COIN,
+                    value=70000 * COIN,
                     header=0,
-                    destination=utxo.DestStakeExtra(alice.public_key)
+                    destination=utxo.DestPubkey(bob.public_key)
                 ),
             ]
         ).sign(alice, [utxos[0][1]])
         client.submit(alice, tx1)
 
-        new_count = list(client.staking_count())[0][1]
-        # there should already by 2 utxos locked
-        assert_equal(new_count[0],2)
-        # the original stake + new stake
-        assert_equal(new_count[1],80000 * COIN)
+        tx2 = utxo.Transaction(
+            client,
+            inputs=[
+                utxo.Input(tx1.outpoint(0)),
+            ],
+            outputs=[
+                utxo.Output(
+                    value=40000 * COIN,
+                    header=0,
+                    destination=utxo.DestStake(bob_stash.public_key, bob.public_key,'0xa03bcfaac6ebdc26bb9c256c51b08f9c1c6d4569f48710a42939168d1d7e5b6086b20e145e97158f6a0b5bff2994439d3320543c8ff382d1ab3e5eafffaf1a18')
+                ),
+                 utxo.Output(
+                    value=10000 * COIN,
+                    header=0,
+                    destination=utxo.DestStakeExtra(alice.public_key)
+                ),
+                utxo.Output(
+                    value=19998 * COIN,
+                    header=0,
+                    destination=utxo.DestPubkey(bob.public_key)
+                ),
+            ]
+        ).sign(bob, tx1.outputs)
+
+        client.submit(bob, tx2)
+
+        staking_count = list(client.staking_count())
+        # there should already be 2 accounts, adding Bob in the list.
+        assert_equal(len(staking_count), 2)
+
+        # bob should have 2 locked utxos
+        assert_equal(staking_count[0][1][0], 2)
+
+        # bob should have a total of 50000 * COINS locked
+        assert_equal(staking_count[0][1][1], 50000 * COIN)
+
+        # fetch the locked utxos from storage
+        locked_utxos = list(client.utxos('LockedUtxos'))
+        # there should already be 3 in the list; 1 from alice, 2 from bob
+        assert_equal(len(locked_utxos),3)
+
 
 if __name__ == '__main__':
     ExampleTest().main()
