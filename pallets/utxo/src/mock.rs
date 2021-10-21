@@ -122,12 +122,12 @@ impl <T:pallet_utxo::Config> StakingHelper<AccountId> for MockStaking<T>
         pub_key.clone()
     }
 
-    fn stake(stash_account: &AccountId, controller_account: &AccountId, _rotate_keys: &mut Vec<u8>, _value:u128) -> DispatchResultWithPostInfo {
+    fn lock_for_staking(stash_account: &AccountId, controller_account: &AccountId, _rotate_keys:  &Vec<u8>, _value:u128) -> DispatchResultWithPostInfo {
         MOCK_STAKING.with(|stake_info| {
             let mut stake_info = stake_info.borrow_mut();
 
             if stake_info.lock_map.contains_key(controller_account) {
-                Err(pallet_utxo::Error::<T>::StakingAlreadyExists)?
+                Err(pallet_utxo::Error::<T>::ControllerAccountAlreadyRegistered)?
             }
 
             if stake_info.stash_map.contains_key(controller_account) {
@@ -151,7 +151,7 @@ impl <T:pallet_utxo::Config> StakingHelper<AccountId> for MockStaking<T>
             let stake_info = stake_info.borrow();
 
             if !stake_info.lock_map.contains_key(controller_account) {
-                Err(pallet_utxo::Error::<T>::NoStakingRecordFound)?
+                Err(pallet_utxo::Error::<T>::ControllerAccountNotFound)?
             }
 
             if stake_info.stash_map.contains_key(controller_account) {
@@ -162,7 +162,7 @@ impl <T:pallet_utxo::Config> StakingHelper<AccountId> for MockStaking<T>
         })
     }
 
-    fn pause(controller_account: &AccountId) -> DispatchResultWithPostInfo {
+    fn unlock_request_for_withdrawal(controller_account: &AccountId) -> DispatchResultWithPostInfo {
         MOCK_STAKING.with(|stake_info| {
             let mut stake_info = stake_info.borrow_mut();
 
@@ -257,6 +257,7 @@ impl SysConfig for Test {
 parameter_types! {
     pub const MaxAuthorities: u32 = 1000;
     pub const MinimumStake: u128 = 10;
+    pub const InitialReward: u128 = 100;
     pub const StakeWithdrawalFee: u128 = 1;
     pub const RewardReductionPeriod: BlockNumber = 5;
 	pub const RewardReductionFraction: Percent = Percent::from_percent(25);
@@ -281,6 +282,7 @@ impl pallet_utxo::Config for Test {
     type StakingHelper =MockStaking<Test>;
     type MinimumStake = MinimumStake;
     type StakeWithdrawalFee = StakeWithdrawalFee;
+    type InitialReward = InitialReward;
 }
 
 fn create_pub_key(keystore: &KeyStore, phrase: &str) -> Public {
@@ -296,9 +298,7 @@ pub fn alice_test_ext() -> TestExternalities {
     pallet_utxo::GenesisConfig::<Test> {
         genesis_utxos: vec![TransactionOutput::new_pubkey(100, H256::from(alice_pub_key))],
         locked_utxos: vec![],
-        extra_mlt_coins: 1_000,
-        initial_reward_amount: 100,
-        _marker: Default::default(),
+        // initial_reward_amount: 100,
     }
     .assimilate_storage(&mut t)
     .unwrap();
@@ -321,9 +321,7 @@ pub fn alice_test_ext_and_keys() -> (TestExternalities, Public, Public) {
     pallet_utxo::GenesisConfig::<Test> {
         genesis_utxos: vec![TransactionOutput::new_pubkey(100, H256::from(alice_pub_key))],
         locked_utxos: vec![],
-        extra_mlt_coins: 1_000,
-        initial_reward_amount: 100,
-        _marker: Default::default(),
+        //initial_reward_amount: 100
     }
     .assimilate_storage(&mut t)
     .unwrap();
@@ -370,9 +368,7 @@ pub fn multiple_keys_test_ext()  -> (TestExternalities, Vec<(Public,H256)>) {
             // tom is a stash account and alice is the controller.
             TransactionOutput::new_stake(10,tom_hash,alice_hash,vec![3,1])
         ],
-        extra_mlt_coins: 1_000,
-        initial_reward_amount: 1,
-        _marker: Default::default(),
+        // initial_reward_amount: 1,
     }
         .assimilate_storage(&mut t)
         .unwrap();

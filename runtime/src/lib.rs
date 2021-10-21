@@ -313,6 +313,7 @@ parameter_types!{
     pub const StakeWithdrawalFee: u128 =  1 * MLT_UNIT;
     pub const RewardReductionPeriod: BlockNumber = MINUTES * 60 * 24 * 365;
 	pub const RewardReductionFraction: Percent = Percent::from_percent(25);
+    pub const InitialReward: u128 = 100 * MLT_UNIT;
 }
 
 impl pallet_utxo::Config for Runtime {
@@ -338,6 +339,7 @@ impl pallet_utxo::Config for Runtime {
     type StakingHelper = StakeOps<Runtime>;
     type MinimumStake = MinimumStake;
     type StakeWithdrawalFee = StakeWithdrawalFee;
+    type InitialReward = InitialReward;
 }
 
 impl pallet_pp::Config for Runtime {

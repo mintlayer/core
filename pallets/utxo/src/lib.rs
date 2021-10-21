@@ -56,7 +56,7 @@ pub mod pallet {
         dispatch::{DispatchResultWithPostInfo, Vec},
         pallet_prelude::*,
         sp_io::crypto,
-        sp_runtime::traits::{BlakeTwo256, Dispatchable, Hash, SaturatedConversion},
+        sp_runtime::traits::{BlakeTwo256, Dispatchable, Hash},
         sp_runtime::Percent,
         traits::IsSubType,
     };
@@ -119,10 +119,10 @@ pub mod pallet {
 
         /// When occurs during StakeExtra, use Destination::LockForStaking for first time staking.
         /// When occurs during unstaking, it means there's no coordination with pallet-staking
-        NoStakingRecordFound,
+        ControllerAccountNotFound,
 
         /// Use Destination::StakeExtra for additional funds to stake.
-        StakingAlreadyExists,
+        ControllerAccountAlreadyRegistered,
 
         /// An action not opted to be performed.
         InvalidOperation,
@@ -155,6 +155,10 @@ pub mod pallet {
 
         /// the rate of diminishing reward
         #[pallet::constant]
+        type InitialReward:Get<Value>;
+
+        /// the rate of diminishing reward
+        #[pallet::constant]
         type RewardReductionFraction:Get<Percent>;
 
         /// duration of unchanged rewards, before applying the RewardReductionFraction
@@ -182,7 +186,7 @@ pub mod pallet {
         fn spend(u: u32) -> Weight;
         fn token_create(u: u32) -> Weight;
         fn send_to_address(u: u32) -> Weight;
-        fn unlock_stake(u: u32) -> Weight;
+        fn unlock_request_for_withdrawal(u: u32) -> Weight;
         fn withdraw_stake(u: u32) -> Weight;
     }
 
@@ -451,23 +455,9 @@ pub mod pallet {
     #[pallet::getter(fn tokens_higher_id)]
     pub(super) type TokensHigherID<T> = StorageValue<_, TokenID, ValueQuery>;
 
-    /// stores the first block number of every new period
-    #[pallet::storage]
-    #[pallet::getter(fn starting_period)]
-    pub(super) type StartingPeriod<T:Config> = StorageValue<_, T::BlockNumber, ValueQuery>;
-
-    /// stores the extra MLTCoins for dispersing rewards
-    #[pallet::storage]
-    #[pallet::getter(fn coins_available)]
-    pub(super) type MLTCoinsAvailable<T> = StorageValue<_, Value, ValueQuery>;
-
     #[pallet::storage]
     #[pallet::getter(fn reward_total)]
     pub(super) type RewardTotal<T> = StorageValue<_, Value, ValueQuery>;
-
-    #[pallet::storage]
-    #[pallet::getter(fn block_author_reward_amount)]
-    pub(super) type BlockAuthorRewardAmount<T> = StorageValue<_, Value, ValueQuery>;
 
     #[pallet::storage]
     #[pallet::getter(fn current_block_author)]
@@ -515,7 +505,6 @@ pub mod pallet {
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
         fn on_finalize(block_num: T::BlockNumber) {
             reward_block_author::<T>(block_num);
-            reward_tx_validation::<T>(&T::authorities(), block_num);
         }
     }
 
@@ -529,40 +518,6 @@ pub mod pallet {
             input.witness = Vec::new();
         }
         trx.encode()
-    }
-
-    fn reward_tx_validation<T: Config>(auths: &[H256], block_number: T::BlockNumber) {
-        let reward = <RewardTotal<T>>::take();
-        let share_value: Value =
-            reward.checked_div(auths.len() as Value).ok_or("No authorities").unwrap();
-        if share_value == 0 {
-            //put reward back if it can't be split nicely
-            <RewardTotal<T>>::put(reward as Value);
-            return;
-        }
-
-        let remainder = reward
-            .checked_sub(share_value * auths.len() as Value)
-            .ok_or("Sub underflow")
-            .unwrap();
-
-        log::debug!("reward_tx_validation:: reward total: {:?}", remainder);
-        <RewardTotal<T>>::put(remainder as Value);
-
-        for authority in auths {
-            // TODO: where do we get the header info?
-            // TODO: are the rewards always of MLT token type?
-            let utxo = TransactionOutput::new_pubkey(share_value, *authority);
-
-            let hash = {
-                let b_num = block_number.saturated_into::<u64>();
-                BlakeTwo256::hash_of(&(&utxo, b_num))
-            };
-
-            if !<UtxoStore<T>>::contains_key(hash) {
-                <UtxoStore<T>>::insert(hash, Some(utxo));
-            }
-        }
     }
 
     pub fn create<T: Config>(caller: &T::AccountId, code: &Vec<u8>, data: &Vec<u8>) {
@@ -855,7 +810,7 @@ pub mod pallet {
                 Destination::LockForStaking { stash_account, controller_account, session_key } => {
                     let stash_pubkey = convert_to_h256::<T>(stash_account)?;
                     let controller_pubkey = convert_to_h256::<T>(controller_account)?;
-                    staking::stake::<T>(&stash_pubkey, &controller_pubkey, session_key, output.value)?;
+                    staking::lock_for_staking::<T>(&stash_pubkey, &controller_pubkey, session_key, output.value)?;
 
                     let hash = tx.outpoint(index as u64);
                     log::debug!("inserting to LockedUtxos {:?} as key {:?}", output, hash);
@@ -1098,13 +1053,13 @@ pub mod pallet {
         /// unlock the stake, if user wants to stop validating and withdraw the locked utxos.
         /// If used with `pallet-staking`, it uses the `BondingDuration`
         /// to set the period/era on when to withdraw.
-        #[pallet::weight(T::WeightInfo::unlock_stake(1 as u32))]
-        pub fn unlock_stake(
+        #[pallet::weight(T::WeightInfo::unlock_request_for_withdrawal(1 as u32))]
+        pub fn unlock_request_for_withdrawal(
             origin: OriginFor<T>,
             controller_pubkey: H256
         ) -> DispatchResultWithPostInfo {
             ensure_signed(origin)?;
-            staking::unlock::<T>(&controller_pubkey)?;
+            staking::unlock_request_for_withdrawal::<T>(&controller_pubkey)?;
             Ok(().into())
         }
 
@@ -1130,11 +1085,8 @@ pub mod pallet {
         pub genesis_utxos: Vec<TransactionOutputFor<T>>,
         /// initially staked utxos of the initial validators.
         pub locked_utxos: Vec<TransactionOutputFor<T>>,
-        /// number of coins available for rewarding, esp. to block authors/producers.
-        pub extra_mlt_coins:Value,
-        /// the amount to reward block authors/producers.
-        pub initial_reward_amount:Value,
-        pub _marker: PhantomData<T>,
+        // /// the amount to reward block authors/producers.
+        // pub initial_reward_amount:Value
     }
 
     #[cfg(feature = "std")]
@@ -1143,9 +1095,7 @@ pub mod pallet {
             Self {
                 genesis_utxos: vec![],
                 locked_utxos: vec![],
-                extra_mlt_coins: 50_000,
-                initial_reward_amount: 100,
-                _marker: Default::default(),
+               // initial_reward_amount: 100,
             }
         }
     }
@@ -1153,8 +1103,6 @@ pub mod pallet {
     #[pallet::genesis_build]
     impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
         fn build(&self) {
-            <MLTCoinsAvailable<T>>::put(self.extra_mlt_coins);
-            <BlockAuthorRewardAmount<T>>::put(self.initial_reward_amount);
 
             self.genesis_utxos.iter().cloned().enumerate().for_each(|(index,u)| {
                 // added the index and the `genesis` on the hashing, to indicate that these utxos are from the beginning of the chain.

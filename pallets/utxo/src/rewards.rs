@@ -15,101 +15,63 @@
 //
 // Author(s): C. Yap
 
-use crate::{Config, Pallet, Event, BlockAuthorRewardAmount, BlockAuthor, MLTCoinsAvailable, TransactionOutput, UtxoStore, StartingPeriod};
+use crate::{Config, Pallet, Event, BlockAuthor, TransactionOutput, UtxoStore, RewardTotal};
 
 use frame_support::traits::Get;
-use sp_runtime::traits::{CheckedSub, SaturatedConversion, BlakeTwo256, Hash, Zero};
+use sp_runtime::traits::{One,CheckedSub, CheckedDiv, SaturatedConversion, BlakeTwo256, Hash, Zero};
 
-
-/// Returns `true` if reward reduction period has passed; and if a new period has to be created.
-pub(crate) fn period_elapsed<T:Config>(time_now: T::BlockNumber) -> bool {
-    let starting_period =  <StartingPeriod<T>>::get();
-    if let Ok(time_elapsed) = time_now.checked_sub(&starting_period).ok_or("subtraction operation invalid") {
-        let has_elapse = time_elapsed > T::RewardReductionPeriod::get();
-
-        if has_elapse {
-            log::debug!("period has elapsed. Updating the start of period to now");
-            <StartingPeriod<T>>::put(time_now);
-        }
-        return has_elapse
-    }
-    false
-}
 
 /// Returns the newly reduced reward amount for a Block Author.
 /// How much a reward is reduced, is based on the config's`RewardReductionFraction`.
-/// Note, this function is under the assumption that the coins_available is NOT 0.
-pub(super) fn update_reward_amount<T:Config>(coins_available:u128) -> u128 {
+fn get_reward_amount<T:Config>(block_number:T::BlockNumber) -> u128 {
     let reduction_fraction = T::RewardReductionFraction::get();
+    let reduction_period: T::BlockNumber =  T::RewardReductionPeriod::get();
+    let mut reward_amount = T::InitialReward::get();
 
-    let reward_amount = <BlockAuthorRewardAmount<T>>::take();
-    log::info!("current reward amount: {}", reward_amount);
-    let reward_amount_deducted = reduction_fraction.mul_ceil(reward_amount);
+    if let Some(mut counter) = block_number.checked_div(&reduction_period) {
+        while counter > T::BlockNumber::zero() {
+            counter = counter.checked_sub(&T::BlockNumber::one()).unwrap_or(T::BlockNumber::zero());
 
-    if let Some(reward_amount) = reward_amount.checked_sub(reward_amount_deducted) {
+            reward_amount = reward_amount.checked_sub(
+                reduction_fraction.mul_ceil(reward_amount)
+            ).unwrap_or(1);
 
-        // if the percentage drop of a reward, makes the current reward_amount 0, and
-        // as long as there is still coins available, set the reward to 1.
-        return if reward_amount.is_zero() {
-            <BlockAuthorRewardAmount<T>>::put(1);
-            1
+            if reward_amount.is_zero() {
+                return 1
+            }
         }
-        else if reward_amount <= coins_available {
-            <BlockAuthorRewardAmount<T>>::put(reward_amount);
-            reward_amount
-        } else {
-            <BlockAuthorRewardAmount<T>>::put(coins_available);
-            coins_available
-        };
     }
 
-    // In the weird case when at such time a computed percentage drop of reward
-    // becomes more than the current reward_amount.
-    0
+    reward_amount
 }
 
-/// Rewards the block author with a utxo of value based on the `BlockAuthorRewardAmount`.
-pub(super) fn reward_block_author<T:Config>(block_number: T::BlockNumber) {
-    let coins_available = <MLTCoinsAvailable<T>>::take();
+/// Rewards the block author with a utxo of value based on the `BlockAuthorRewardAmount`
+/// and the transaction fees.
+pub(crate) fn reward_block_author<T:Config>(block_number: T::BlockNumber) {
 
-    // give rewards only if there are coins available.
-    if coins_available > 0 {
-        // give rewards only if a block author is found
-        if let Some(block_author) = <BlockAuthor<T>>::take() {
-            log::debug!("reward_block_author:: : {:?}", block_author);
+    // give rewards only if a block author is found
+    if let Some(block_author) = <BlockAuthor<T>>::take() {
+        log::debug!("reward_block_author:: : {:?}", block_author);
 
-            // check if a period has passed.
-            // if it has, update the reward amount based on the reduction rate.
-            // see RewardReductionFraction
-            let reward_amount = if period_elapsed::<T>(block_number) {
-                update_reward_amount::<T>(coins_available)
-            } else {
-                <BlockAuthorRewardAmount<T>>::get()
+        let fees_total = <RewardTotal<T>>::take();
+        if let Some(reward_amount) = get_reward_amount::<T>(block_number).checked_add(fees_total) {
+            let utxo = TransactionOutput::new_pubkey(reward_amount, block_author.clone());
+
+            let hash = {
+                let b_num = block_number.saturated_into::<u64>();
+                BlakeTwo256::hash_of(&(&utxo, b_num, "author_reward"))
             };
 
-            // just double check to avoid creating a utxo of value 0
-            if !reward_amount.is_zero() {
-                let utxo = TransactionOutput::new_pubkey(reward_amount, block_author.clone());
+            if !<UtxoStore<T>>::contains_key(hash) {
+                <UtxoStore<T>>::insert(hash, Some(utxo.clone()));
 
-                let hash = {
-                    let b_num = block_number.saturated_into::<u64>();
-                    BlakeTwo256::hash_of(&(&utxo, b_num, "author_reward"))
-                };
-
-                if !<UtxoStore<T>>::contains_key(hash) {
-                    <UtxoStore<T>>::insert(hash, Some(utxo.clone()));
-
-                    // deduct the coins transferred to the block author
-                    <MLTCoinsAvailable<T>>::put(coins_available - reward_amount);
-
-                    <Pallet<T>>::deposit_event(Event::<T>::BlockAuthorRewarded(utxo));
-                }
+                <Pallet<T>>::deposit_event(Event::<T>::BlockAuthorRewarded(utxo));
             }
         } else {
-            log::warn!("no block author found for block number {:?}", block_number);
+            log::warn!("problem adding the block author reward and the fees.");
         }
 
-        <MLTCoinsAvailable<T>>::put(coins_available);
+    } else {
+        log::warn!("no block author found for block number {:?}", block_number);
     }
-
 }

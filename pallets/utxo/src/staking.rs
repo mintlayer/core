@@ -15,7 +15,7 @@
 //
 // Author(s): C. Yap
 
-use crate::{Config, StakingCount, Error, Event, Pallet, TransactionOutput, Destination, LockedUtxos, Value, UtxoStore, MLTCoinsAvailable, convert_to_h256};
+use crate::{Config, StakingCount, Error, Event, Pallet, TransactionOutput, Destination, LockedUtxos, Value, UtxoStore, convert_to_h256, RewardTotal};
 use frame_support::{dispatch::{DispatchResultWithPostInfo, Vec}, ensure, traits::Get};
 use sp_core::H256;
 use sp_std::vec;
@@ -36,13 +36,12 @@ pub trait StakingHelper<AccountId>{
     /// In `pallet-staking`, its job is like an "accountant" to the stash account.
     /// * `session_key` - to get up-to-date with validators, eras, sessions. see `pallet-session`.
     /// * `value` - the amount to stake/bond/stash
-    fn stake(stash_account:&AccountId, controller_account:&AccountId, session_key:&Vec<u8>, value:Value) -> DispatchResultWithPostInfo;
+    fn lock_for_staking(stash_account:&AccountId, controller_account:&AccountId, session_key:&Vec<u8>, value:Value) -> DispatchResultWithPostInfo;
 
     /// stake more funds for the validator
     fn stake_extra(controller_account:&AccountId, value:Value) -> DispatchResultWithPostInfo;
 
-    /// quitting the role of a validator.
-    fn pause(controller_account:&AccountId) -> DispatchResultWithPostInfo;
+    fn unlock_request_for_withdrawal(controller_account:&AccountId) -> DispatchResultWithPostInfo;
 
     /// transfer balance from the locked state to the actual free balance.
     fn withdraw(controller_account: &AccountId) -> DispatchResultWithPostInfo;
@@ -58,25 +57,25 @@ pub trait StakingHelper<AccountId>{
 /// * `controller_pubkey` - is the `validator` in our utxo system.
 /// * `session_key` - to get up-to-date with the validators, eras, sessions. see `pallet-session`.
 /// * `value` - the amount to stake/bond/stash
-pub(crate) fn stake<T: Config>(
+pub(crate) fn lock_for_staking<T: Config>(
     stash_pubkey: &H256,
     controller_pubkey: &H256,
     session_key:&Vec<u8>,
     value:Value
 )
     -> DispatchResultWithPostInfo {
-    ensure!(!<StakingCount<T>>::contains_key(controller_pubkey),Error::<T>::StakingAlreadyExists);
+    ensure!(!<StakingCount<T>>::contains_key(controller_pubkey),Error::<T>::ControllerAccountAlreadyRegistered);
 
     let stash_account = T::StakingHelper::get_account_id(stash_pubkey);
     let controller_account = T::StakingHelper::get_account_id(controller_pubkey);
 
-    T::StakingHelper::stake(&stash_account, &controller_account, session_key,value)
+    T::StakingHelper::lock_for_staking(&stash_account, &controller_account, session_key,value)
 }
 
 /// stake more values. This is only for existing validators.
 pub(crate) fn stake_extra<T: Config>(controller_pubkey: &H256, value:Value) -> DispatchResultWithPostInfo {
     // Checks whether a given pubkey is a validator
-    ensure!(<StakingCount<T>>::contains_key(controller_pubkey.clone()) , Error::<T>::NoStakingRecordFound);
+    ensure!(<StakingCount<T>>::contains_key(controller_pubkey.clone()) , Error::<T>::ControllerAccountNotFound);
 
     let controller_account= T::StakingHelper::get_account_id(controller_pubkey);
 
@@ -85,9 +84,9 @@ pub(crate) fn stake_extra<T: Config>(controller_pubkey: &H256, value:Value) -> D
 
 /// unlocking the staked funds outside of the `pallet-utxo`.
 /// also means quitting/pausing from being a validator.
-pub(crate) fn unlock<T: Config>(controller_pubkey: &H256) -> DispatchResultWithPostInfo {
+pub(crate) fn unlock_request_for_withdrawal<T: Config>(controller_pubkey: &H256) -> DispatchResultWithPostInfo {
     let controller_account= T::StakingHelper::get_account_id(controller_pubkey);
-    T::StakingHelper::pause(&controller_account)?;
+    T::StakingHelper::unlock_request_for_withdrawal(&controller_account)?;
 
     <Pallet<T>>::deposit_event(Event::<T>::StakeUnlocked(controller_pubkey.clone()));
 
@@ -122,10 +121,9 @@ pub(crate) fn withdraw<T: Config>(controller_pubkey: H256, outpoints: Vec<H256>)
     let utxo = TransactionOutput::new_pubkey(total, controller_pubkey);
     <UtxoStore<T>>::insert(hash, Some(utxo));
 
-    // TODO: currently moving fee back to the rewards. Should this be distributed to
-    // a list of authorites
-    let coins_available = <MLTCoinsAvailable<T>>::take();
-    <MLTCoinsAvailable<T>>::put(coins_available + fee);
+    // TODO: currently moving fee back to the rewards.
+    let reward_total = <RewardTotal<T>>::take();
+    <RewardTotal<T>>::put(reward_total + fee);
 
     <Pallet<T>>::deposit_event(Event::<T>::StakeWithdrawn(total,controller_pubkey));
     Ok(().into())
@@ -161,7 +159,7 @@ pub(crate) fn is_owned_locked_utxo<T:Config>(utxo:&TransactionOutput<T::AccountI
 /// * `controller_pubkey` - An H256 public key of an account
 /// * `outpoints` - List of keys of unlocked utxos said to be "owned" by the controller_pubkey
 pub fn validate_withdrawal<T:Config>(controller_pubkey: &H256, outpoints:&Vec<H256>) -> Result<ValidTransaction, &'static str> {
-    ensure!(<StakingCount<T>>::contains_key(controller_pubkey.clone()),Error::<T>::NoStakingRecordFound);
+    ensure!(<StakingCount<T>>::contains_key(controller_pubkey.clone()),Error::<T>::ControllerAccountNotFound);
 
     let (num_of_utxos, _) = <StakingCount<T>>::get(controller_pubkey.clone()).ok_or("cannot find the public key inside the stakingcount.")?;
     ensure!(num_of_utxos == outpoints.len() as u64, "please provide all staked outpoints.");

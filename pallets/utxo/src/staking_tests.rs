@@ -15,14 +15,13 @@
 //
 // Author(s): C. Yap
 
-use crate::{mock::*, Transaction, TransactionInput, TransactionOutput, UtxoStore, LockedUtxos, Error, StakingCount, StartingPeriod, BlockAuthorRewardAmount, MLTCoinsAvailable};
+use crate::{mock::*, Transaction, TransactionInput, TransactionOutput, UtxoStore, LockedUtxos, Error, StakingCount};
 use codec::Encode;
 use frame_support::{
     assert_err, assert_ok,
     sp_io::crypto,
 };
 use sp_core::{sp_std::vec, testing::SR25519, H256};
-use crate::rewards::{update_reward_amount, period_elapsed};
 
 #[test]
 fn simple_staking() {
@@ -102,7 +101,7 @@ fn staker_staking_again() {
             ]
         }.sign(&[utxo],0, &alice_pub_key).expect(" alice's pub key not found");
 
-        assert_err!(Utxo::spend(Origin::signed(H256::zero()), tx), Error::<Test>::StakingAlreadyExists);
+        assert_err!(Utxo::spend(Origin::signed(H256::zero()), tx), Error::<Test>::ControllerAccountAlreadyRegistered);
     })
 }
 
@@ -176,7 +175,7 @@ fn non_validator_staking_extra() {
             ]
         }.sign(&[utxo],0,&greg_pub_key).expect("greg's pub key not found");
 
-        assert_err!(Utxo::spend(Origin::signed(H256::zero()), tx), Error::<Test>::NoStakingRecordFound);
+        assert_err!(Utxo::spend(Origin::signed(H256::zero()), tx), Error::<Test>::ControllerAccountNotFound);
     })
 }
 
@@ -193,7 +192,7 @@ fn pausing_and_withdrawing() {
         // ALICE (index 0) wants to stop validating.
         let (alice_pub_key, _) = keys_and_hashes[0];
 
-        assert_ok!(Utxo::unlock_stake(Origin::signed(H256::zero()),H256::from(alice_pub_key)));
+        assert_ok!(Utxo::unlock_request_for_withdrawal(Origin::signed(H256::zero()),H256::from(alice_pub_key)));
 
         // increase the block number 6 times, as if new blocks has been created.
         for _ in 1 .. 6{
@@ -206,7 +205,6 @@ fn pausing_and_withdrawing() {
         ));
 
         assert!(!LockedUtxos::<Test>::contains_key(alice_locked_utxo));
-        assert_eq!(MLTCoinsAvailable::<Test>::get(),1_001);
     })
 }
 
@@ -216,7 +214,7 @@ fn non_validator_pausing(){
     test_ext.execute_with(|| {
         let (karl_pub_key, _) = keys_and_hashes[1];
         assert_err!(
-            Utxo::unlock_stake(Origin::signed(H256::zero()),H256::from(karl_pub_key)),
+            Utxo::unlock_request_for_withdrawal(Origin::signed(H256::zero()),H256::from(karl_pub_key)),
             "CANNOT PAUSE. CONTROLLER ACCOUNT DOES NOT EXIST"
         );
     })
@@ -238,7 +236,7 @@ fn non_validator_withdrawing() {
             Origin::signed(H256::zero()),
             H256::from(karl_pub_key),
             vec![alice_locked_utxo]
-        ), "NoStakingRecordFound");
+        ), "ControllerAccountNotFound");
     })
 }
 
@@ -255,7 +253,7 @@ fn withdrawing_before_expected_period() {
         // ALICE (index 0) wants to stop validating.
         let (alice_pub_key, _) = keys_and_hashes[0];
 
-        assert_ok!(Utxo::unlock_stake(Origin::signed(H256::zero()),H256::from(alice_pub_key)));
+        assert_ok!(Utxo::unlock_request_for_withdrawal(Origin::signed(H256::zero()),H256::from(alice_pub_key)));
 
         // ALICE is not waiting for the withdrawal period.
         assert_err!(Utxo::withdraw_stake(
@@ -274,7 +272,7 @@ fn withdrawing_unknown_locked_utxo(){
         // ALICE (index 0) wants to stop validating.
         let (alice_pub_key, _) = keys_and_hashes[0];
 
-        assert_ok!(Utxo::unlock_stake(Origin::signed(H256::zero()),H256::from(alice_pub_key)));
+        assert_ok!(Utxo::unlock_request_for_withdrawal(Origin::signed(H256::zero()),H256::from(alice_pub_key)));
 
         // ALICE withdrawing something.
         assert_err!(Utxo::withdraw_stake(
@@ -282,23 +280,6 @@ fn withdrawing_unknown_locked_utxo(){
             H256::from(alice_pub_key),
             vec![H256::random()]
         ), "OutpointDoesNotExist");
-    })
-}
-
-#[test]
-fn reward_reduced() {
-    let (mut test_ext, _, _ ) =  alice_test_ext_and_keys();
-    test_ext.execute_with(|| {
-        assert_eq!(StartingPeriod::<Test>::get(),0);
-        assert_eq!(BlockAuthorRewardAmount::<Test>::get(),100);
-        assert_eq!(MLTCoinsAvailable::<Test>::get(),1_000);
-        // RewardReduction Period is 5; so at block 6, reward should be reduced.
-        let time_now = 6;
-        period_elapsed::<Test>(time_now);
-        assert_eq!(StartingPeriod::<Test>::get(),time_now);
-
-        let reward_amount =  update_reward_amount::<Test>(1_000);
-        assert_eq!(BlockAuthorRewardAmount::<Test>::get(), reward_amount);
     })
 }
 

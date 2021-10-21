@@ -1,4 +1,4 @@
-use node_template_runtime::{pallet_utxo::{self, MLT_UNIT}, MLT_ORIG_SUPPLY, AccountId, BalancesConfig, GenesisConfig, PpConfig, Signature, SudoConfig, SystemConfig, UtxoConfig, WASM_BINARY, SessionConfig, StakingConfig, StakerStatus, MINIMUM_STAKE};
+use node_template_runtime::{pallet_utxo, MLT_ORIG_SUPPLY, AccountId, BalancesConfig, GenesisConfig, PpConfig, Signature, SudoConfig, SystemConfig, UtxoConfig, WASM_BINARY, SessionConfig, StakingConfig, StakerStatus, MINIMUM_STAKE};
 use sc_network::config::MultiaddrWithPeerId;
 use sc_service::ChainType;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
@@ -257,9 +257,7 @@ fn testnet_genesis(
             // The # of validators set should also be the same here.
             // This should be the same as what's set as the initial authorities
             locked_utxos,
-            extra_mlt_coins: 200_000_000  * MLT_UNIT,
-            initial_reward_amount: 100 * MLT_UNIT,
-            _marker: Default::default(),
+            // initial_reward_amount: 100 * MLT_UNIT
         },
         pp: PpConfig {
             _marker: Default::default(),

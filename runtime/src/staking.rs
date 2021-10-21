@@ -37,7 +37,7 @@ impl <T: pallet_staking::Config + pallet_utxo::Config + pallet_session::Config> 
         pub_key.0.into()
     }
 
-    fn stake(stash_account: &StakeAccountId<T>, controller_account: &StakeAccountId<T>, session_key: &Vec<u8>, value: u128) -> DispatchResultWithPostInfo {
+    fn lock_for_staking(stash_account: &StakeAccountId<T>, controller_account: &StakeAccountId<T>, session_key: &Vec<u8>, value: u128) -> DispatchResultWithPostInfo {
         let controller_lookup: LookupSourceOf<T> = T::Lookup::unlookup(controller_account.clone());
         let reward_destination = pallet_staking::RewardDestination::Staked;
 
@@ -63,7 +63,7 @@ impl <T: pallet_staking::Config + pallet_utxo::Config + pallet_session::Config> 
             ..Default::default()
         };
 
-        // validate
+        // applying for the role of "validator".
         StakingPallet::<T>::validate(
             RawOrigin::Signed(controller_account.clone()).into(),
             validator_prefs
@@ -84,17 +84,17 @@ impl <T: pallet_staking::Config + pallet_utxo::Config + pallet_session::Config> 
         }
 
         log::error!("check sync with pallet-staking.");
-        return Err(pallet_utxo::Error::<T>::NoStakingRecordFound)?;
+        return Err(pallet_utxo::Error::<T>::ControllerAccountAlreadyRegistered)?;
     }
 
 
-    fn pause(controller_account: &StakeAccountId<T>) -> DispatchResultWithPostInfo {
+    fn unlock_request_for_withdrawal(controller_account: &StakeAccountId<T>) -> DispatchResultWithPostInfo {
         // stop validating / block producing
         StakingPallet::<T>::chill(RawOrigin::Signed(controller_account.clone()).into())?;
 
         // get the total balance to free up
         let stake_ledger = <StakingPallet<T>>::ledger(controller_account.clone()).ok_or(
-            pallet_utxo::Error::<T>::NoStakingRecordFound
+            pallet_utxo::Error::<T>::ControllerAccountAlreadyRegistered
         )?;
 
         // unbond
