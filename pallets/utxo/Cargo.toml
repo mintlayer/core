@@ -21,7 +21,6 @@ std = [
 hex-literal = "0.2.1"
 log = "0.4.8"
 serde = '1.0.119'
-pallet-utxo-tokens = { path = "./tokens" }
 variant_count = '1.1'
 
 [dependencies.bech32]

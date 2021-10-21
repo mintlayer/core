@@ -24,7 +24,6 @@ structopt = '0.3.8'
 node-template-runtime = {version = '3.0.0', path = '../runtime'}
 pallet-utxo-rpc = { path = "../pallets/utxo/rpc" }
 pallet-utxo-rpc-runtime-api = { path = "../pallets/utxo/rpc/runtime-api" }
-pallet-utxo-tokens = { path = "../pallets/utxo/tokens" }
 log = "0.4.8"
 ureq = "2.2.0"
 

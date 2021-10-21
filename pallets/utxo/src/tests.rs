@@ -16,8 +16,8 @@
 // Author(s): C. Yap
 
 use crate::{
-    mock::*, Destination, RewardTotal, TokenList, Transaction, TransactionInput, TransactionOutput,
-    UtxoStore, Value,
+    mock::*, tokens::Value, Destination, RewardTotal, Transaction, TransactionInput,
+    TransactionOutput, UtxoStore,
 };
 use chainscript::{opcodes::all as opc, Builder};
 use codec::Encode;
@@ -26,7 +26,7 @@ use frame_support::{
     sp_io::crypto,
     sp_runtime::traits::{BlakeTwo256, Hash},
 };
-use pallet_utxo_tokens::TokenInstance;
+
 use sp_core::{sp_std::vec, sr25519::Public, testing::SR25519, H256, H512};
 
 fn tx_input_gen_no_signature() -> (TransactionOutput<H256>, TransactionInput) {

@@ -19,22 +19,21 @@
 
 pub use pallet::*;
 
-#[cfg(test)]
-mod mock;
-
-#[cfg(test)]
-mod tests;
-
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
-
+#[cfg(test)]
+mod mock;
 mod script;
 mod sign;
+#[cfg(test)]
+mod tests;
+pub mod tokens;
 pub mod weights;
 
 #[frame_support::pallet]
 pub mod pallet {
     use crate::sign::{self, Scheme};
+    use crate::tokens::{Mlt, TokenId, TxData, Value};
     use bech32;
     use chainscript::Script;
     use codec::{Decode, Encode};
@@ -49,7 +48,6 @@ pub mod pallet {
     };
     use frame_system::pallet_prelude::*;
     use hex_literal::hex;
-    use pallet_utxo_tokens::TokenInstance;
     use pp_api::ProgrammablePoolApi;
     #[cfg(feature = "std")]
     use serde::{Deserialize, Serialize};
@@ -64,17 +62,6 @@ pub mod pallet {
         AtLeast32Bit, Zero, /*, StaticLookup , AtLeast32BitUnsigned, Member, One */
     };
     use sp_runtime::DispatchErrorWithPostInfo;
-
-    pub type TokenId = H256;
-    pub type Value = u128;
-    pub type String = Vec<u8>;
-
-    pub struct Mlt(Value);
-    impl Mlt {
-        pub fn to_munit(&self) -> Value {
-            self.0 * 1_000 * 100_000_000
-        }
-    }
 
     #[pallet::error]
     pub enum Error<T> {
@@ -237,47 +224,6 @@ pub mod pallet {
         pub(crate) data: Option<TxData>,
     }
 
-    #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-    #[derive(Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, RuntimeDebug)]
-    pub enum TxData {
-        // TokenTransfer data to another user. If it is a token, then the token data must also be transferred to the recipient.
-        #[codec(index = 1)]
-        TokenTransferV1 { token_id: TokenId, amount: Value },
-        // A new token creation
-        #[codec(index = 2)]
-        TokenIssuanceV1 {
-            token_id: TokenId,
-            token_ticker: Vec<u8>,
-            amount_to_issue: Value,
-            // Should be not more than 18 numbers
-            number_of_decimals: u8,
-            metadata_URI: Vec<u8>,
-        },
-        // Burning a token or NFT
-        #[codec(index = 3)]
-        TokenBurnV1 {
-            token_id: TokenId,
-            amount_to_burn: Value,
-        },
-        // A new NFT creation
-        #[codec(index = 4)]
-        NftMintV1 {
-            token_id: TokenId,
-            data_hash: NftDataHash,
-            metadata_URI: Vec<u8>,
-        },
-    }
-
-    #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-    #[derive(Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, RuntimeDebug)]
-    pub enum NftDataHash {
-        #[codec(index = 1)]
-        Hash32([u8; 32]),
-        #[codec(index = 2)]
-        Raw(Vec<u8>),
-        // Or any type that you want to implement
-    }
-
     impl<AccountId> TransactionOutput<AccountId> {
         /// By default the header is 0:
         /// token type for both the value and fee is MLT,
@@ -333,7 +279,7 @@ pub mod pallet {
             }
         }
 
-        pub fn new_nft(id: TokenId, data: Vec<u8>, data_url: String, creator: H256) -> Self {
+        pub fn new_nft(id: TokenId, data: Vec<u8>, data_url: Vec<u8>, creator: H256) -> Self {
             let pubkey = sp_core::sr25519::Public::from_h256(creator);
             Self {
                 value: 0,
@@ -394,11 +340,6 @@ pub mod pallet {
     pub type TransactionFor<T: Config> = Transaction<T::AccountId>;
 
     #[pallet::storage]
-    #[pallet::getter(fn token_list)]
-    pub(super) type TokenList<T> =
-        StorageMap<_, Identity, TokenId, Option<TokenInstance>, ValueQuery>;
-
-    #[pallet::storage]
     #[pallet::getter(fn reward_total)]
     pub(super) type RewardTotal<T> = StorageValue<_, Value, ValueQuery>;
 
@@ -407,12 +348,17 @@ pub mod pallet {
     pub(super) type UtxoStore<T: Config> =
         StorageMap<_, Identity, H256, Option<TransactionOutputFor<T>>, ValueQuery>;
 
+    #[pallet::storage]
+    #[pallet::getter(fn pointer_to_issue_token)]
+    pub(super) type PointerToIssueToken<T: Config> =
+        StorageMap<_, Identity, TokenId, /* UTXO */ H256, ValueQuery>;
+
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     #[pallet::metadata(T::AccountId = "AccountId")]
     pub enum Event<T: Config> {
         TokenCreated(H256, T::AccountId),
-        Minted(H256, T::AccountId, String),
+        Minted(H256, T::AccountId, Vec<u8>),
         TransactionSuccess(TransactionFor<T>),
     }
 
@@ -421,6 +367,11 @@ pub mod pallet {
         fn on_finalize(block_num: T::BlockNumber) {
             disperse_reward::<T>(&T::authorities(), block_num)
         }
+    }
+
+    pub(crate) fn get_utxo_by_tid<T: Config>(token_id: TokenId) -> Option<TransactionOutputFor<T>> {
+        let utxo_id = PointerToIssueToken::<T>::get(token_id);
+        UtxoStore::<T>::get(utxo_id)
     }
 
     // Strips a transaction of its Signature fields by replacing value with ZERO-initialized fixed hash.
@@ -613,7 +564,7 @@ pub mod pallet {
             } else {
                 // But when we don't have an input for token but token id exist in TokenList
                 ensure!(
-                    !<TokenList<T>>::contains_key(tid),
+                    !<PointerToIssueToken<T>>::contains_key(tid),
                     "no inputs for the token id"
                 );
             }
@@ -779,8 +730,8 @@ pub mod pallet {
         caller: &T::AccountId,
         public: H256,
         input_for_fee: TransactionInput,
-        token_name: String,
-        token_ticker: String,
+        token_name: Vec<u8>,
+        token_ticker: Vec<u8>,
         supply: Value,
     ) -> Result<H256, DispatchErrorWithPostInfo<PostDispatchInfo>> {
         // ensure!(token_name.len() <= 25, Error::<T>::Unapproved);
@@ -845,7 +796,7 @@ pub mod pallet {
     fn mint<T: Config>(
         caller: &T::AccountId,
         creator_pubkey: sp_core::sr25519::Public,
-        data_url: String,
+        data_url: Vec<u8>,
         data: Vec<u8>,
     ) -> Result<TokenId, DispatchErrorWithPostInfo<PostDispatchInfo>> {
         /*        let (fee, inputs_hashes) = pick_utxo::<T>(caller, Mlt(100).to_munit());
@@ -954,8 +905,8 @@ pub mod pallet {
             origin: OriginFor<T>,
             public: H256,
             input_for_fee: TransactionInput,
-            token_name: String,
-            token_ticker: String,
+            token_name: Vec<u8>,
+            token_ticker: Vec<u8>,
             supply: Value,
         ) -> DispatchResultWithPostInfo {
             let caller = &ensure_signed(origin)?;
@@ -978,7 +929,7 @@ pub mod pallet {
         pub fn mint(
             origin: OriginFor<T>,
             creator_pubkey: sp_core::sr25519::Public,
-            data_url: String,
+            data_url: Vec<u8>,
             data: Vec<u8>,
         ) -> DispatchResultWithPostInfo {
             let caller = &ensure_signed(origin)?;
@@ -1080,13 +1031,11 @@ pub mod pallet {
     }
 }
 
-use pallet_utxo_tokens::{TokenInstance, TokenListData};
-
 use frame_support::inherent::Vec;
 use frame_support::pallet_prelude::DispatchResultWithPostInfo;
 use sp_core::{
     crypto::UncheckedFrom,
-    {H256, H512},
+    Encode, {H256, H512},
 };
 use sp_runtime::sp_std::vec;
 use utxo_api::UtxoApi;
@@ -1096,16 +1045,13 @@ impl<T: Config> crate::Pallet<T> {
         1337
     }
 
-    pub fn tokens_list() -> TokenListData {
-        <TokenList<T>>::iter()
-            .enumerate()
-            .filter_map(|(_, instance)| instance.1)
-            .collect()
-    }
-
-    pub fn nft_read(id: H256) -> Option<(/* Data url */ Vec<u8>, /* Data hash */ Vec<u8>)> {
-        match TokenList::<T>::get(id)? {
-            TokenInstance::Nft { data, data_url, .. } => Some((data_url, data.to_vec())),
+    pub fn nft_read(nft_id: H256) -> Option<(/* Data url */ Vec<u8>, /* Data hash */ Vec<u8>)> {
+        match crate::pallet::get_utxo_by_tid::<T>(nft_id)?.data {
+            Some(crate::tokens::TxData::NftMintV1 {
+                token_id,
+                data_hash,
+                metadata_URI,
+            }) => Some((metadata_URI, data_hash.encode())),
             _ => None,
         }
     }

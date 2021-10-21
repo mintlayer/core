@@ -164,7 +164,7 @@ fn testnet_genesis(
         .map(|x| {
             // may need to create a const variable to represent 1_000 and 100_000_000
             pallet_utxo::TransactionOutput::new_pubkey(
-                1_000 * 100_000_000 * 400_000_000 as pallet_utxo::Value,
+                1_000 * 100_000_000 * 400_000_000 as pallet_utxo::tokens::Value,
                 H256::from_slice(x.as_slice()),
             )
         })

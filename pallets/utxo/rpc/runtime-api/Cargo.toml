@@ -4,9 +4,6 @@ version = "0.1.0"
 authors = ["RBB Lab"]
 edition = "2018"
 
-[dependencies]
-pallet-utxo-tokens = { path = "../../tokens" }
-
 [dependencies.serde]
 version = "1.0.104"
 optional = true
