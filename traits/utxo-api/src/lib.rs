@@ -16,13 +16,15 @@
 // Author(s): A. Altonen
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use frame_support::pallet_prelude::DispatchResultWithPostInfo;
+use frame_support::{
+    dispatch::Vec,
+    pallet_prelude::{DispatchError, DispatchResultWithPostInfo},
+};
 use sp_core::{H256, H512};
 
 pub trait UtxoApi {
     type AccountId;
 
-    /// TODO
     fn spend(
         caller: &Self::AccountId,
         value: u128,
@@ -30,4 +32,19 @@ pub trait UtxoApi {
         utxo: H256,
         sig: H512,
     ) -> DispatchResultWithPostInfo;
+
+    fn send_conscrit_p2pk(
+        caller: &Self::AccountId,
+        destination: &Self::AccountId,
+        value: u128,
+        outpoints: &Vec<H256>,
+    ) -> Result<(), DispatchError>;
+
+    fn send_conscrit_c2c(
+        caller: &Self::AccountId,
+        destination: &Self::AccountId,
+        value: u128,
+        data: &Vec<u8>,
+        outpoints: &Vec<H256>,
+    ) -> Result<(), DispatchError>;
 }

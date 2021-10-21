@@ -81,7 +81,7 @@ class ExampleTest(MintlayerTestFramework):
                     destination=utxo.DestPubkey(alice.public_key)
                 ),
                 utxo.Output(
-                    value=0,
+                    value=10,
                     header=0,
                     destination=utxo.DestCreatePP(
                         code=os.path.join(os.path.dirname(__file__), "code.wasm"),
@@ -126,10 +126,11 @@ class ExampleTest(MintlayerTestFramework):
                     destination=utxo.DestPubkey(alice.public_key)
                 ),
                 utxo.Output(
-                    value=0,
+                    value=1,
                     header=0,
                     destination=utxo.DestCallPP(
                         dest_account=acc_id,
+                        fund=False,
                         input_data=bytes.fromhex(msg_data.to_hex()[2:]),
                     )
                 ),
