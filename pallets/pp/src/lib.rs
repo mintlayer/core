@@ -144,7 +144,12 @@ fn send_p2pk_tx<T: Config>(
     ensure!(fund_info.funds >= value, "Caller doesn't have enough funds");
     let outpoints = fund_info.utxos.iter().map(|x| x.0).collect::<Vec<H256>>();
 
-    T::Utxo::submit_c2pk_tx(caller, dest, value, &outpoints)
+    T::Utxo::submit_c2pk_tx(caller, dest, value, &outpoints).map(|_| {
+        <ContractBalances<T>>::mutate(&caller, |info| {
+            info.as_mut().unwrap().utxos = Vec::new();
+            info.as_mut().unwrap().funds = 0;
+        });
+    })
 }
 
 /// Create Contract-to-Contract transfer that allows smart contracts to
@@ -169,7 +174,12 @@ fn send_c2c_tx<T: Config>(
     ))?;
     let outpoints = fund_info.utxos.iter().map(|x| x.0).collect::<Vec<H256>>();
 
-    T::Utxo::submit_c2c_tx(caller, dest, fund_info.funds, data, &outpoints)
+    T::Utxo::submit_c2c_tx(caller, dest, fund_info.funds, data, &outpoints).map(|_| {
+        <ContractBalances<T>>::mutate(&caller, |info| {
+            info.as_mut().unwrap().utxos = Vec::new();
+            info.as_mut().unwrap().funds = 0;
+        });
+    })
 }
 
 impl<T: Config> ProgrammablePoolApi for Pallet<T>
