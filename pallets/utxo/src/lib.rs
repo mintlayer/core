@@ -56,7 +56,7 @@ pub mod pallet {
     use sp_core::{
         sp_std::collections::btree_map::BTreeMap,
         sp_std::{convert::TryInto, str, vec},
-        sr25519::{Public as SR25Pub, Signature as SR25Sig},
+        sr25519::Public as SR25Pub,
         testing::SR25519,
         H256, H512,
     };
@@ -228,53 +228,54 @@ pub mod pallet {
         }
     }
 
-    #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-    #[derive(Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, RuntimeDebug, Hash)]
-    pub enum TxHeaderAndExtraData {
-        NormalTx {
-            // Normal token ID
-            id: TokenId,
-        },
-        ConfidentialTx, /* not implemented yet */
-        Nft {
-            id: TokenId,
-            data: Vec<u8>,
-            data_url: String,
-            creator_pkh: H256,
-        },
-    }
-
-    impl TxHeaderAndExtraData {
-        pub fn id(&self) -> Option<TokenId> {
-            match self {
-                Self::NormalTx { id } => Some(*id),
-                Self::Nft { id, .. } => Some(*id),
-                _ => None,
-            }
-        }
-
-        pub fn is_normal(&self) -> bool {
-            match self {
-                Self::NormalTx { .. } => true,
-                _ => false,
-            }
-        }
-
-        pub fn is_nft(&self) -> bool {
-            match self {
-                Self::Nft { .. } => true,
-                _ => true,
-            }
-        }
-    }
-
     /// Output of a transaction
     #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
     #[derive(Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, RuntimeDebug)]
     pub struct TransactionOutput<AccountId> {
-        pub(crate) header: TxHeaderAndExtraData,
         pub(crate) value: Value,
         pub(crate) destination: Destination<AccountId>,
+        pub(crate) data: Option<TxData>,
+    }
+
+    #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+    #[derive(Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, RuntimeDebug)]
+    pub enum TxData {
+        // TokenTransfer data to another user. If it is a token, then the token data must also be transferred to the recipient.
+        #[codec(index = 1)]
+        TokenTransferV1 { token_id: TokenId, amount: Value },
+        // A new token creation
+        #[codec(index = 2)]
+        TokenIssuanceV1 {
+            token_id: TokenId,
+            token_ticker: Vec<u8>,
+            amount_to_issue: Value,
+            // Should be not more than 18 numbers
+            number_of_decimals: u8,
+            metadata_URI: Vec<u8>,
+        },
+        // Burning a token or NFT
+        #[codec(index = 3)]
+        TokenBurnV1 {
+            token_id: TokenId,
+            amount_to_burn: Value,
+        },
+        // A new NFT creation
+        #[codec(index = 4)]
+        NftMintV1 {
+            token_id: TokenId,
+            data_hash: NftDataHash,
+            metadata_URI: Vec<u8>,
+        },
+    }
+
+    #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+    #[derive(Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, RuntimeDebug)]
+    pub enum NftDataHash {
+        #[codec(index = 1)]
+        Hash32([u8; 32]),
+        #[codec(index = 2)]
+        Raw(Vec<u8>),
+        // Or any type that you want to implement
     }
 
     impl<AccountId> TransactionOutput<AccountId> {
@@ -285,36 +286,50 @@ pub mod pallet {
         pub fn new_pubkey(value: Value, pubkey: H256) -> Self {
             let pubkey = sp_core::sr25519::Public::from_h256(pubkey);
             Self {
-                header: TxHeaderAndExtraData::NormalTx { id: H256::zero() },
                 value,
                 destination: Destination::Pubkey(pubkey.into()),
+                data: None,
             }
         }
 
         /// Create a new output to create a smart contract.
         pub fn new_create_pp(value: Value, code: Vec<u8>, data: Vec<u8>) -> Self {
             Self {
-                header: TxHeaderAndExtraData::NormalTx { id: H256::zero() },
                 value,
                 destination: Destination::CreatePP(code, data),
+                data: None,
             }
         }
 
         /// Create a new output to call a smart contract routine.
         pub fn new_call_pp(value: Value, dest_account: AccountId, input: Vec<u8>) -> Self {
             Self {
-                header: TxHeaderAndExtraData::NormalTx { id: H256::zero() },
                 value,
                 destination: Destination::CallPP(dest_account, input),
+                data: None,
             }
         }
 
-        pub fn new_token(id: TokenId, value: Value, pubkey: H256) -> Self {
+        pub fn new_token(
+            token_id: TokenId,
+            token_ticker: Vec<u8>,
+            amount_to_issue: Value,
+            number_of_decimals: u8,
+            metadata_URI: Vec<u8>,
+            pubkey: H256,
+        ) -> Self {
             let pubkey = sp_core::sr25519::Public::from_h256(pubkey);
             Self {
-                value,
-                header: TxHeaderAndExtraData::NormalTx { id },
+                value: 0,
                 destination: Destination::Pubkey(pubkey),
+                data: Some(TxData::TokenIssuanceV1 {
+                    token_id,
+                    token_ticker,
+                    amount_to_issue,
+                    // Should be not more than 18 numbers
+                    number_of_decimals,
+                    metadata_URI,
+                }),
             }
         }
 
@@ -322,22 +337,17 @@ pub mod pallet {
             let pubkey = sp_core::sr25519::Public::from_h256(creator);
             Self {
                 value: 0,
-                header: TxHeaderAndExtraData::Nft {
-                    id,
-                    data,
-                    creator_pkh: creator.clone(),
-                    data_url,
-                },
                 destination: Destination::Pubkey(pubkey),
+                data: None,
             }
         }
 
         /// Create a new output to given script hash.
         pub fn new_script_hash(value: Value, hash: H256) -> Self {
             Self {
-                header: TxHeaderAndExtraData::NormalTx { id: H256::zero() },
                 value,
                 destination: Destination::ScriptHash(hash),
+                data: None,
             }
         }
     }
@@ -385,7 +395,6 @@ pub mod pallet {
 
     #[pallet::storage]
     #[pallet::getter(fn token_list)]
-    // todo: Soon it will turn into StorageMap
     pub(super) type TokenList<T> =
         StorageMap<_, Identity, TokenId, Option<TokenInstance>, ValueQuery>;
 
@@ -545,12 +554,27 @@ pub mod pallet {
             .inputs
             .iter()
             .filter_map(|input| <UtxoStore<T>>::get(&input.outpoint))
-            .filter_map(|output| {
-                if let TxHeaderAndExtraData::NormalTx { id } = &output.header {
-                    Some((*id, output))
-                } else {
-                    None
-                }
+            .filter_map(|output| match output.data {
+                Some(ref data) => match data {
+                    TxData::TokenTransferV1 { token_id, amount } => Some((*token_id, output)),
+                    TxData::TokenIssuanceV1 {
+                        token_id,
+                        token_ticker,
+                        amount_to_issue,
+                        number_of_decimals,
+                        metadata_URI,
+                    } => Some((*token_id, output)),
+                    TxData::TokenBurnV1 { .. } => {
+                        // frame_support::fail!("Token gone forever, we can't use it anymore").ok();
+                        None
+                    }
+                    TxData::NftMintV1 {
+                        token_id,
+                        data_hash,
+                        metadata_URI,
+                    } => Some((*token_id, output)),
+                },
+                None => Some((H256::zero(), output)),
             })
             .collect();
 
@@ -561,18 +585,26 @@ pub mod pallet {
             .outputs
             .iter()
             .filter_map(|output| {
-                if let TxHeaderAndExtraData::NormalTx { id } = &output.header {
-                    Some((*id, output.value))
-                } else {
-                    None
+                match output.data {
+                    Some(TxData::TokenTransferV1 { token_id, amount }) => Some((token_id, amount)),
+                    Some(TxData::TokenIssuanceV1 {
+                        token_id,
+                        amount_to_issue,
+                        ..
+                    }) => Some((token_id, amount_to_issue)),
+                    Some(TxData::NftMintV1 { token_id, .. }) => Some((token_id, 1)),
+                    // Token gone forever, we can't use it anymore
+                    Some(TxData::TokenBurnV1 { .. }) => None,
+                    None => Some((H256::zero(), output.value)),
                 }
             })
             .collect();
 
         // Check for token creation
         for output in tx.outputs.iter() {
-            let tid = match output.header {
-                TxHeaderAndExtraData::NormalTx { id } => id,
+            let tid = match output.data {
+                Some(TxData::TokenTransferV1 { token_id, .. }) => token_id,
+                Some(TxData::TokenIssuanceV1 { token_id, .. }) => token_id,
                 _ => continue,
             };
             // If we have input and output for the same token it's not a problem
@@ -751,62 +783,63 @@ pub mod pallet {
         token_ticker: String,
         supply: Value,
     ) -> Result<H256, DispatchErrorWithPostInfo<PostDispatchInfo>> {
-        ensure!(token_name.len() <= 25, Error::<T>::Unapproved);
-        ensure!(token_ticker.len() <= 5, Error::<T>::Unapproved);
-        ensure!(!supply.is_zero(), Error::<T>::MinBalanceZero);
-
-        // Input with MLT FEE
-        let fee = UtxoStore::<T>::get(input_for_fee.outpoint).ok_or(Error::<T>::Unapproved)?.value;
-        ensure!(fee >= Mlt(100).to_munit(), Error::<T>::Unapproved);
-
-        // Save in UTXO
-        let instance = crate::TokenInstance::new_normal(
-            BlakeTwo256::hash_of(&(&token_name, &token_ticker)),
-            token_name,
-            token_ticker,
-            supply,
-        );
-        let token_id = *instance.id();
-
-        ensure!(
-            !<TokenList<T>>::contains_key(instance.id()),
-            Error::<T>::InUse
-        );
-
-        let mut tx = Transaction {
-            inputs: crate::vec![
-                // Fee an input equal 100 MLT
-                input_for_fee,
-            ],
-            outputs: crate::vec![
-                // Output a new tokens
-                TransactionOutput::new_token(*instance.id(), supply, public),
-            ],
-        };
-
-        // We shall make an output to return odd funds
-        if fee > Mlt(100).to_munit() {
-            tx.outputs.push(TransactionOutput::new_pubkey(
-                fee - Mlt(100).to_munit(),
-                public,
-            ));
-        }
-
-        let sig = crypto::sr25519_sign(
-            SR25519,
-            &sp_core::sr25519::Public::from_h256(public),
-            &tx.encode(),
-        )
-        .ok_or(DispatchError::Token(sp_runtime::TokenError::CannotCreate))?;
-        for i in 0..tx.inputs.len() {
-            tx.inputs[i].witness = sig.0.to_vec();
-        }
-        // Success
-        spend::<T>(caller, &tx)?;
-
-        // Save in Store
-        <TokenList<T>>::insert(token_id, Some(instance));
-        Ok(token_id)
+        // ensure!(token_name.len() <= 25, Error::<T>::Unapproved);
+        // ensure!(token_ticker.len() <= 5, Error::<T>::Unapproved);
+        // ensure!(!supply.is_zero(), Error::<T>::MinBalanceZero);
+        //
+        // // Input with MLT FEE
+        // let fee = UtxoStore::<T>::get(input_for_fee.outpoint).ok_or(Error::<T>::Unapproved)?.value;
+        // ensure!(fee >= Mlt(100).to_munit(), Error::<T>::Unapproved);
+        //
+        // // Save in UTXO
+        // let instance = crate::TokenInstance::new_normal(
+        //     BlakeTwo256::hash_of(&(&token_name, &token_ticker)),
+        //     token_name,
+        //     token_ticker,
+        //     supply,
+        // );
+        // let token_id = *instance.id();
+        //
+        // ensure!(
+        //     !<TokenList<T>>::contains_key(instance.id()),
+        //     Error::<T>::InUse
+        // );
+        //
+        // let mut tx = Transaction {
+        //     inputs: crate::vec![
+        //         // Fee an input equal 100 MLT
+        //         input_for_fee,
+        //     ],
+        //     outputs: crate::vec![
+        //         // Output a new tokens
+        //         TransactionOutput::new_token(*instance.id(), supply, public),
+        //     ],
+        // };
+        //
+        // // We shall make an output to return odd funds
+        // if fee > Mlt(100).to_munit() {
+        //     tx.outputs.push(TransactionOutput::new_pubkey(
+        //         fee - Mlt(100).to_munit(),
+        //         public,
+        //     ));
+        // }
+        //
+        // let sig = crypto::sr25519_sign(
+        //     SR25519,
+        //     &sp_core::sr25519::Public::from_h256(public),
+        //     &tx.encode(),
+        // )
+        // .ok_or(DispatchError::Token(sp_runtime::TokenError::CannotCreate))?;
+        // for i in 0..tx.inputs.len() {
+        //     tx.inputs[i].witness = sig.0.to_vec();
+        // }
+        // // Success
+        // spend::<T>(caller, &tx)?;
+        //
+        // // Save in Store
+        // <TokenList<T>>::insert(token_id, Some(instance));
+        // Ok(token_id)
+        unimplemented!();
     }
 
     fn mint<T: Config>(
@@ -1005,7 +1038,7 @@ pub mod pallet {
                         value,
                         destination: dest,
                         // todo: We need to check what kind of token over here
-                        header: TxHeaderAndExtraData::NormalTx { id: H256::zero() },
+                        data: None,
                     },
                     TransactionOutput::new_pubkey(total - value, H256::from(pubkey_raw)),
                 ],
