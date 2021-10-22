@@ -42,7 +42,7 @@ FindAuthor<Validators::ValidatorId> for FindAccountFromAuthorIndex<T,Inner, Vali
         // we use a list of authorities to get the H256 equivalent of the author.
         // An example would be Aura's list of authorities.
         if let Some(authority) = T::authorities().get(i as usize) {
-            <BlockAuthor::<T>>::put(Some(*authority));
+            <BlockAuthor::<T>>::put(*authority);
         }
 
         // As Block authors need to be validators as well, This validator set will determine the

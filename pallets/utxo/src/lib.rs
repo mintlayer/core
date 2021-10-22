@@ -461,7 +461,7 @@ pub mod pallet {
 
     #[pallet::storage]
     #[pallet::getter(fn current_block_author)]
-    pub(super) type BlockAuthor<T> = StorageValue<_, Option<H256>, ValueQuery>;
+    pub(super) type BlockAuthor<T> = StorageValue<_, H256, OptionQuery>;
 
     #[pallet::storage]
     #[pallet::getter(fn utxo_store)]
@@ -473,12 +473,12 @@ pub mod pallet {
     #[pallet::storage]
     #[pallet::getter(fn locked_utxos)]
     pub(super) type LockedUtxos<T: Config> =
-    StorageMap<_, Identity, H256, Option<TransactionOutputFor<T>>, ValueQuery>;
+    StorageMap<_, Identity, H256, TransactionOutputFor<T>, OptionQuery>;
 
     /// this is to count how many stakings done for that controller account.
     #[pallet::storage]
     #[pallet::getter(fn staking_count)]
-    pub(super) type StakingCount<T: Config> = StorageMap<_, Identity,H256,Option<(u64, Value)>, ValueQuery>;
+    pub(super) type StakingCount<T: Config> = StorageMap<_, Identity,H256,(u64, Value), OptionQuery>;
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -667,16 +667,14 @@ pub mod pallet {
                     new_utxos.push(hash.as_fixed_bytes().to_vec());
                 }
                 Destination::StakeExtra(_) => {
-                    ensure!(output.value > 0, "output value must be nonzero");
                     let hash = tx.outpoint(output_index as u64);
                     new_utxos.push(hash.as_fixed_bytes().to_vec());
-                    ensure!(!<LockedUtxos<T>>::contains_key(hash), "output already exists");
+                    staking::validate_stake_extra::<T>(hash,output.value)?;
                 }
                 Destination::LockForStaking {..} => {
-                    ensure!(output.value >= T::MinimumStake::get(), "output value must be equal or more than the set minimum stake");
-                    let hash = tx.outpoint(output_index as u64);
+                   let hash = tx.outpoint(output_index as u64);
                     new_utxos.push(hash.as_fixed_bytes().to_vec());
-                    ensure!(!<LockedUtxos<T>>::contains_key(hash), "output already exists");
+                    staking::validate_lock_for_staking::<T>(hash,output.value)?;
                 }
                 Destination::CreatePP(_, _) => {
                     log::info!("TODO validate OP_CREATE");
@@ -806,35 +804,13 @@ pub mod pallet {
                     <UtxoStore<T>>::insert(hash, Some(output));
                 }
 
-                //TODO: change back to Public/H256 or something, after UI testing.
-                Destination::LockForStaking { stash_account, controller_account, session_key } => {
-                    let stash_pubkey = convert_to_h256::<T>(stash_account)?;
-                    let controller_pubkey = convert_to_h256::<T>(controller_account)?;
-                    staking::lock_for_staking::<T>(&stash_pubkey, &controller_pubkey, session_key, output.value)?;
-
+                Destination::LockForStaking { .. } => {
                     let hash = tx.outpoint(index as u64);
-                    log::debug!("inserting to LockedUtxos {:?} as key {:?}", output, hash);
-                    <LockedUtxos<T>>::insert(hash, Some(output));
-                    <StakingCount<T>>::insert(controller_pubkey, Some((1,output.value)));
+                    staking::lock_for_staking::<T>(hash,output)?;
                 }
-                //TODO: change back to Public/H256 or something, after UI testing.
-                Destination::StakeExtra(controller_account) => {
-                    let controller_pubkey = convert_to_h256::<T>(controller_account)?;
-                    staking::stake_extra::<T>(&controller_pubkey, output.value)?;
-
+                Destination::StakeExtra(_) => {
                     let hash = tx.outpoint(index as u64);
-                    log::debug!("inserting to LockedUtxos {:?} as key {:?}", output, hash);
-
-                    let (mut num_of_utxos, mut total) = <StakingCount<T>>::get(&controller_pubkey).ok_or("cannot find the public key inside the stakingcount.")?;
-
-                    // update the total locked utxo values
-                    total = total.checked_add(output.value).ok_or("exceeded limit of total amount to stake.")?;
-
-                    // increase the number of utxos being locked.
-                    num_of_utxos = num_of_utxos.checked_add(1).ok_or("exceeded limit of number of utxos to stake.")?;
-
-                    <LockedUtxos<T>>::insert(hash, Some(output));
-                    <StakingCount<T>>::insert(controller_pubkey,Some((num_of_utxos, total)));
+                    staking::locking_extra_utxos::<T>(hash,output)?;
                 }
                 Destination::CreatePP(script, data) => {
                     create::<T>(caller, script, &data);
@@ -1115,12 +1091,12 @@ pub mod pallet {
                 //TODO: change back to Public/H256 or something, after UI testing.
                 if let Destination::LockForStaking { stash_account:_, controller_account, session_key:_ } =  &u.destination {
                     if let Ok(controller_pubkey) = convert_to_h256::<T>(controller_account){
-                        <StakingCount<T>>::insert(controller_pubkey,Some((1, u.value)));
+                        <StakingCount<T>>::insert(controller_pubkey,(1, u.value));
                     }
                 }
 
                 // added the index and the `genesis` on the hashing, to indicate that these utxos are from the beginning of the chain.
-                LockedUtxos::<T>::insert(BlakeTwo256::hash_of(&(&u, index as u64, "genesis")), Some(u));
+                LockedUtxos::<T>::insert(BlakeTwo256::hash_of(&(&u, index as u64, "genesis")), u);
             });
         }
     }
