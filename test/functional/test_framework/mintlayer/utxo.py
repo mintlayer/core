@@ -3,9 +3,10 @@ from substrateinterface import SubstrateInterface, Keypair
 from substrateinterface.exceptions import SubstrateRequestException
 import scalecodec
 import os
+from _staking import Staking
 
 """ Client. A thin wrapper over SubstrateInterface """
-class Client:
+class Client(Staking):
     def __init__(self, url="ws://127.0.0.1", port=9944):
         source_dir = os.path.dirname(os.path.abspath(__file__))
         types_file = os.path.join(source_dir, "..", "..", "custom-types.json")
@@ -41,6 +42,7 @@ class Client:
 
         return ((h, Output.load(o.value)) for (h, o) in query)
 
+
     """ Get UTXOs for given key """
     def utxos_for(self, keypair):
         matching = lambda e: e[1].destination.get_pubkey() == keypair.public_key
@@ -57,7 +59,7 @@ class Client:
         return ((h, tuple(map(int,str(obj)[1:-1].split(', ')))) for (h, obj) in query)
 
 
-    """ Submit a transaction onto the blockchain """
+    """ Submit a transaction onto the blockchain: spend """
     def submit(self, keypair, tx):
         call = self.substrate.compose_call(
             call_module = 'Utxo',
@@ -70,7 +72,24 @@ class Client:
         try:
             receipt = self.substrate.submit_extrinsic(extrinsic, wait_for_inclusion=True)
             print("Extrinsic '{}' sent and included in block '{}'".format(receipt.extrinsic_hash, receipt.block_hash))
-            return (receipt.extrinsic_hash, receipt.block_hash)
+            return (receipt.extrinsic_hash, receipt.block_hash, receipt.triggered_events)
+        except SubstrateRequestException as e:
+            print("Failed to send: {}".format(e))
+
+    def unlock_request_for_withdrawal(self, keypair):
+        call = self.substrate.compose_call(
+            call_module = 'Utxo',
+            call_function = 'unlock_request_for_withdrawal',
+            call_params = { 'controller_pubkey': keypair.public_key },
+        )
+        #TODO ^ same code as above; put them in 1 func
+        extrinsic = self.substrate.create_signed_extrinsic(call=call, keypair=keypair)
+        print("extrinsic submitted...")
+
+        try:
+            receipt = self.substrate.submit_extrinsic(extrinsic, wait_for_inclusion=True)
+            print("Extrinsic '{}' sent and included in block '{}'".format(receipt.extrinsic_hash, receipt.block_hash))
+            return (receipt.extrinsic_hash, receipt.block_hash, receipt.triggered_events)
         except SubstrateRequestException as e:
             print("Failed to send: {}".format(e))
 
