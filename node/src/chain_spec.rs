@@ -1,4 +1,4 @@
-use node_template_runtime::{pallet_utxo, MLT_ORIG_SUPPLY, AccountId, BalancesConfig, GenesisConfig, PpConfig, Signature, SudoConfig, SystemConfig, UtxoConfig, WASM_BINARY, SessionConfig, StakingConfig, StakerStatus, MINIMUM_STAKE};
+use node_template_runtime::{pallet_utxo, MLT_ORIG_SUPPLY, NUM_OF_VALIDATOR_SLOTS, AccountId, BalancesConfig, GenesisConfig, PpConfig, Signature, SudoConfig, SystemConfig, UtxoConfig, WASM_BINARY, SessionConfig, StakingConfig, StakerStatus, MINIMUM_STAKE};
 use sc_network::config::MultiaddrWithPeerId;
 use sc_service::ChainType;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
@@ -266,9 +266,7 @@ fn testnet_genesis(
             keys: session_keys
         },
         staking: StakingConfig {
-            // provide 5 more slots. TODO: what's the max slots?
-            validator_count: initial_authorities.len() as u32 + 5u32,
-            // TODO: what's the actual count?
+            validator_count: NUM_OF_VALIDATOR_SLOTS,
             // The # of validators set should be the same number of locked_utxos specified in UtxoConfig.
             minimum_validator_count: initial_authorities.len() as u32,
             invulnerables: initial_authorities.iter().map(|x| x.controller_account_id()).collect(),

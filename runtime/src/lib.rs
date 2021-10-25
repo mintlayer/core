@@ -136,6 +136,9 @@ pub const MINUTES: BlockNumber = 60_000 / (MILLISECS_PER_BLOCK as BlockNumber);
 pub const HOURS: BlockNumber = MINUTES * 60;
 pub const DAYS: BlockNumber = HOURS * 24;
 
+// number of slots available per era, of pallet-staking.
+pub const NUM_OF_VALIDATOR_SLOTS: u32 = 10;
+
 pub const MILLICENTS: Balance = 1_000_000_000;
 pub const CENTS: Balance = 1_000 * MILLICENTS;
 pub const DOLLARS: Balance = 100 * CENTS;
@@ -431,8 +434,10 @@ impl onchain::Config for Runtime {
 
 parameter_types! {
     // TODO: how many sessions is in 1 era?
+    // we've settled on 10 blocks;
+    // currently period is at 2.
     // Note: an era is when the change of validator set happens.
-    pub const SessionsPerEra: sp_staking::SessionIndex = 2;
+    pub const SessionsPerEra: sp_staking::SessionIndex = 5;
 
     // Note: upon unlocking funds, it doesn't mean withdrawal is activated.
     // TODO: How long should the stake stay "bonded" or "locked", until it's allowed to withdraw?

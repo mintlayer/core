@@ -35,7 +35,7 @@ MY_RELAY = 1 # from version 70001 onwards, fRelay should be appended to version 
 MAX_INV_SZ = 50000
 MAX_BLOCK_BASE_SIZE = 1000000
 
-COIN = 1000 * 100000000 # 1 bitcoin in satoshis
+COIN = 1000 * 100000000 # 1 MLT Coin
 COINBASE_MATURITY = 10
 STAKE_COMBINE_THRESHOLD = Decimal('1000.')
 STAKE_SPLIT_AGE = 60 * 60  # in regtest
