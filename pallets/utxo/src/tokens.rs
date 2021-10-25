@@ -54,7 +54,7 @@ impl TokenId {
 
     pub fn to_string(&self) -> Vec<u8> {
         match self.inner {
-            TokenIdInner::MLT => vec![],
+            TokenIdInner::MLT => sp_std::vec![],
             TokenIdInner::Asset(hash) => hash.as_bytes().to_base58().to_vec(),
         }
     }
@@ -153,4 +153,15 @@ pub enum NftDataHash {
     #[codec(index = 2)]
     Raw(Vec<u8>),
     // Or any type that you want to implement
+}
+
+impl OutputData {
+    pub(crate) fn id(&self) -> Option<TokenId> {
+        match self {
+            OutputData::TokenTransferV1 { ref token_id, .. }
+            | OutputData::TokenIssuanceV1 { ref token_id, .. }
+            | OutputData::NftMintV1 { ref token_id, .. } => Some(token_id.clone()),
+            _ => None,
+        }
+    }
 }

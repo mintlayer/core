@@ -4,6 +4,9 @@
 //! commit hash: c6e7d37
 //! works only up to 128 bytes
 
+use sp_std::vec;
+use sp_std::vec::Vec;
+
 const ALPHABET: &'static [u8] = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
 const B58_DIGITS_MAP: &'static [i8] = &[
@@ -203,27 +206,27 @@ mod tests {
 
     #[test]
     fn test_to_base58_basic() {
-        assert_eq!(b"".to_base58(), "");
-        assert_eq!(&[32].to_base58(), "Z");
-        assert_eq!(&[45].to_base58(), "n");
-        assert_eq!(&[48].to_base58(), "q");
-        assert_eq!(&[49].to_base58(), "r");
-        assert_eq!(&[57].to_base58(), "z");
-        assert_eq!(&[45, 49].to_base58(), "4SU");
-        assert_eq!(&[49, 49].to_base58(), "4k8");
-        assert_eq!(b"abc".to_base58(), "ZiCa");
-        assert_eq!(b"1234598760".to_base58(), "3mJr7AoUXx2Wqd");
+        assert_eq!(b"".to_base58(), "".as_bytes());
+        assert_eq!(&[32].to_base58(), "Z".as_bytes());
+        assert_eq!(&[45].to_base58(), "n".as_bytes());
+        assert_eq!(&[48].to_base58(), "q".as_bytes());
+        assert_eq!(&[49].to_base58(), "r".as_bytes());
+        assert_eq!(&[57].to_base58(), "z".as_bytes());
+        assert_eq!(&[45, 49].to_base58(), "4SU".as_bytes());
+        assert_eq!(&[49, 49].to_base58(), "4k8".as_bytes());
+        assert_eq!(b"abc".to_base58(), "ZiCa".as_bytes());
+        assert_eq!(b"1234598760".to_base58(), "3mJr7AoUXx2Wqd".as_bytes());
         assert_eq!(
             b"abcdefghijklmnopqrstuvwxyz".to_base58(),
-            "3yxU3u1igY8WkgtjK92fbJQCd4BZiiT1v25f"
+            "3yxU3u1igY8WkgtjK92fbJQCd4BZiiT1v25f".as_bytes()
         );
     }
 
     #[test]
     fn test_to_base58_initial_zeros() {
-        assert_eq!(b"\0abc".to_base58(), "1ZiCa");
-        assert_eq!(b"\0\0abc".to_base58(), "11ZiCa");
-        assert_eq!(b"\0\0\0abc".to_base58(), "111ZiCa");
-        assert_eq!(b"\0\0\0\0abc".to_base58(), "1111ZiCa");
+        assert_eq!(b"\0abc".to_base58(), "1ZiCa".as_bytes());
+        assert_eq!(b"\0\0abc".to_base58(), "11ZiCa".as_bytes());
+        assert_eq!(b"\0\0\0abc".to_base58(), "111ZiCa".as_bytes());
+        assert_eq!(b"\0\0\0\0abc".to_base58(), "1111ZiCa".as_bytes());
     }
 }

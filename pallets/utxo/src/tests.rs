@@ -27,6 +27,7 @@ use frame_support::{
     sp_runtime::traits::{BlakeTwo256, Hash},
 };
 
+use crate::tokens::OutputData;
 use sp_core::{sp_std::vec, sr25519::Public, testing::SR25519, H256, H512};
 
 fn tx_input_gen_no_signature() -> (TransactionOutput<H256>, TransactionInput) {
@@ -532,48 +533,181 @@ fn test_send_to_address() {
     })
 }
 
+// #[test]
+// fn nft_test() {
+// execute_with_alice(|alice_pub_key| {
+//     // Let's create a new test nft
+//     let nft_id = BlakeTwo256::hash_of(&b"TEST");
+//     let instance = TokenInstance::new_nft(
+//         nft_id,
+//         (*b"01010101010101010101010101010101").to_vec(),
+//         b"http://facebook.com".to_vec(),
+//         alice_pub_key.to_vec(),
+//     );
+//
+//     if let TokenInstance::Nft {
+//         id,
+//         data,
+//         data_url,
+//         creator_pubkey,
+//         ..
+//     } = instance
+//     {
+//         let mut tx = Transaction {
+//             inputs: vec![
+//                 // 100 MLT
+//                 tx_input_gen_no_signature(),
+//             ],
+//             outputs: vec![TransactionOutput::new_nft(
+//                 id,
+//                 data.to_vec(),
+//                 data_url,
+//                 H256::from_slice(creator_pubkey.as_slice()),
+//             )],
+//         };
+//         let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx.encode()).unwrap();
+//         tx.inputs[0].witness = alice_sig.0.to_vec();
+//         assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx.clone()));
+//     }
+//
+//     // it should allow to write and read ?
+//     // let rsp = await dataToken.readData(firstTokenId);
+//     // assert.equal(rsp, empty);
+//     // await dataToken.writeData(firstTokenId, data);
+//     // rsp = await dataToken.readData(firstTokenId);
+//     // assert.equal(rsp, data);
+// });
+
+// *Testing token creation:
+use crate::tokens::TokenId;
 #[test]
-fn nft_test() {
-    // execute_with_alice(|alice_pub_key| {
-    //     // Let's create a new test nft
-    //     let nft_id = BlakeTwo256::hash_of(&b"TEST");
-    //     let instance = TokenInstance::new_nft(
-    //         nft_id,
-    //         (*b"01010101010101010101010101010101").to_vec(),
-    //         b"http://facebook.com".to_vec(),
-    //         alice_pub_key.to_vec(),
-    //     );
-    //
-    //     if let TokenInstance::Nft {
-    //         id,
-    //         data,
-    //         data_url,
-    //         creator_pubkey,
-    //         ..
-    //     } = instance
-    //     {
-    //         let mut tx = Transaction {
-    //             inputs: vec![
-    //                 // 100 MLT
-    //                 tx_input_gen_no_signature(),
-    //             ],
-    //             outputs: vec![TransactionOutput::new_nft(
-    //                 id,
-    //                 data.to_vec(),
-    //                 data_url,
-    //                 H256::from_slice(creator_pubkey.as_slice()),
-    //             )],
-    //         };
-    //         let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx.encode()).unwrap();
-    //         tx.inputs[0].witness = alice_sig.0.to_vec();
-    //         assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx.clone()));
-    //     }
-    //
-    //     // it should allow to write and read ?
-    //     // let rsp = await dataToken.readData(firstTokenId);
-    //     // assert.equal(rsp, empty);
-    //     // await dataToken.writeData(firstTokenId, data);
-    //     // rsp = await dataToken.readData(firstTokenId);
-    //     // assert.equal(rsp, data);
-    // });
+// Simple creation of tokens
+fn checking_tokens_issuance() {
+    execute_with_alice(|alice_pub_key| {
+        // Alice wants to send herself a new utxo of value 50.
+        let (utxo0, input0) = tx_input_gen_no_signature();
+        let first_input_hash = BlakeTwo256::hash(&input0.outpoint.as_ref());
+
+        let output = TransactionOutput {
+            value: 0,
+            destination: Destination::Pubkey(alice_pub_key),
+
+            // TransactionOutput::new_pubkey(50, H256::from(alice_pub_key)),
+            data: Some(OutputData::TokenIssuanceV1 {
+                token_id: TokenId::new_asset(first_input_hash),
+                token_ticker: "Ben's token".as_bytes().to_vec(),
+                amount_to_issue: 1_000_000_000,
+                // Should be not more than 18 numbers
+                number_of_decimals: 2,
+                metadata_uri: "facebook.com".as_bytes().to_vec(),
+            }),
+        };
+        let tx = Transaction {
+            inputs: vec![input0],
+            outputs: vec![output],
+        }
+        .sign_unchecked(&[utxo0], 0, &alice_pub_key);
+
+        let new_utxo_hash = tx.outpoint(0);
+
+        let (_, init_utxo) = genesis_utxo();
+        assert!(UtxoStore::<Test>::contains_key(H256::from(init_utxo)));
+        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx));
+        assert!(!UtxoStore::<Test>::contains_key(H256::from(init_utxo)));
+        assert!(UtxoStore::<Test>::contains_key(new_utxo_hash));
+        assert_eq!(50, UtxoStore::<Test>::get(new_utxo_hash).unwrap().value);
+    })
 }
+
+#[test]
+// Simple creation of NFT
+fn checking_nft_mint() {}
+
+#[test]
+// NFT might be only unique, we can't create a few nft for one item
+fn checking_nft_unique() {}
+
+#[test]
+// Creation a token with a pre-existing ID or re-creation of an already created token.
+fn checking_tokens_twice_creation() {}
+
+// ** Creating a token with corrupted data
+////////////////////////////////////////////////////////////////////////////////////////////////
+
+#[test]
+//Data field of zero length
+fn checking_tokens_with_empty_data() {}
+
+#[test]
+// The data field of the maximum allowed length filled with random garbage
+fn checking_tokens_with_junk_data() {}
+
+#[test]
+// Creation of a token with 0 issue amount
+fn checking_tokens_creation_with_zero_amount() {}
+
+#[test]
+// Generating a token with a long URI string
+fn checking_tokens_creation_with_long_uri() {}
+
+// ** Creation of a token without input with MLT to pay commission
+////////////////////////////////////////////////////////////////////////////////////////////////
+
+#[test]
+// Test tx where Input with token and without MLT, output has token (without MLT)
+fn checking_tokens_creation_without_mlt() {}
+
+#[test]
+// Test tx where Input with token and without MLT, output has MLT (without token)
+fn checking_tokens_creation_with_random_inputs_and_outputs() {}
+
+#[test]
+// Test tx where Input without token but with MLT, output has MLT and token
+fn checking_tokens_creation_without_inputs() {
+    // Test tx where no inputs for token
+}
+
+#[test]
+// Test where less MLT at the input than you need to pay the commission
+fn checking_tokens_creation_with_insufficient_fee() {}
+
+#[test]
+// Test tx where Input and output have a token but with zero value
+fn checking_tokens_creation_with_zero_value() {}
+
+// * Testing token transfer
+////////////////////////////////////////////////////////////////////////////////////////////////
+
+// #[test]
+// //
+// fn checking_tokens_() {}
+// #[test]
+// //
+// fn checking_tokens_() {}
+// #[test]
+// //
+// fn checking_tokens_() {}
+// #[test]
+// //
+// fn checking_tokens_() {}
+// #[test]
+// //
+// fn checking_tokens_() {}
+// #[test]
+// //
+// fn checking_tokens_() {}
+// #[test]
+// //
+// fn checking_tokens_() {}
+// #[test]
+// //
+// fn checking_tokens_() {}
+// #[test]
+// //
+// fn checking_tokens_() {}
+
+// Testing token transfer
+
+// Testing the compatibility of the old version with the new one
+
+// Testing burning tokens

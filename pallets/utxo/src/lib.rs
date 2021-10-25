@@ -29,6 +29,7 @@ mod sign;
 #[cfg(test)]
 mod tests;
 pub mod tokens;
+#[macro_use]
 pub mod verifier;
 pub mod weights;
 
@@ -36,7 +37,8 @@ pub mod weights;
 pub mod pallet {
     //    use crate::sign::{self, Scheme};
     use crate::tokens::{/*Mlt,*/ OutputData, TokenId, Value};
-    use crate::verifier::TransactionVerifier;
+    // use crate::verifier::TransactionVerifier;
+    use super::implement_transaction_verifier;
     use bech32;
     use chainscript::Script;
     use codec::{Decode, Encode};
@@ -55,15 +57,16 @@ pub mod pallet {
     #[cfg(feature = "std")]
     use serde::{Deserialize, Serialize};
     use sp_core::{
-        // sp_std::collections::btree_map::BTreeMap,
+        sp_std::collections::btree_map::BTreeMap,
         sp_std::{convert::TryInto, str, vec},
         sr25519,
         testing::SR25519,
-        H256,
-        H512,
+        H256, H512,
     };
     use sp_runtime::traits::AtLeast32Bit;
     // use sp_runtime::DispatchErrorWithPostInfo;
+
+    implement_transaction_verifier!();
 
     #[pallet::error]
     pub enum Error<T> {
@@ -91,7 +94,7 @@ pub mod pallet {
         Unapproved,
         /// The source account would not survive the transfer and it needs to stay alive.
         WouldDie,
-        // Thrown when there is an attempt to mint a duplicate collection.
+        /// Thrown when there is an attempt to mint a duplicate collection.
         NftCollectionExists,
     }
 
@@ -315,7 +318,7 @@ pub mod pallet {
 
     #[pallet::storage]
     #[pallet::getter(fn utxo_store)]
-    pub(super) type UtxoStore<T: Config> =
+    pub type UtxoStore<T: Config> =
         StorageMap<_, Identity, H256, Option<TransactionOutputFor<T>>, ValueQuery>;
 
     #[pallet::storage]
@@ -411,17 +414,16 @@ pub mod pallet {
     pub fn validate_transaction<T: Config>(
         tx: &TransactionFor<T>,
     ) -> Result<ValidTransaction, &'static str> {
-        TransactionVerifier::<'_, T>::new(tx)
-            .checking_inputs()?
-            .checking_outputs()?
-            .checking_signatures()?
-            .checking_utxos_exists()?
-            .checking_tokens_transferring()?
-            .checking_tokens_issued()?
-            .checking_nft_mint()?
-            .checking_assets_burn()?
-            .calculating_reward()?
-            .collect_result()
+        let mut tv = TransactionVerifier::<'_, T>::new(tx)?;
+        tv.checking_outputs()?;
+        tv.checking_signatures()?;
+        tv.checking_utxos_exists()?;
+        tv.checking_tokens_transferring()?;
+        tv.checking_tokens_issued()?;
+        tv.checking_nft_mint()?;
+        tv.checking_assets_burn()?;
+        tv.calculating_reward()?;
+        tv.collect_result()
 
         /*
                //ensure rather than assert to avoid panic
