@@ -32,7 +32,7 @@
 				[ "CallPP", "DestinationCallPP" ],
 				[ "ScriptHash", "H256"],
 				[ "LockForStaking", "DestinationStake" ],
-				[ "StakeExtra", "AccountId" ]
+				[ "LockExtraForStaking", "AccountId" ]
 			]
 		},
 		"TransactionInput": {

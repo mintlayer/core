@@ -93,7 +93,7 @@ class ExampleTest(MintlayerTestFramework):
                 utxo.Output(
                     value=4000 * COIN,
                     header=0,
-                    destination=utxo.DestStake(bob_stash.public_key, bob.public_key,'0xa03bcfaac6ebdc26bb9c256c51b08f9c1c6d4569f48710a42939168d1d7e5b6086b20e145e97158f6a0b5bff2994439d3320543c8ff382d1ab3e5eafffaf1a18')
+                    destination=utxo.DestLockForStaking(bob_stash.public_key, bob.public_key,'0xa03bcfaac6ebdc26bb9c256c51b08f9c1c6d4569f48710a42939168d1d7e5b6086b20e145e97158f6a0b5bff2994439d3320543c8ff382d1ab3e5eafffaf1a18')
                 ),
                 utxo.Output(
                     value=45999 * COIN,

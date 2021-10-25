@@ -4,7 +4,7 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """An example functional test
 
-Alice stakes an extra 40_000 utxo
+Bob tries to unlock the locked utxos belonging to Alice.
 """
 
 from substrateinterface import Keypair
@@ -59,38 +59,20 @@ class ExampleTest(MintlayerTestFramework):
     def run_test(self):
         client = self.nodes[0].rpc_client
 
-        alice = Keypair.create_from_uri('//Alice')
+        ledger = list(client.get_staking_ledger())
+        assert_equal(len(ledger[0][1]['unlocking']),0)
 
-        # fetch the genesis utxo from storage
-        utxos = list(client.utxos_for(alice))
+        bob = Keypair.create_from_uri('//Bob')
+
+        (_, _, events) = client.unlock_request_for_withdrawal(bob)
 
 
-        orig_count = list(client.staking_count())[0][1]
-        # there should only be 1 count of alice's locked utxo
-        assert_equal(orig_count[0],1)
-        # the amount that alice locked is 40_000 * MLT_UNIT
-        assert_equal(orig_count[1],40000 * COIN)
+        ledger = list(client.get_staking_ledger())
+        assert_equal(len(ledger[0][1]['unlocking']),0)
 
-        tx1 = utxo.Transaction(
-            client,
-            inputs=[
-                utxo.Input(utxos[0][0]),
-            ],
-            outputs=[
-                utxo.Output(
-                    value=40000 * COIN,
-                    header=0,
-                    destination=utxo.DestLockExtraForStaking(alice.public_key)
-                ),
-            ]
-        ).sign(alice, [utxos[0][1]])
-        client.submit(alice, tx1)
-
-        new_count = list(client.staking_count())[0][1]
-        # there should already by 2 utxos locked
-        assert_equal(new_count[0],2)
-        # the original stake + new stake
-        assert_equal(new_count[1],80000 * COIN)
+        locked_utxos = list(client.utxos('LockedUtxos'))
+        # there should still be 1 utxo locked, no actual withdrawal happened.
+        assert_equal(len(locked_utxos),1)
 
 if __name__ == '__main__':
     ExampleTest().main()

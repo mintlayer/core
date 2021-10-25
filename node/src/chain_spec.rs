@@ -202,7 +202,7 @@ fn testnet_genesis(
            // initial authorities meaning they're also validators.
            // locking some values as a stake from validators
            //TODO: change back to Public/H256 or something, after UI testing.
-           locked_utxos.push(pallet_utxo::TransactionOutput::<AccountId>::new_stake(
+           locked_utxos.push(pallet_utxo::TransactionOutput::<AccountId>::new_lock_for_staking(
                // this is the minimum stake amount
                MINIMUM_STAKE,
                auth_keys.stash_account_id(),

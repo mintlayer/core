@@ -76,11 +76,30 @@ class Client(Staking):
         except SubstrateRequestException as e:
             print("Failed to send: {}".format(e))
 
+    """ Submit a transaction onto the blockchain: unlock """
     def unlock_request_for_withdrawal(self, keypair):
         call = self.substrate.compose_call(
             call_module = 'Utxo',
             call_function = 'unlock_request_for_withdrawal',
             call_params = { 'controller_pubkey': keypair.public_key },
+        )
+        #TODO ^ same code as above; put them in 1 func
+        extrinsic = self.substrate.create_signed_extrinsic(call=call, keypair=keypair)
+        print("extrinsic submitted...")
+
+        try:
+            receipt = self.substrate.submit_extrinsic(extrinsic, wait_for_inclusion=True)
+            print("Extrinsic '{}' sent and included in block '{}'".format(receipt.extrinsic_hash, receipt.block_hash))
+            return (receipt.extrinsic_hash, receipt.block_hash, receipt.triggered_events)
+        except SubstrateRequestException as e:
+            print("Failed to send: {}".format(e))
+
+    """ Submit a transaction onto the blockchain: withdraw """
+    def withdraw_stake(self, keypair, outpoints):
+        call = self.substrate.compose_call(
+            call_module = 'Utxo',
+            call_function = 'withdraw_stake',
+            call_params = { 'controller_pubkey': keypair.public_key, 'outpoints': outpoints },
         )
         #TODO ^ same code as above; put them in 1 func
         extrinsic = self.substrate.create_signed_extrinsic(call=call, keypair=keypair)
@@ -103,9 +122,9 @@ class Destination():
         if 'CallPP' in obj:
             return DestCallPP.load(obj['CallPP'])
         if 'LockForStaking' in obj:
-            return DestStake.load(obj['LockForStaking'])
-        if 'StakeExtra' in obj:
-            return DestStakeExtra.load(obj['StakeExtra'])
+            return DestLockForStaking.load(obj['LockForStaking'])
+        if 'LockExtraForStaking' in obj:
+            return DestLockExtraForStaking.load(obj['LockExtraForStaking'])
         return None
 
     def type_string(self):
@@ -156,7 +175,7 @@ class DestCallPP(Destination):
     def json(self):
         return { 'CallPP': { 'dest_account': self.acct, 'input_data': self.data } }
 
-class DestStake(Destination):
+class DestLockForStaking(Destination):
     def __init__(self, stash_account, controller_account, session_key):
         self.stash = stash_account
         self.controller = controller_account
@@ -164,22 +183,22 @@ class DestStake(Destination):
 
     @staticmethod
     def load(obj):
-        return DestStake(obj['stash_account'], obj['controller_account'], ['session_key'])
+        return DestLockForStaking(obj['stash_account'], obj['controller_account'], ['session_key'])
 
     def json(self):
         return { 'LockForStaking': { 'stash_account': self.stash, 'controller_account': self.controller, 'session_key': self.sesh } }
 
 
-class DestStakeExtra(Destination):
+class DestLockExtraForStaking(Destination):
     def __init__(self, account):
         self.account = account
 
     @staticmethod
     def load(obj):
-        return DestStakeExtra(obj)
+        return DestLockExtraForStaking(obj)
 
     def json(self):
-        return { 'StakeExtra': self.account }
+        return { 'LockExtraForStaking': self.account }
 
 
 class Output():

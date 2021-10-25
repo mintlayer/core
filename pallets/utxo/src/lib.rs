@@ -117,11 +117,11 @@ pub mod pallet {
         /// The source account would not survive the transfer and it needs to stay alive.
         WouldDie,
 
-        /// When occurs during StakeExtra, use Destination::LockForStaking for first time staking.
+        /// When occurs during LockExtraForStaking, use Destination::LockForStaking for first time staking.
         /// When occurs during unstaking, it means there's no coordination with pallet-staking
         ControllerAccountNotFound,
 
-        /// Use Destination::StakeExtra for additional funds to stake.
+        /// Use Destination::LockExtraForStaking for additional funds to stake.
         ControllerAccountAlreadyRegistered,
 
         /// An action not opted to be performed.
@@ -274,7 +274,7 @@ pub mod pallet {
             session_key: Vec<u8>
         },
         /// lock more funds
-        StakeExtra(AccountId) //TODO: change back to Public/H256 or something, after UI testing.
+        LockExtraForStaking(AccountId) //TODO: change back to Public/H256 or something, after UI testing.
     }
 
     impl<AccountId> Destination<AccountId> {
@@ -327,7 +327,7 @@ pub mod pallet {
         /// * `session_key` - for every new validator candidate, you want to link it to a session key.
         /// Generation of `session_key` is done through an rpc call `author_rotateKeys`.
         /// See https://docs.substrate.io/v3/concepts/session-keys/
-        pub fn new_stake(value: Value, stash_account:AccountId, controller_account:AccountId, session_key:Vec<u8>) -> Self {
+        pub fn new_lock_for_staking(value: Value, stash_account:AccountId, controller_account:AccountId, session_key:Vec<u8>) -> Self {
             Self {
                 value,
                 header: 0,
@@ -337,11 +337,11 @@ pub mod pallet {
 
         /// TODO: change back to Public/H256 or something, after UI Testing.
         /// Create a staking extra of an existing validator.
-        pub fn new_stake_extra(value: Value, controller_account: AccountId) -> Self {
+        pub fn new_lock_extra_for_staking(value: Value, controller_account: AccountId) -> Self {
             Self {
                 value,
                 header: 0,
-                destination: Destination::StakeExtra(controller_account)
+                destination: Destination::LockExtraForStaking(controller_account)
             }
         }
 
@@ -666,10 +666,10 @@ pub mod pallet {
                     ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
                     new_utxos.push(hash.as_fixed_bytes().to_vec());
                 }
-                Destination::StakeExtra(_) => {
+                Destination::LockExtraForStaking(_) => {
                     let hash = tx.outpoint(output_index as u64);
                     new_utxos.push(hash.as_fixed_bytes().to_vec());
-                    staking::validate_stake_extra::<T>(hash,output.value)?;
+                    staking::validate_lock_extra_for_staking::<T>(hash,output.value)?;
                 }
                 Destination::LockForStaking {..} => {
                    let hash = tx.outpoint(output_index as u64);
@@ -750,7 +750,7 @@ pub mod pallet {
                         crate::script::verify(&tx, &input_utxos, index as u64, witness, lock)
                             .map_err(|_| "script verification failed")?;
                     }
-                    Destination::LockForStaking {..} | Destination::StakeExtra(_) => {
+                    Destination::LockForStaking {..} | Destination::LockExtraForStaking(_) => {
                         log::info!("TODO validate STAKE spending");
                     }
                 }
@@ -808,7 +808,7 @@ pub mod pallet {
                     let hash = tx.outpoint(index as u64);
                     staking::lock_for_staking::<T>(hash,output)?;
                 }
-                Destination::StakeExtra(_) => {
+                Destination::LockExtraForStaking(_) => {
                     let hash = tx.outpoint(index as u64);
                     staking::locking_extra_utxos::<T>(hash,output)?;
                 }
@@ -1095,6 +1095,7 @@ pub mod pallet {
                     }
                 }
 
+                log::info!("genesis insert lock: {:?}",u);
                 // added the index and the `genesis` on the hashing, to indicate that these utxos are from the beginning of the chain.
                 LockedUtxos::<T>::insert(BlakeTwo256::hash_of(&(&u, index as u64, "genesis")), u);
             });

@@ -4,7 +4,7 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """An example functional test
 
-Alice stakes an extra 40_000 utxo
+Bob tries to withdraw a stake which is not his.
 """
 
 from substrateinterface import Keypair
@@ -59,38 +59,23 @@ class ExampleTest(MintlayerTestFramework):
     def run_test(self):
         client = self.nodes[0].rpc_client
 
-        alice = Keypair.create_from_uri('//Alice')
+        ledger = list(client.get_staking_ledger())
+        assert_equal(len(ledger[0][1]['unlocking']),0)
 
-        # fetch the genesis utxo from storage
-        utxos = list(client.utxos_for(alice))
+        bob = Keypair.create_from_uri('//Bob')
+        print("bob's public key: ", bob.public_key)
+        # this is alice's locked utxo
+        outpoints = ['0x85cf089ac493b7969df7fc1dfd3ed1b880506d7dcfc0e41c71b3676dc2c48b9d']
 
+        (_, _, events) = client.withdraw_stake(bob,outpoints)
 
-        orig_count = list(client.staking_count())[0][1]
-        # there should only be 1 count of alice's locked utxo
-        assert_equal(orig_count[0],1)
-        # the amount that alice locked is 40_000 * MLT_UNIT
-        assert_equal(orig_count[1],40000 * COIN)
+        ledger = list(client.get_staking_ledger())
+        assert_equal(len(ledger[0][1]['unlocking']),0)
 
-        tx1 = utxo.Transaction(
-            client,
-            inputs=[
-                utxo.Input(utxos[0][0]),
-            ],
-            outputs=[
-                utxo.Output(
-                    value=40000 * COIN,
-                    header=0,
-                    destination=utxo.DestLockExtraForStaking(alice.public_key)
-                ),
-            ]
-        ).sign(alice, [utxos[0][1]])
-        client.submit(alice, tx1)
+        locked_utxos = list(client.utxos('LockedUtxos'))
+        # there should still be 1 utxo locked, no actual withdrawal happened.
+        assert_equal(len(locked_utxos),1)
 
-        new_count = list(client.staking_count())[0][1]
-        # there should already by 2 utxos locked
-        assert_equal(new_count[0],2)
-        # the original stake + new stake
-        assert_equal(new_count[1],80000 * COIN)
 
 if __name__ == '__main__':
     ExampleTest().main()

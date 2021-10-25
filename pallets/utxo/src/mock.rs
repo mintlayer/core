@@ -146,7 +146,7 @@ impl <T:pallet_utxo::Config> StakingHelper<AccountId> for MockStaking<T>
         } )
     }
 
-    fn stake_extra(controller_account: &AccountId, _value: u128) -> DispatchResultWithPostInfo {
+    fn lock_extra_for_staking(controller_account: &AccountId, _value: u128) -> DispatchResultWithPostInfo {
         MOCK_STAKING.with(|stake_info| {
             let stake_info = stake_info.borrow();
 
@@ -366,7 +366,7 @@ pub fn multiple_keys_test_ext()  -> (TestExternalities, Vec<(Public,H256)>) {
         genesis_utxos: vec![alice_genesis.clone(), karl_genesis.clone(), greg_genesis.clone(), tom_genesis.clone()],
         locked_utxos: vec![
             // tom is a stash account and alice is the controller.
-            TransactionOutput::new_stake(10,tom_hash,alice_hash,vec![3,1])
+            TransactionOutput::new_lock_for_staking(10,tom_hash,alice_hash,vec![3,1])
         ],
         // initial_reward_amount: 1,
     }

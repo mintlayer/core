@@ -18,7 +18,7 @@ To run the test cases, just run command `cargo test`.
       "CallPP": "DestinationCallPP",
       "ScriptHash": "H256",
       "LockForStaking": "DestinationStake", 
-       "StakeExtra": "AccountId"
+       "LockExtraForStaking": "AccountId"
       }
    },
    "DestinationStake": {

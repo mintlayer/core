@@ -40,7 +40,7 @@ fn simple_staking() {
             outputs: vec![
                 // KARL (index 1) wants to be a validator. He will use GREG (index 2) as the stash account.
                 // minimum value to stake is 10,
-                TransactionOutput::new_stake(10, H256::from(greg_pub_key),H256::from(karl_pub_key),vec![2,1]),
+                TransactionOutput::new_lock_for_staking(10, H256::from(greg_pub_key),H256::from(karl_pub_key),vec![2,1]),
                 TransactionOutput::new_pubkey(90,H256::from(karl_pub_key))
             ]
         }.sign(&[utxo],0,&karl_pub_key).expect("karl's pub key not found");
@@ -69,7 +69,7 @@ fn less_than_minimum_stake() {
             outputs: vec![
                 // KARL (index 1) wants to be a validator. He will use GREG (index 2) as the stash account.
                 // minimum value to stake is 10, but KARL only staked 5.
-                TransactionOutput::new_stake(5, H256::from(greg_pub_key),H256::from(karl_pub_key),vec![2,1]),
+                TransactionOutput::new_lock_for_staking(5, H256::from(greg_pub_key),H256::from(karl_pub_key),vec![2,1]),
                 TransactionOutput::new_pubkey(90,H256::from(karl_pub_key))
             ]
         };
@@ -96,7 +96,7 @@ fn staker_staking_again() {
             ],
             outputs: vec![
                 // ALICE (index 0) wants to stake again. He will use GREG (index 2) as the stash account.
-                TransactionOutput::new_stake(10, H256::from(greg_pub_key),H256::from(alice_pub_key),vec![2,0]),
+                TransactionOutput::new_lock_for_staking(10, H256::from(greg_pub_key),H256::from(alice_pub_key),vec![2,0]),
                 TransactionOutput::new_pubkey(90,H256::from(alice_pub_key))
             ]
         }.sign(&[utxo],0, &alice_pub_key).expect(" alice's pub key not found");
@@ -119,7 +119,7 @@ fn stash_account_is_staking() {
             ],
             outputs: vec![
                 // TOM (index 3) wants to stake. But he's a stash account already!
-                TransactionOutput::new_stake(10, H256::from(greg_pub_key),H256::from(tom_pub_key),vec![2,3]),
+                TransactionOutput::new_lock_for_staking(10, H256::from(greg_pub_key),H256::from(tom_pub_key),vec![2,3]),
                 TransactionOutput::new_pubkey(90,H256::from(tom_pub_key))
             ]
         }.sign(&[utxo.clone()],0,&tom_pub_key).expect("tom's public key not found");
@@ -140,7 +140,7 @@ fn simple_staking_extra() {
             ],
             outputs: vec![
                 // ALICE (index 0) wants to add extra stake.
-                TransactionOutput::new_stake_extra(20, H256::from(alice_pub_key)),
+                TransactionOutput::new_lock_extra_for_staking(20, H256::from(alice_pub_key)),
                 TransactionOutput::new_pubkey(70,H256::from(alice_pub_key))
             ]
         }.sign(&[utxo],0,&alice_pub_key).expect(" alice's pub key not found");
@@ -170,7 +170,7 @@ fn non_validator_staking_extra() {
             ],
             outputs: vec![
                 // GREG (index 2) wants to stake extra funds. But he's not a validator...
-                TransactionOutput::new_stake_extra(20, H256::from(greg_pub_key)),
+                TransactionOutput::new_lock_extra_for_staking(20, H256::from(greg_pub_key)),
                 TransactionOutput::new_pubkey(100,H256::from(greg_pub_key))
             ]
         }.sign(&[utxo],0,&greg_pub_key).expect("greg's pub key not found");

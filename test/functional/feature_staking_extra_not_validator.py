@@ -82,7 +82,7 @@ class ExampleTest(MintlayerTestFramework):
                 utxo.Output(
                     value=40000 * COIN,
                     header=0,
-                    destination=utxo.DestStakeExtra(bob.public_key)
+                    destination=utxo.DestLockExtraForStaking(bob.public_key)
                 ),
             ]
         ).sign(bob, [utxos[0][1]])

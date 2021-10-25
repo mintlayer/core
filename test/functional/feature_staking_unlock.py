@@ -4,7 +4,7 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """An example functional test
 
-Send a transaction from Alice to Bob, then Bob stakes for the first time.
+Alice wants to unlock her locked utxos.
 """
 
 from substrateinterface import Keypair

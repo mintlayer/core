@@ -18,6 +18,7 @@
 use crate::Perbill;
 
 use codec::Decode;
+use frame_support::fail;
 use frame_support::dispatch::{DispatchResultWithPostInfo, Vec};
 use frame_system::{Config as SysConfig, RawOrigin};
 use pallet_staking::{Pallet as StakingPallet, BalanceOf};
@@ -73,7 +74,7 @@ impl <T: pallet_staking::Config + pallet_utxo::Config + pallet_session::Config> 
     }
 
 
-    fn stake_extra(controller_account: &StakeAccountId<T>, value: u128) -> DispatchResultWithPostInfo {
+    fn lock_extra_for_staking(controller_account: &StakeAccountId<T>, value: u128) -> DispatchResultWithPostInfo {
         // get the stash account first
         if let Some(stake_ledger) = <StakingPallet<T>>::ledger(controller_account.clone()) {
             StakingPallet::<T>::bond_extra(
@@ -94,7 +95,7 @@ impl <T: pallet_staking::Config + pallet_utxo::Config + pallet_session::Config> 
 
         // get the total balance to free up
         let stake_ledger = <StakingPallet<T>>::ledger(controller_account.clone()).ok_or(
-            pallet_utxo::Error::<T>::ControllerAccountAlreadyRegistered
+            pallet_utxo::Error::<T>::ControllerAccountNotFound
         )?;
 
         // unbond
@@ -108,6 +109,13 @@ impl <T: pallet_staking::Config + pallet_utxo::Config + pallet_session::Config> 
 
 
     fn withdraw(controller_account: &StakeAccountId<T>) -> DispatchResultWithPostInfo {
+        let stake_ledger = <StakingPallet<T>>::ledger(controller_account.clone()).ok_or(
+            pallet_utxo::Error::<T>::ControllerAccountNotFound
+        )?;
+        if stake_ledger.unlocking.is_empty() {
+            fail!(pallet_utxo::Error::<T>::InvalidOperation);
+        }
+
         StakingPallet::<T>::withdraw_unbonded(RawOrigin::Signed(controller_account.clone()).into(),0)
     }
 }

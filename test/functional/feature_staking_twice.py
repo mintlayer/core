@@ -93,12 +93,12 @@ class ExampleTest(MintlayerTestFramework):
                 utxo.Output(
                     value=40000 * COIN,
                     header=0,
-                    destination=utxo.DestStake(bob_stash.public_key, bob.public_key,'0xa03bcfaac6ebdc26bb9c256c51b08f9c1c6d4569f48710a42939168d1d7e5b6086b20e145e97158f6a0b5bff2994439d3320543c8ff382d1ab3e5eafffaf1a18')
+                    destination=utxo.DestLockForStaking(bob_stash.public_key, bob.public_key,'0xa03bcfaac6ebdc26bb9c256c51b08f9c1c6d4569f48710a42939168d1d7e5b6086b20e145e97158f6a0b5bff2994439d3320543c8ff382d1ab3e5eafffaf1a18')
                 ),
                  utxo.Output(
                     value=10000 * COIN,
                     header=0,
-                    destination=utxo.DestStakeExtra(alice.public_key)
+                    destination=utxo.DestLockExtraForStaking(alice.public_key)
                 ),
                 utxo.Output(
                     value=19998 * COIN,
@@ -108,17 +108,19 @@ class ExampleTest(MintlayerTestFramework):
             ]
         ).sign(bob, tx1.outputs)
 
+
         client.submit(bob, tx2)
 
         staking_count = list(client.staking_count())
+
         # there should already be 2 accounts, adding Bob in the list.
         assert_equal(len(staking_count), 2)
 
         # bob should have 2 locked utxos
-        assert_equal(staking_count[0][1][0], 2)
+        assert_equal(staking_count[1][1][0], 2)
 
         # bob should have a total of 50000 * COINS locked
-        assert_equal(staking_count[0][1][1], 50000 * COIN)
+        assert_equal(staking_count[1][1][1], 50000 * COIN)
 
         # fetch the locked utxos from storage
         locked_utxos = list(client.utxos('LockedUtxos'))
