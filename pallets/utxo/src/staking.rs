@@ -152,7 +152,7 @@ mod utils {
                 ensure!(&controller_pubkey == ctrl_pubkey, "hash of extra stake not owned");
             }
             _ => {
-                log::error!("For locked utxos, only with destinations `Stake` and `LockExtraForStaking` are allowed.");
+                log::error!("For locked utxos, only with destinations `Stake` and `StakeExtra` are allowed.");
                 Err("destination not applicable")?
             }
         }
@@ -189,7 +189,7 @@ pub mod validation{
     use super::*;
 
     /// Checks whether a transaction is valid to do `lock_for_staking`.
-    pub(crate) fn validate_lock_for_staking<T:Config>(
+    pub(crate) fn validate_lock_for_staking_requirements<T:Config>(
         hash_key:H256,
         output_value:Value
     ) -> Result<(), &'static str> {
@@ -200,7 +200,7 @@ pub mod validation{
     }
 
     /// Checks whether a transaction is valid to do extra locking of utxos for staking
-    pub(crate) fn validate_lock_extra_for_staking<T:Config>(
+    pub(crate) fn validate_lock_extra_for_staking_requirements<T:Config>(
         hash_key:H256,
         output_value:Value
     ) -> Result<(), &'static str> {

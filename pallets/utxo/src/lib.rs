@@ -669,12 +669,12 @@ pub mod pallet {
                 Destination::LockExtraForStaking(_) => {
                     let hash = tx.outpoint(output_index as u64);
                     new_utxos.push(hash.as_fixed_bytes().to_vec());
-                    staking::validate_lock_extra_for_staking::<T>(hash,output.value)?;
+                    staking::validate_lock_extra_for_staking_requirements::<T>(hash,output.value)?;
                 }
                 Destination::LockForStaking {..} => {
                    let hash = tx.outpoint(output_index as u64);
                     new_utxos.push(hash.as_fixed_bytes().to_vec());
-                    staking::validate_lock_for_staking::<T>(hash,output.value)?;
+                    staking::validate_lock_for_staking_requirements::<T>(hash,output.value)?;
                 }
                 Destination::CreatePP(_, _) => {
                     log::info!("TODO validate OP_CREATE");
