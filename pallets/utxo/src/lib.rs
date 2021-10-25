@@ -415,9 +415,11 @@ pub mod pallet {
         tx: &TransactionFor<T>,
     ) -> Result<ValidTransaction, &'static str> {
         let mut tv = TransactionVerifier::<'_, T>::new(tx)?;
+        tv.checking_inputs()?;
         tv.checking_outputs()?;
         tv.checking_signatures()?;
         tv.checking_utxos_exists()?;
+        tv.checking_amounts()?;
         tv.checking_tokens_transferring()?;
         tv.checking_tokens_issued()?;
         tv.checking_nft_mint()?;

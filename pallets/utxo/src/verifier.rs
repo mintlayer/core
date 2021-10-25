@@ -11,6 +11,7 @@ macro_rules! implement_transaction_verifier {
             all_outputs_map: BTreeMap<TokenId, TransactionOutputFor<T>>,
             total_value_of_input_tokens: BTreeMap<TokenId, Value>,
             total_value_of_output_tokens: BTreeMap<TokenId, Value>,
+            new_utxos: Vec<Vec<u8>>,
         }
 
         impl<T: Config> TransactionVerifier<'_, T> {
@@ -143,6 +144,7 @@ macro_rules! implement_transaction_verifier {
             pub fn new(tx: &TransactionFor<T>) -> Result<TransactionVerifier<T>, &'static str> {
                 let all_inputs_map = Self::init_inputs(&tx);
                 let all_outputs_map = Self::init_outputs(&tx);
+                let new_utxos = Vec::new();
                 let total_value_of_input_tokens =
                     Self::init_total_value_of_input_tokens(&all_inputs_map)?;
                 let total_value_of_output_tokens =
@@ -153,6 +155,7 @@ macro_rules! implement_transaction_verifier {
                     all_outputs_map,
                     total_value_of_input_tokens,
                     total_value_of_output_tokens,
+                    new_utxos,
                 })
             }
 
@@ -230,30 +233,6 @@ macro_rules! implement_transaction_verifier {
             }
 
             pub fn checking_signatures(&self) -> Result<(), &'static str> {
-                /*
-                // if all spent UTXOs are available, check the math and signatures
-                if let Ok(input_utxos) = &input_utxos {
-                    // We have to check sum of input tokens is less or equal to output tokens.
-
-                    let mut new_token_exist = false;
-                    for output_token in &outputs_sum {
-                        match inputs_sum.get(&output_token.0) {
-                            Some(input_value) => ensure!(
-                                input_value >= &output_token.1,
-                                "output value must not exceed input value"
-                            ),
-                            None => {
-                                // If the transaction has one an output with a new token ID
-                                if new_token_exist {
-                                    frame_support::fail!("input for the token not found")
-                                } else {
-                                    new_token_exist = true;
-                                }
-                            }
-                        }
-                    }
-                    */
-
                 for (index, (_, (input, input_utxo))) in self.all_inputs_map.iter().enumerate() {
                     let spending: Vec<TransactionOutput<T::AccountId>> = self
                         .all_inputs_map
@@ -301,8 +280,52 @@ macro_rules! implement_transaction_verifier {
                 Ok(())
             }
 
-            pub fn checking_utxos_exists(&self) -> Result<(), &'static str> {
-                unimplemented!()
+            pub fn checking_amounts(&self) -> Result<(), &'static str> {
+                // if all spent UTXOs are available, check the math and signatures
+                let mut new_token_exist = false;
+                for (_, (token_id, input_value)) in
+                    self.total_value_of_input_tokens.iter().enumerate()
+                {
+                    match self.total_value_of_output_tokens.get(token_id) {
+                        Some(output_value) => ensure!(
+                            input_value >= &output_value,
+                            "output value must not exceed input value"
+                        ),
+                        None => {
+                            // If the transaction has one an output with a new token ID
+                            if new_token_exist {
+                                frame_support::fail!("input for the token not found")
+                            } else {
+                                new_token_exist = true;
+                            }
+                        }
+                    }
+                }
+                Ok(())
+            }
+
+            pub fn checking_utxos_exists(&mut self) -> Result<(), &'static str> {
+                // Check that outputs are valid
+
+                for (output_index, (token_id, output)) in self.all_outputs_map.iter().enumerate() {
+                    match output.destination {
+                        Destination::Pubkey(_) | Destination::ScriptHash(_) => {
+                            if token_id == &TokenId::mlt() {
+                                ensure!(output.value > 0, "output value must be nonzero");
+                            }
+                            let hash = self.tx.outpoint(output_index as u64);
+                            ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
+                            self.new_utxos.push(hash.as_fixed_bytes().to_vec());
+                        }
+                        Destination::CreatePP(_, _) => {
+                            log::info!("TODO validate OP_CREATE");
+                        }
+                        Destination::CallPP(_, _) => {
+                            log::info!("TODO validate OP_CALL");
+                        }
+                    }
+                }
+                Ok(())
             }
 
             pub fn checking_tokens_transferring(&self) -> Result<(), &'static str> {
