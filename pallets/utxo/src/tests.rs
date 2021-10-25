@@ -579,7 +579,7 @@ fn test_send_to_address() {
 // });
 
 // *Testing token creation:
-use crate::tokens::TokenId;
+use crate::tokens::{NftDataHash, TokenId};
 #[test]
 // Simple creation of tokens
 fn checking_tokens_issuance() {
@@ -591,7 +591,6 @@ fn checking_tokens_issuance() {
         let output = TransactionOutput {
             value: 0,
             destination: Destination::Pubkey(alice_pub_key),
-
             // TransactionOutput::new_pubkey(50, H256::from(alice_pub_key)),
             data: Some(OutputData::TokenIssuanceV1 {
                 token_id: TokenId::new_asset(first_input_hash),
@@ -607,21 +606,70 @@ fn checking_tokens_issuance() {
             outputs: vec![output],
         }
         .sign_unchecked(&[utxo0], 0, &alice_pub_key);
-
         let new_utxo_hash = tx.outpoint(0);
-
         let (_, init_utxo) = genesis_utxo();
         assert!(UtxoStore::<Test>::contains_key(H256::from(init_utxo)));
         assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx));
         assert!(!UtxoStore::<Test>::contains_key(H256::from(init_utxo)));
         assert!(UtxoStore::<Test>::contains_key(new_utxo_hash));
-        assert_eq!(50, UtxoStore::<Test>::get(new_utxo_hash).unwrap().value);
+        assert_eq!(
+            1_000_000_000,
+            UtxoStore::<Test>::get(new_utxo_hash)
+                .unwrap()
+                .data
+                .map(|x| match x {
+                    OutputData::TokenIssuanceV1 {
+                        amount_to_issue, ..
+                    } => amount_to_issue,
+                    _ => 0,
+                })
+                .unwrap_or(0)
+        );
     })
 }
 
 #[test]
 // Simple creation of NFT
-fn checking_nft_mint() {}
+fn checking_nft_mint() {
+    execute_with_alice(|alice_pub_key| {
+        // Alice wants to send herself a new utxo of value 50.
+        let (utxo0, input0) = tx_input_gen_no_signature();
+        let first_input_hash = BlakeTwo256::hash(&input0.outpoint.as_ref());
+        let data_hash = NftDataHash::Raw(vec![1, 2, 3, 4, 5]);
+        let output = TransactionOutput {
+            value: 0,
+            destination: Destination::Pubkey(alice_pub_key),
+            // TransactionOutput::new_pubkey(50, H256::from(alice_pub_key)),
+            data: Some(OutputData::NftMintV1 {
+                token_id: TokenId::new_asset(first_input_hash),
+                data_hash: data_hash.clone(),
+                metadata_uri: "facebook.com".as_bytes().to_vec(),
+            }),
+        };
+        let tx = Transaction {
+            inputs: vec![input0],
+            outputs: vec![output],
+        }
+        .sign_unchecked(&[utxo0], 0, &alice_pub_key);
+        let new_utxo_hash = tx.outpoint(0);
+        let (_, init_utxo) = genesis_utxo();
+        assert!(UtxoStore::<Test>::contains_key(H256::from(init_utxo)));
+        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx));
+        assert!(!UtxoStore::<Test>::contains_key(H256::from(init_utxo)));
+        assert!(UtxoStore::<Test>::contains_key(new_utxo_hash));
+        assert_eq!(
+            data_hash,
+            UtxoStore::<Test>::get(new_utxo_hash)
+                .unwrap()
+                .data
+                .map(|x| match x {
+                    OutputData::NftMintV1 { data_hash, .. } => data_hash,
+                    _ => NftDataHash::Raw(Vec::new()),
+                })
+                .unwrap_or(NftDataHash::Raw(Vec::new()))
+        );
+    })
+}
 
 #[test]
 // NFT might be only unique, we can't create a few nft for one item

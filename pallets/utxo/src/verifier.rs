@@ -12,6 +12,11 @@ macro_rules! implement_transaction_verifier {
             total_value_of_input_tokens: BTreeMap<TokenId, Value>,
             total_value_of_output_tokens: BTreeMap<TokenId, Value>,
             new_utxos: Vec<Vec<u8>>,
+            spended_utxos: Result<
+                Vec<TransactionOutput<<T as frame_system::Config>::AccountId>>,
+                Vec<Vec<u8>>,
+            >,
+            reward: u64,
         }
 
         impl<T: Config> TransactionVerifier<'_, T> {
@@ -144,7 +149,6 @@ macro_rules! implement_transaction_verifier {
             pub fn new(tx: &TransactionFor<T>) -> Result<TransactionVerifier<T>, &'static str> {
                 let all_inputs_map = Self::init_inputs(&tx);
                 let all_outputs_map = Self::init_outputs(&tx);
-                let new_utxos = Vec::new();
                 let total_value_of_input_tokens =
                     Self::init_total_value_of_input_tokens(&all_inputs_map)?;
                 let total_value_of_output_tokens =
@@ -155,7 +159,9 @@ macro_rules! implement_transaction_verifier {
                     all_outputs_map,
                     total_value_of_input_tokens,
                     total_value_of_output_tokens,
-                    new_utxos,
+                    new_utxos: Vec::new(),
+                    spended_utxos: Ok(Vec::new()),
+                    reward: 0,
                 })
             }
 
@@ -305,8 +311,32 @@ macro_rules! implement_transaction_verifier {
             }
 
             pub fn checking_utxos_exists(&mut self) -> Result<(), &'static str> {
-                // Check that outputs are valid
+                // Resolve the transaction inputs by looking up UTXOs being spent by them.
+                //
+                // This will contain one of the following:
+                // * Ok(utxos): a vector of UTXOs each input spends.
+                // * Err(missing): a vector of outputs missing from the store
 
+                self.spended_utxos = {
+                    let mut missing = Vec::new();
+                    let mut resolved: Vec<TransactionOutputFor<T>> = Vec::new();
+
+                    for input in &self.tx.inputs {
+                        if let Some(input_utxo) = <UtxoStore<T>>::get(&input.outpoint) {
+                            let lock_commitment = input_utxo.destination.lock_commitment();
+                            ensure!(
+                                input.lock_hash() == *lock_commitment,
+                                "Lock hash does not match"
+                            );
+                            resolved.push(input_utxo);
+                        } else {
+                            missing.push(input.outpoint.clone().as_fixed_bytes().to_vec());
+                        }
+                    }
+                    missing.is_empty().then(|| resolved).ok_or(missing)
+                };
+
+                // Check that outputs are valid
                 for (output_index, (token_id, output)) in self.all_outputs_map.iter().enumerate() {
                     match output.destination {
                         Destination::Pubkey(_) | Destination::ScriptHash(_) => {
@@ -344,12 +374,38 @@ macro_rules! implement_transaction_verifier {
                 unimplemented!()
             }
 
-            pub fn calculating_reward(&self) -> Result<(), &'static str> {
-                unimplemented!()
+            pub fn calculating_reward(&mut self) -> Result<(), &'static str> {
+                use std::convert::TryFrom;
+                // Reward at the moment only in MLT
+                self.reward = if self.total_value_of_input_tokens.contains_key(&TokenId::mlt())
+                    && self.total_value_of_output_tokens.contains_key(&(TokenId::mlt()))
+                {
+                    u64::try_from(
+                        self.total_value_of_input_tokens[&TokenId::mlt()]
+                            .checked_sub(self.total_value_of_output_tokens[&TokenId::mlt()])
+                            .ok_or("reward underflow")?,
+                    )
+                    .map_err(|_e| "too big amount of fee")?
+                } else {
+                    u64::try_from(
+                        *self
+                            .total_value_of_input_tokens
+                            .get(&TokenId::mlt())
+                            .ok_or("fee doesn't exist")?,
+                    )
+                    .map_err(|_e| "too big amount of fee")?
+                };
+                Ok(())
             }
 
             pub fn collect_result(&self) -> Result<ValidTransaction, &'static str> {
-                unimplemented!()
+                Ok(ValidTransaction {
+                    priority: self.reward,
+                    requires: self.spended_utxos.clone().map_or_else(|x| x, |_| Vec::new()),
+                    provides: self.new_utxos.clone(),
+                    longevity: TransactionLongevity::MAX,
+                    propagate: true,
+                })
             }
         }
     };

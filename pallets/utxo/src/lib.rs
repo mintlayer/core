@@ -420,10 +420,10 @@ pub mod pallet {
         tv.checking_signatures()?;
         tv.checking_utxos_exists()?;
         tv.checking_amounts()?;
-        tv.checking_tokens_transferring()?;
-        tv.checking_tokens_issued()?;
-        tv.checking_nft_mint()?;
-        tv.checking_assets_burn()?;
+        //tv.checking_tokens_transferring()?;
+        //tv.checking_tokens_issued()?;
+        //tv.checking_nft_mint()?;
+        //tv.checking_assets_burn()?;
         tv.calculating_reward()?;
         tv.collect_result()
 
