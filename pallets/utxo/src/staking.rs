@@ -54,11 +54,11 @@ pub trait StakingHelper<AccountId>{
 /// also means you don't want to be a validator anymore.
 pub(crate) fn unlock_request_for_withdrawal<T: Config>(controller_pubkey: &H256) -> DispatchResultWithPostInfo {
     let controller_account= T::StakingHelper::get_account_id(controller_pubkey);
-    T::StakingHelper::unlock_request_for_withdrawal(&controller_account)?;
+    let res = T::StakingHelper::unlock_request_for_withdrawal(&controller_account)?;
 
     <Pallet<T>>::deposit_event(Event::<T>::StakeUnlocked(controller_pubkey.clone()));
 
-    Ok(().into())
+    Ok(res)
 }
 
 /// Consolidates all unlocked utxos  into one, and moves it to `UtxoStore`.
@@ -72,7 +72,7 @@ pub(crate) fn withdraw<T: Config>(controller_pubkey: H256, outpoints: Vec<H256>)
     validate_withdrawal::<T>(&controller_pubkey,&outpoints)?;
 
     let controller_account = T::StakingHelper::get_account_id(&controller_pubkey);
-    T::StakingHelper::withdraw(&controller_account)?;
+    let res = T::StakingHelper::withdraw(&controller_account)?;
 
     let (_, mut total) = <StakingCount<T>>::get(controller_pubkey.clone()).ok_or("cannot find the public key inside the stakingcount.")?;
 
@@ -94,7 +94,7 @@ pub(crate) fn withdraw<T: Config>(controller_pubkey: H256, outpoints: Vec<H256>)
     <RewardTotal<T>>::put(reward_total + fee);
 
     <Pallet<T>>::deposit_event(Event::<T>::StakeWithdrawn(total,controller_pubkey));
-    Ok(().into())
+    Ok(res)
 }
 
 /// Calls the outside staking logic to lock some funds

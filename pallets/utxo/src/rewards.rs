@@ -29,14 +29,16 @@ fn get_reward_amount<T:Config>(block_number:T::BlockNumber) -> u128 {
     let mut reward_amount = T::InitialReward::get();
 
     if let Some(mut counter) = block_number.checked_div(&reduction_period) {
+        // how many times the initial reward should be slashed.
         while counter > T::BlockNumber::zero() {
             counter = counter.checked_sub(&T::BlockNumber::one()).unwrap_or(T::BlockNumber::zero());
 
             reward_amount = reward_amount.checked_sub(
                 reduction_fraction.mul_ceil(reward_amount)
-            ).unwrap_or(1);
+            ).unwrap_or(1);  // TODO: this is only testnet specific to reward at least 1
 
             if reward_amount.is_zero() {
+                // TODO: this is only testnet specific to reward at least 1
                 return 1
             }
         }
@@ -49,12 +51,10 @@ fn get_reward_amount<T:Config>(block_number:T::BlockNumber) -> u128 {
 /// and the transaction fees.
 pub(crate) fn reward_block_author<T:Config>(block_number: T::BlockNumber) {
 
-    // give rewards only if a block author is found
-    if let Some(block_author) = <BlockAuthor<T>>::take() {
-        log::debug!("reward_block_author:: : {:?}", block_author);
-
-        let fees_total = <RewardTotal<T>>::take();
-        if let Some(reward_amount) = get_reward_amount::<T>(block_number).checked_add(fees_total) {
+    let fees_total = <RewardTotal<T>>::take();
+    if let Some(reward_amount) = get_reward_amount::<T>(block_number).checked_add(fees_total) {
+        // give rewards only if a block author is found
+        if let Some(block_author) = <BlockAuthor<T>>::take() {
             let utxo = TransactionOutput::new_pubkey(reward_amount, block_author.clone());
 
             let hash = {
@@ -68,10 +68,14 @@ pub(crate) fn reward_block_author<T:Config>(block_number: T::BlockNumber) {
                 <Pallet<T>>::deposit_event(Event::<T>::BlockAuthorRewarded(utxo));
             }
         } else {
-            log::warn!("problem adding the block author reward and the fees.");
+            log::warn!("no block author found for block number {:?}", block_number);
+            <RewardTotal<T>>::put(fees_total + reward_amount);
+
         }
 
     } else {
-        log::warn!("no block author found for block number {:?}", block_number);
+        log::warn!("problem adding the block author reward and the fees.");
+        <RewardTotal<T>>::put(fees_total);
     }
+
 }

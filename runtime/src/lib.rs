@@ -135,6 +135,7 @@ pub const SLOT_DURATION: u64 = MILLISECS_PER_BLOCK;
 pub const MINUTES: BlockNumber = 60_000 / (MILLISECS_PER_BLOCK as BlockNumber);
 pub const HOURS: BlockNumber = MINUTES * 60;
 pub const DAYS: BlockNumber = HOURS * 24;
+pub const YEARS: BlockNumber = DAYS * 365;
 
 // number of slots available per era, of pallet-staking.
 pub const NUM_OF_VALIDATOR_SLOTS: u32 = 10;
@@ -144,7 +145,7 @@ pub const CENTS: Balance = 1_000 * MILLICENTS;
 pub const DOLLARS: Balance = 100 * CENTS;
 
 /// The initial supply of mlt coins
-pub const MLT_ORIG_SUPPLY: Balance = 400_000_000 * MLT_UNIT;
+pub const MLT_ORIG_SUPPLY: Balance = 400_000_000_000 * MLT_UNIT;
 pub const MINIMUM_STAKE: Balance = 40_000 * MLT_UNIT;
 
 const fn deposit(items: u32, bytes: u32) -> Balance {
@@ -314,8 +315,8 @@ impl pallet_template::Config for Runtime {
 parameter_types!{
     pub const MinimumStake: u128 = MINIMUM_STAKE;
     pub const StakeWithdrawalFee: u128 =  1 * MLT_UNIT;
-    pub const RewardReductionPeriod: BlockNumber = MINUTES * 60 * 24 * 365;
-	pub const RewardReductionFraction: Percent = Percent::from_percent(25);
+    pub const RewardReductionPeriod: BlockNumber = 1 * YEARS; // reward reduced every year
+	pub const RewardReductionFraction: Percent = Percent::from_percent(25); // reward reduced at 25%
     pub const InitialReward: u128 = 100 * MLT_UNIT;
 }
 
@@ -401,9 +402,9 @@ impl pallet_contracts::Config for Runtime {
 }
 
 parameter_types! {
-    pub const DisabledValidatorsThreshold: Perbill = Perbill::from_percent(17);
+    pub const DisabledValidatorsThreshold: Perbill = Perbill::from_percent(0);
     //TODO how many blocks should it be, per period?
-    pub const Period: u32 = 2;
+    pub const Period: u32 = 5;
     pub const Offset: u32 = 0;
 }
 
@@ -437,11 +438,11 @@ parameter_types! {
     // we've settled on 10 blocks;
     // currently period is at 2.
     // Note: an era is when the change of validator set happens.
-    pub const SessionsPerEra: sp_staking::SessionIndex = 5;
+    pub const SessionsPerEra: sp_staking::SessionIndex = 2;
 
     // Note: upon unlocking funds, it doesn't mean withdrawal is activated.
     // TODO: How long should the stake stay "bonded" or "locked", until it's allowed to withdraw?
-    pub const BondingDuration: pallet_staking::EraIndex = 2;
+    pub const BondingDuration: pallet_staking::EraIndex = 3;
 
     pub const SlashDeferDuration: pallet_staking::EraIndex = 0;
     pub const MaxNominatorRewardedPerValidator: u32 = 0;

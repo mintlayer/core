@@ -113,9 +113,21 @@ impl <T: pallet_staking::Config + pallet_utxo::Config + pallet_session::Config> 
             pallet_utxo::Error::<T>::ControllerAccountNotFound
         )?;
         if stake_ledger.unlocking.is_empty() {
+            log::error!("No unlocked funds found to withdraw.");
             fail!(pallet_utxo::Error::<T>::InvalidOperation);
+        } else if stake_ledger.unlocking.len() > 1{
+            log::error!("Pallet-staking ledger's unlocking field should only contain ONE element.");
+            fail!(pallet_utxo::Error::<T>::InvalidOperation)
         }
 
-        StakingPallet::<T>::withdraw_unbonded(RawOrigin::Signed(controller_account.clone()).into(),0)
+       let res = StakingPallet::<T>::withdraw_unbonded(RawOrigin::Signed(controller_account.clone()).into(),0)?;
+
+        // if the staking still exists, withdrawal was unsuccessful.
+        if <StakingPallet<T>>::ledger(controller_account.clone()).is_some() {
+            log::error!("no withdrawal was done.");
+            fail!(pallet_utxo::Error::<T>::InvalidOperation)
+        }
+
+        Ok(res)
     }
 }
