@@ -560,7 +560,7 @@ macro_rules! implement_transaction_verifier {
             }
 
             pub fn calculating_reward(&mut self) -> Result<(), &'static str> {
-                use std::convert::TryFrom;
+                use sp_std::convert::TryFrom;
                 // Reward at the moment only in MLT
                 self.reward = if self.total_value_of_input_tokens.contains_key(&TokenId::mlt())
                     && self.total_value_of_output_tokens.contains_key(&(TokenId::mlt()))

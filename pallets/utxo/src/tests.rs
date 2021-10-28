@@ -1138,6 +1138,7 @@ fn checking_immutable_tx_format() {
 fn checking_burn_tokens() {
     // todo: Burn tokens has not tested yet
 }
+
 // Testing the compatibility of the old version with the new one
 #[test]
 fn checking_token_id() {
