@@ -46,16 +46,13 @@ use utxo_api::UtxoApi;
 
 #[frame_support::pallet]
 pub mod pallet {
-    pub use crate::script::{BlockTime, RawBlockTime};
-    use crate::sign::{self, Scheme};
-    use crate::tokens::{NftDataHash, OutputData, TokenId, Value};
-    // use crate::verifier::TransactionVerifier;
     use super::implement_transaction_verifier;
+    pub use crate::script::{BlockTime, RawBlockTime};
+    use crate::tokens::{NftDataHash, OutputData, TokenId, Value};
     use bech32;
     use chainscript::Script;
     use codec::{Decode, Encode};
     use core::marker::PhantomData;
-    //    use frame_support::weights::PostDispatchInfo;
     use frame_support::{
         dispatch::{DispatchResultWithPostInfo, Vec},
         pallet_prelude::*,
@@ -76,8 +73,6 @@ pub mod pallet {
         H256, H512,
     };
     use sp_runtime::traits::AtLeast32Bit;
-    // use sp_runtime::DispatchErrorWithPostInfo;
-
     implement_transaction_verifier!();
 
     #[pallet::error]
@@ -274,8 +269,8 @@ pub mod pallet {
         ) -> Self {
             Self {
                 value,
-                header: 0,
                 destination: Destination::CallPP(dest_account, fund, input),
+                data: None,
             }
         }
 
@@ -538,7 +533,6 @@ pub mod pallet {
                 Destination::CallPP(acct_id, fund, data) => {
                     call::<T>(caller, acct_id, hash, output.value, *fund, data);
                 }
-                _ => {}
             }
         }
 
@@ -605,7 +599,7 @@ pub mod pallet {
             Ok(().into())
         }
 
-        #[pallet::weight(T::WeightInfo::send_to_address(16_u32.saturating_add(address.len() as u32)))]
+        #[pallet::weight(<T as Config>::WeightInfo::send_to_address(16_u32.saturating_add(address.len() as u32)))]
         pub fn send_to_address(
             origin: OriginFor<T>,
             value: Value,
@@ -699,15 +693,6 @@ pub mod pallet {
     }
 }
 
-use frame_support::inherent::Vec;
-use frame_support::pallet_prelude::DispatchResultWithPostInfo;
-use sp_core::{
-    crypto::UncheckedFrom,
-    Encode, {H256, H512},
-};
-use sp_runtime::sp_std::vec;
-use utxo_api::UtxoApi;
-
 impl<T: Config> crate::Pallet<T> {
     pub fn send() -> u32 {
         1337
@@ -728,9 +713,6 @@ impl<T: Config> crate::Pallet<T> {
             }) => Some((metadata_uri, data_hash.encode())),
             _ => None,
         }
-    }
-}
-
     }
 }
 

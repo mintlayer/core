@@ -16,7 +16,7 @@
 // Author(s): C. Yap
 
 use crate::{
-    mock::*, tokens::Value, Destination, RewardTotal, Transaction, TransactionInput,
+    mock::*, tokens::Value, BlockTime, Destination, RewardTotal, Transaction, TransactionInput,
     TransactionOutput, UtxoStore,
 };
 use chainscript::{opcodes::all as opc, Builder};
@@ -581,6 +581,7 @@ fn checking_tokens_issuance() {
         let tx = Transaction {
             inputs: vec![input0],
             outputs: vec![output_new],
+            time_lock: Default::default(),
         }
         .sign_unchecked(&[utxo0], 0, &alice_pub_key);
         let new_utxo_hash = tx.outpoint(0);
@@ -628,6 +629,7 @@ fn checking_nft_mint() {
         let tx = Transaction {
             inputs: vec![input0],
             outputs: vec![output],
+            time_lock: Default::default(),
         }
         .sign_unchecked(&[utxo0], 0, &alice_pub_key);
         let new_utxo_hash = tx.outpoint(0);
@@ -673,6 +675,7 @@ fn checking_nft_unique() {
                 },
                 TransactionOutput::new_pubkey(50, H256::from(alice_pub_key)),
             ],
+            time_lock: Default::default(),
         }
         .sign_unchecked(&[utxo0.clone()], 0, &alice_pub_key);
         let new_utxo_hash = tx.outpoint(1);
@@ -699,6 +702,7 @@ fn checking_nft_unique() {
                 destination: Destination::Pubkey(alice_pub_key),
                 data: Some(nft_data.clone()),
             }],
+            time_lock: Default::default(),
         }
         .sign_unchecked(&[new_utxo], 0, &alice_pub_key);
         // Spend
@@ -734,6 +738,7 @@ fn checking_tokens_double_creation() {
                 destination: Destination::Pubkey(alice_pub_key),
                 data: Some(issuance_data.clone()),
             }],
+            time_lock: Default::default(),
         }
         .sign_unchecked(&[utxo0.clone()], 0, &alice_pub_key);
         let new_utxo_hash = tx.outpoint(0);
@@ -768,6 +773,7 @@ fn checking_tokens_double_creation() {
                 destination: Destination::Pubkey(alice_pub_key),
                 data: Some(issuance_data.clone()),
             }],
+            time_lock: Default::default(),
         }
         .sign_unchecked(&[new_utxo], 0, &alice_pub_key);
         // Spend
@@ -794,6 +800,7 @@ fn checking_tokens_with_invalid_data() {
                 let tx = Transaction {
                     inputs: vec![input0],
                     outputs: vec![output_new],
+                    time_lock: Default::default(),
                 }
                 .sign_unchecked(&[utxo0], 0, &alice_pub_key);
                 let new_utxo_hash = tx.outpoint(0);
@@ -934,6 +941,7 @@ fn checking_tokens_transferring() {
                     },
                 ),
             ],
+            time_lock: Default::default(),
         }
         .sign_unchecked(&[utxo0.clone()], 0, &alice_pub_key);
 
@@ -948,6 +956,7 @@ fn checking_tokens_transferring() {
         let _tx = Transaction {
             inputs: vec![TransactionInput::new_empty(new_utxo_hash)],
             outputs: vec![TransactionOutput::new_pubkey(90, H256::from(karl_pub_key))],
+            time_lock: Default::default(),
         }
         .sign_unchecked(&[new_utxo.clone()], 0, &alice_pub_key);
 
@@ -962,6 +971,7 @@ fn checking_tokens_transferring() {
                     amount: 1_00_000_000,
                 },
             )],
+            time_lock: Default::default(),
         }
         .sign_unchecked(&[token_utxo.clone()], 0, &karl_pub_key);
         frame_support::assert_err_ignore_postinfo!(
@@ -980,6 +990,7 @@ fn checking_tokens_transferring() {
                     amount: 1_000_000_001,
                 },
             )],
+            time_lock: Default::default(),
         }
         .sign_unchecked(&[token_utxo.clone()], 0, &karl_pub_key);
         frame_support::assert_err_ignore_postinfo!(
@@ -998,6 +1009,7 @@ fn checking_tokens_transferring() {
                     amount: 1_000_000_000,
                 },
             )],
+            time_lock: Default::default(),
         }
         .sign_unchecked(&[token_utxo.clone()], 0, &karl_pub_key);
         frame_support::assert_err_ignore_postinfo!(
@@ -1016,6 +1028,7 @@ fn checking_tokens_transferring() {
                     amount: 1_000_000_000,
                 },
             )],
+            time_lock: Default::default(),
         }
         .sign_unchecked(&[token_utxo], 0, &karl_pub_key);
         assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx));
@@ -1044,6 +1057,7 @@ fn checking_nft_transferring() {
                     },
                 ),
             ],
+            time_lock: Default::default(),
         }
         .sign_unchecked(&[utxo0.clone()], 0, &alice_pub_key);
 
@@ -1058,6 +1072,7 @@ fn checking_nft_transferring() {
         let _tx = Transaction {
             inputs: vec![TransactionInput::new_empty(new_utxo_hash)],
             outputs: vec![TransactionOutput::new_pubkey(90, H256::from(karl_pub_key))],
+            time_lock: Default::default(),
         }
         .sign_unchecked(&[new_utxo.clone()], 0, &alice_pub_key);
 
@@ -1072,6 +1087,7 @@ fn checking_nft_transferring() {
                     amount: 1_00_000_000,
                 },
             )],
+            time_lock: Default::default(),
         }
         .sign_unchecked(&[token_utxo.clone()], 0, &karl_pub_key);
         frame_support::assert_err_ignore_postinfo!(
@@ -1090,6 +1106,7 @@ fn checking_nft_transferring() {
                     amount: 1_000_000_001,
                 },
             )],
+            time_lock: Default::default(),
         }
         .sign_unchecked(&[token_utxo.clone()], 0, &karl_pub_key);
         frame_support::assert_err_ignore_postinfo!(
@@ -1108,6 +1125,7 @@ fn checking_nft_transferring() {
                     amount: 1_000_000_000,
                 },
             )],
+            time_lock: Default::default(),
         }
         .sign_unchecked(&[token_utxo.clone()], 0, &karl_pub_key);
         frame_support::assert_err_ignore_postinfo!(
@@ -1126,6 +1144,7 @@ fn checking_nft_transferring() {
                     amount: 1,
                 },
             )],
+            time_lock: Default::default(),
         }
         .sign_unchecked(&[token_utxo], 0, &karl_pub_key);
         assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx));
@@ -1158,6 +1177,7 @@ fn checking_tokens_creation_with_insufficient_fee() {
                     },
                 ),
             ],
+            time_lock: Default::default(),
         }
         .sign_unchecked(&[utxo0.clone()], 0, &alice_pub_key);
 
@@ -1181,6 +1201,7 @@ fn checking_tokens_creation_with_insufficient_fee() {
                     metadata_uri: "facebook.com".as_bytes().to_vec(),
                 },
             )],
+            time_lock: Default::default(),
         }
         .sign_unchecked(&[token_utxo], 0, &karl_pub_key);
         frame_support::assert_err_ignore_postinfo!(
