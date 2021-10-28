@@ -5,6 +5,7 @@ from substrateinterface import SubstrateInterface, Keypair
 from substrateinterface.exceptions import SubstrateRequestException
 import scalecodec
 import os
+import logging
 
 """ Client. A thin wrapper over SubstrateInterface """
 class Client:
@@ -12,6 +13,7 @@ class Client:
         source_dir = os.path.dirname(os.path.abspath(__file__))
         types_file = os.path.join(source_dir, "..", "..", "custom-types.json")
         custom_type_registry = scalecodec.type_registry.load_type_registry_file(types_file)
+        self.log = logging.getLogger('TestFramework.client')
 
         self.substrate = SubstrateInterface(
             url=url + ":" + str(port),
@@ -56,14 +58,14 @@ class Client:
             call_params = { 'tx': tx.json() },
         )
         extrinsic = self.substrate.create_signed_extrinsic(call=call, keypair=keypair)
-        print("extrinsic submitted...")
+        self.log.debug("extrinsic submitted...")
 
         try:
             receipt = self.substrate.submit_extrinsic(extrinsic, wait_for_inclusion=True)
-            print("Extrinsic '{}' sent and included in block '{}'".format(receipt.extrinsic_hash, receipt.block_hash))
+            self.log.debug("Extrinsic '{}' sent and included in block '{}'".format(receipt.extrinsic_hash, receipt.block_hash))
             return (receipt.extrinsic_hash, receipt.block_hash)
         except SubstrateRequestException as e:
-            print("Failed to send: {}".format(e))
+            self.log.info("Failed to send: {}".format(e))
 
 class Destination():
     @staticmethod
@@ -107,22 +109,31 @@ class DestCreatePP(Destination):
 
     @staticmethod
     def load(obj):
-        return DestCreatePP(obj['code'], obj['data'])
+        # the type of obj['code'] is str but instead
+        # containing a file path, it contains the bytecode
+        # of the smart contract.
+        # Because it's str the constructor tries to use it a file path
+        # and thus incorrectly constructs the DestCreatePP object
+        #
+        # convert the bytecode str representation to a byte vector
+        code = bytes.fromhex(obj['code'][2:])
+        return DestCreatePP(code, obj['data'])
 
     def json(self):
         return { 'CreatePP': { 'code': self.code, 'data': self.data } }
 
 class DestCallPP(Destination):
-    def __init__(self, dest_account, input_data):
+    def __init__(self, dest_account, fund, input_data):
         self.acct = dest_account
+        self.fund = fund
         self.data = input_data
 
     @staticmethod
     def load(obj):
-        return DestCallPP(obj['dest_account'], obj['input_data'])
+        return DestCallPP(obj['dest_account'], obj['fund'], obj['input_data'])
 
     def json(self):
-        return { 'CallPP': { 'dest_account': self.acct, 'input_data': self.data } }
+        return { 'CallPP': { 'dest_account': self.acct, 'fund': self.fund, 'input_data': self.data } }
 
 class Output():
     def __init__(self, value, header, destination):
@@ -163,10 +174,11 @@ class Input():
         }
 
 class Transaction():
-    def __init__(self, client, inputs, outputs):
+    def __init__(self, client, inputs, outputs, time_lock = 0):
         self.client = client
         self.inputs = inputs
         self.outputs = outputs
+        self.time_lock = time_lock
 
     def type_string(self):
         return 'Transaction'
@@ -175,6 +187,7 @@ class Transaction():
         return {
             'inputs': [ i.json() for i in self.inputs ],
             'outputs': [ o.json() for o in self.outputs ],
+            'time_lock': self.time_lock
         }
 
     """ Get data to be signed for this transaction """
@@ -191,6 +204,7 @@ class Transaction():
             'sighash': 0,
             'inputs': { 'SpecifiedPay': (outpoints_hash, utxos_hash, idx) },
             'outputs': { 'All': outputs_hash },
+            'time_lock': self.time_lock,
             'codesep_pos': 0xffffffff
         }
         return self.client.encode_obj('SignatureData', sigdata)

@@ -40,7 +40,8 @@ To run the test cases, just run command `cargo test`.
   "TransactionOutputFor": "TransactionOutput",
   "Transaction": {
     "inputs": "Vec<TransactionInput>",
-    "outputs": "Vec<TransactionOutput>"
+    "outputs": "Vec<TransactionOutput>",
+    "time_lock": "Compact<u64>"
   },
   "TransactionFor": "Transaction",
   "Address": "MultiAddress",

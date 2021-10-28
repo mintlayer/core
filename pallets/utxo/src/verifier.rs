@@ -293,6 +293,11 @@ macro_rules! implement_transaction_verifier {
             }
 
             pub fn new(tx: &TransactionFor<T>) -> Result<TransactionVerifier<T>, &'static str> {
+                // Verify absolute time lock
+                ensure!(
+                    tx.check_time_lock::<T>(),
+                    "Time lock restrictions not satisfied"
+                );
                 let all_inputs_map = Self::init_inputs(&tx)?;
                 let all_outputs_map = Self::init_outputs(&tx)?;
                 let total_value_of_input_tokens =
@@ -406,7 +411,6 @@ macro_rules! implement_transaction_verifier {
                                 let msg = TransactionSigMsg::construct(
                                     SigHash::default(),
                                     &self.tx,
-                                    // todo: Check with Lukas is it correct or no
                                     &spending_utxos[..],
                                     (index + sub_index) as u64,
                                     u32::MAX,
@@ -420,8 +424,15 @@ macro_rules! implement_transaction_verifier {
                             Destination::CreatePP(_, _) => {
                                 log::info!("TODO validate spending of OP_CREATE");
                             }
-                            Destination::CallPP(_, _) => {
-                                log::info!("TODO validate spending of OP_CALL");
+                            Destination::CallPP(_, _, _) => {
+                                let spend = u16::from_le_bytes(
+                                    input.witness[1..].try_into().or_else(|_| {
+                                        Err(DispatchError::Other(
+                                            "Failed to convert witness to an opcode",
+                                        ))
+                                    })?,
+                                );
+                                ensure!(spend == 0x1337, "OP_SPEND not found");
                             }
                             Destination::ScriptHash(_hash) => {
                                 let witness = input.witness.clone();
@@ -536,27 +547,6 @@ macro_rules! implement_transaction_verifier {
                     }
                 }
                 Ok(())
-            }
-
-            pub fn checking_tokens_transferring(&self) -> Result<(), &'static str> {
-                unimplemented!()
-            }
-
-            pub fn checking_tokens_issued(&self) -> Result<(), &'static str> {
-                //
-                //                 for (output_index, (token_id, output)) in self.all_outputs_map.iter().enumerate() {
-                //     match output.destination {
-                //
-                //     }
-                unimplemented!()
-            }
-
-            pub fn checking_nft_mint(&self) -> Result<(), &'static str> {
-                unimplemented!()
-            }
-
-            pub fn checking_assets_burn(&self) -> Result<(), &'static str> {
-                unimplemented!()
             }
 
             pub fn calculating_reward(&mut self) -> Result<(), &'static str> {

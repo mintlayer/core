@@ -33,9 +33,21 @@ pub mod tokens;
 pub mod verifier;
 pub mod weights;
 
+use chainscript::Builder;
+use codec::Encode;
+use core::convert::TryInto;
+use frame_support::{
+    inherent::Vec,
+    pallet_prelude::{DispatchError, DispatchResultWithPostInfo},
+};
+use sp_core::{crypto::UncheckedFrom, H256, H512};
+use sp_runtime::sp_std::vec;
+use utxo_api::UtxoApi;
+
 #[frame_support::pallet]
 pub mod pallet {
-    //    use crate::sign::{self, Scheme};
+    pub use crate::script::{BlockTime, RawBlockTime};
+    use crate::sign::{self, Scheme};
     use crate::tokens::{NftDataHash, OutputData, TokenId, Value};
     // use crate::verifier::TransactionVerifier;
     use super::implement_transaction_verifier;
@@ -49,7 +61,7 @@ pub mod pallet {
         pallet_prelude::*,
         sp_io::crypto,
         sp_runtime::traits::{BlakeTwo256, Dispatchable, Hash, SaturatedConversion},
-        traits::IsSubType,
+        traits::{IsSubType, UnixTime},
     };
     use frame_system::pallet_prelude::*;
     use hex_literal::hex;
@@ -104,7 +116,7 @@ pub mod pallet {
 
     /// runtime configuration
     #[pallet::config]
-    pub trait Config: frame_system::Config {
+    pub trait Config: frame_system::Config + pallet_timestamp::Config {
         type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 
         type AssetId: Parameter + AtLeast32Bit + Default + Copy;
@@ -197,8 +209,9 @@ pub mod pallet {
         Pubkey(sr25519::Public),
         /// Pay to fund a new programmable pool. Takes code and data.
         CreatePP(Vec<u8>, Vec<u8>),
-        /// Pay to an existing contract. Takes a destination account and input data.
-        CallPP(AccountId, Vec<u8>),
+        /// Pay to an existing contract. Takes a destination account,
+        /// whether the call funds the contract, and input data.
+        CallPP(AccountId, bool, Vec<u8>),
         /// Pay to script hash
         ScriptHash(H256),
     }
@@ -253,11 +266,16 @@ pub mod pallet {
         }
 
         /// Create a new output to call a smart contract routine.
-        pub fn new_call_pp(value: Value, dest_account: AccountId, input: Vec<u8>) -> Self {
+        pub fn new_call_pp(
+            value: Value,
+            dest_account: AccountId,
+            fund: bool,
+            input: Vec<u8>,
+        ) -> Self {
             Self {
                 value,
-                destination: Destination::CallPP(dest_account, input),
-                data: None,
+                header: 0,
+                destination: Destination::CallPP(dest_account, fund, input),
             }
         }
 
@@ -286,6 +304,7 @@ pub mod pallet {
     pub struct Transaction<AccountId> {
         pub(crate) inputs: Vec<TransactionInput>,
         pub(crate) outputs: Vec<TransactionOutput<AccountId>>,
+        pub(crate) time_lock: RawBlockTime,
     }
 
     impl<AccountId: Encode> Transaction<AccountId> {
@@ -311,6 +330,17 @@ pub mod pallet {
             self.inputs[index].witness =
                 crypto::sr25519_sign(SR25519, pk, &msg.encode())?.0.to_vec();
             Some(self)
+        }
+
+        pub fn check_time_lock<T: Config>(&self) -> bool {
+            match self.time_lock.time() {
+                BlockTime::Blocks(lock_block_num) => {
+                    <frame_system::Pallet<T>>::block_number() >= lock_block_num.into()
+                }
+                BlockTime::Timestamp(lock_time) => {
+                    <pallet_timestamp::Pallet<T> as UnixTime>::now() >= lock_time
+                }
+            }
         }
     }
 
@@ -345,8 +375,6 @@ pub mod pallet {
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     #[pallet::metadata(T::AccountId = "AccountId")]
     pub enum Event<T: Config> {
-        TokenCreated(H256, T::AccountId),
-        Minted(H256, T::AccountId, Vec<u8>),
         TransactionSuccess(TransactionFor<T>),
     }
 
@@ -408,19 +436,40 @@ pub mod pallet {
         }
     }
 
-    pub fn create<T: Config>(caller: &T::AccountId, code: &Vec<u8>, data: &Vec<u8>) {
+    pub fn create<T: Config>(
+        caller: &T::AccountId,
+        code: &Vec<u8>,
+        utxo_hash: H256,
+        utxo_value: u128,
+        data: &Vec<u8>,
+    ) {
         let weight: Weight = 6000000000;
 
-        match T::ProgrammablePool::create(caller, weight, code, data) {
+        match T::ProgrammablePool::create(caller, weight, code, utxo_hash, utxo_value, data) {
             Ok(_) => log::info!("success!"),
             Err(e) => log::error!("failure: {:#?}", e),
         }
     }
 
-    pub fn call<T: Config>(caller: &T::AccountId, dest: &T::AccountId, data: &Vec<u8>) {
+    pub fn call<T: Config>(
+        caller: &T::AccountId,
+        dest: &T::AccountId,
+        utxo_hash: H256,
+        utxo_value: u128,
+        fund_contract: bool,
+        data: &Vec<u8>,
+    ) {
         let weight: Weight = 6000000000;
 
-        match T::ProgrammablePool::call(caller, dest, weight, data) {
+        match T::ProgrammablePool::call(
+            caller,
+            dest,
+            weight,
+            utxo_hash,
+            utxo_value,
+            fund_contract,
+            data,
+        ) {
             Ok(_) => log::info!("success!"),
             Err(e) => log::error!("failure: {:#?}", e),
         }
@@ -459,6 +508,10 @@ pub mod pallet {
         }
 
         for (index, output) in tx.outputs.iter().enumerate() {
+            let hash = tx.outpoint(index as u64);
+            log::debug!("inserting to UtxoStore {:?} as key {:?}", output, hash);
+            <UtxoStore<T>>::insert(hash, Some(output));
+
             match &output.destination {
                 Destination::Pubkey(_) | Destination::ScriptHash(_) => {
                     let hash = tx.outpoint(index as u64);
@@ -480,11 +533,12 @@ pub mod pallet {
                     }
                 }
                 Destination::CreatePP(script, data) => {
-                    create::<T>(caller, script, &data);
+                    create::<T>(caller, script, hash, output.value, &data);
                 }
-                Destination::CallPP(acct_id, data) => {
-                    call::<T>(caller, acct_id, data);
+                Destination::CallPP(acct_id, fund, data) => {
+                    call::<T>(caller, acct_id, hash, output.value, *fund, data);
                 }
+                _ => {}
             }
         }
 
@@ -541,7 +595,7 @@ pub mod pallet {
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
-        #[pallet::weight(T::WeightInfo::spend(tx.inputs.len().saturating_add(tx.outputs.len()) as u32))]
+        #[pallet::weight(<T as Config>::WeightInfo::spend(tx.inputs.len().saturating_add(tx.outputs.len()) as u32))]
         pub fn spend(
             origin: OriginFor<T>,
             tx: Transaction<T::AccountId>,
@@ -606,6 +660,7 @@ pub mod pallet {
                     },
                     TransactionOutput::new_pubkey(total - value, H256::from(pubkey_raw)),
                 ],
+                time_lock: Default::default(),
             };
 
             for i in 0..tx.inputs.len() {
@@ -676,6 +731,35 @@ impl<T: Config> crate::Pallet<T> {
     }
 }
 
+    }
+}
+
+fn coin_picker<T: Config>(outpoints: &Vec<H256>) -> Result<Vec<TransactionInput>, DispatchError> {
+    let mut inputs: Vec<TransactionInput> = Vec::new();
+
+    // consensus-critical sorting function...
+    let mut outpoints = outpoints.clone();
+    outpoints.sort();
+
+    for outpoint in outpoints.iter() {
+        let tx = <UtxoStore<T>>::get(&outpoint).ok_or("UTXO doesn't exist!")?;
+        match tx.destination {
+            Destination::CallPP(_, _, _) => {
+                inputs.push(TransactionInput::new_script(
+                    *outpoint,
+                    Builder::new().into_script(),
+                    Builder::new().push_int(0x1337).into_script(),
+                ));
+            }
+            _ => {
+                return Err(DispatchError::Other("Only CallPP vouts can be spent!"));
+            }
+        }
+    }
+
+    Ok(inputs)
+}
+
 impl<T: Config> UtxoApi for Pallet<T>
 where
     T::AccountId: UncheckedFrom<T::Hash> + AsRef<[u8]>,
@@ -694,7 +778,53 @@ where
             &Transaction {
                 inputs: vec![TransactionInput::new_with_signature(utxo, sig)],
                 outputs: vec![TransactionOutputFor::<T>::new_pubkey(value, address)],
+                time_lock: Default::default(),
             },
         )
+    }
+
+    fn send_conscrit_p2pk(
+        caller: &T::AccountId,
+        dest: &T::AccountId,
+        value: u128,
+        outpoints: &Vec<H256>,
+    ) -> Result<(), DispatchError> {
+        let pubkey_raw: [u8; 32] =
+            dest.encode().try_into().map_err(|_| "Failed to get caller's public key")?;
+
+        spend::<T>(
+            caller,
+            &Transaction {
+                inputs: coin_picker::<T>(outpoints)?,
+                outputs: vec![TransactionOutput::new_pubkey(value, H256::from(pubkey_raw))],
+                time_lock: Default::default(),
+            },
+        )
+        .map_err(|_| "Failed to spend the transaction!")?;
+        Ok(())
+    }
+
+    fn send_conscrit_c2c(
+        caller: &Self::AccountId,
+        dest: &Self::AccountId,
+        value: u128,
+        data: &Vec<u8>,
+        outpoints: &Vec<H256>,
+    ) -> Result<(), DispatchError> {
+        spend::<T>(
+            caller,
+            &Transaction {
+                inputs: coin_picker::<T>(outpoints)?,
+                outputs: vec![TransactionOutput::new_call_pp(
+                    value,
+                    dest.clone(),
+                    true,
+                    data.clone(),
+                )],
+                time_lock: Default::default(),
+            },
+        )
+        .map_err(|_| "Failed to spend the transaction!")?;
+        Ok(())
     }
 }
