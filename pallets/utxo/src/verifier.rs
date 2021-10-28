@@ -7,8 +7,8 @@ macro_rules! implement_transaction_verifier {
 
         pub struct TransactionVerifier<'a, T: Config> {
             tx: &'a TransactionFor<T>,
-            all_inputs_map: BTreeMap<TokenId, (TransactionInput, TransactionOutputFor<T>)>,
-            all_outputs_map: BTreeMap<TokenId, TransactionOutputFor<T>>,
+            all_inputs_map: BTreeMap<TokenId, Vec<(TransactionInput, TransactionOutputFor<T>)>>,
+            all_outputs_map: BTreeMap<TokenId, Vec<TransactionOutputFor<T>>>,
             total_value_of_input_tokens: BTreeMap<TokenId, Value>,
             total_value_of_output_tokens: BTreeMap<TokenId, Value>,
             new_utxos: Vec<Vec<u8>>,
@@ -23,76 +23,157 @@ macro_rules! implement_transaction_verifier {
             // Turn Vector into BTreeMap
             fn init_inputs(
                 tx: &TransactionFor<T>,
-            ) -> BTreeMap<TokenId, (TransactionInput, TransactionOutputFor<T>)> {
-                let input_map: BTreeMap<TokenId, (TransactionInput, TransactionOutputFor<T>)> = tx
-                    .inputs
-                    .iter()
-                    .filter_map(|input| {
-                        let token_id =
-                            TransactionVerifier::<'_, T>::get_token_id_from_input(input.outpoint)
-                                .ok()?;
-                        let output =
-                            TransactionVerifier::<'_, T>::get_output_by_outpoint(input.outpoint)?;
-                        Some((token_id, (input.clone(), output)))
-                    })
-                    .collect();
-                input_map
+            ) -> Result<
+                BTreeMap<TokenId, Vec<(TransactionInput, TransactionOutputFor<T>)>>,
+                &'static str,
+            > {
+                let mut input_map: BTreeMap<
+                    TokenId,
+                    Vec<(TransactionInput, TransactionOutputFor<T>)>,
+                > = BTreeMap::new();
+
+                for input in &tx.inputs {
+                    let token_id =
+                        TransactionVerifier::<'_, T>::get_token_id_from_input(input.outpoint)?;
+                    let output =
+                        TransactionVerifier::<'_, T>::get_output_by_outpoint(input.outpoint)
+                            .ok_or("missing inputs")?;
+
+                    if let Some(inputs) = input_map.get_mut(&token_id) {
+                        inputs.push((input.clone(), output));
+                    } else {
+                        input_map.insert(token_id, vec![(input.clone(), output)]);
+                    }
+                }
+                Ok(input_map)
             }
             // Turn Vector into BTreeMap
-            fn init_outputs(tx: &TransactionFor<T>) -> BTreeMap<TokenId, TransactionOutputFor<T>> {
-                let output_map: BTreeMap<TokenId, TransactionOutputFor<T>> = tx
-                    .outputs
-                    .iter()
-                    .map(|output| {
-                        (
-                            TransactionVerifier::<'_, T>::get_token_id_from_output(&output),
-                            output.clone(),
-                        )
-                    })
-                    .collect();
-                output_map
+            fn init_outputs(
+                tx: &TransactionFor<T>,
+            ) -> Result<BTreeMap<TokenId, Vec<TransactionOutputFor<T>>>, &'static str> {
+                let mut count = 0;
+                let mut output_map: BTreeMap<TokenId, Vec<TransactionOutputFor<T>>> =
+                    BTreeMap::new();
+
+                for output in &tx.outputs {
+                    let token_id = TransactionVerifier::<'_, T>::get_token_id_from_output(&output);
+                    if let Some(outputs) = output_map.get_mut(&token_id) {
+                        count += 1;
+                        outputs.push(output.clone());
+                    } else {
+                        count += 1;
+                        output_map.insert(token_id, vec![output.clone()]);
+                    }
+                }
+                ensure!(count == tx.outputs.len(), "can't load all outputs");
+                Ok(output_map)
             }
 
             fn init_total_value_of_input_tokens(
-                all_inputs_map: &BTreeMap<TokenId, (TransactionInput, TransactionOutputFor<T>)>,
+                all_inputs_map: &BTreeMap<
+                    TokenId,
+                    Vec<(TransactionInput, TransactionOutputFor<T>)>,
+                >,
             ) -> Result<BTreeMap<TokenId, Value>, &'static str> {
                 let mut total_value_of_input_tokens: BTreeMap<TokenId, Value> = BTreeMap::new();
                 let mut mlt_amount: Value = 0;
-                for (_, (_, (_, input_utxo))) in all_inputs_map.iter().enumerate() {
-                    match &input_utxo.data {
-                        Some(OutputData::TokenIssuanceV1 {
-                            ref token_id,
-                            amount_to_issue,
-                            ..
-                        }) => {
-                            // If token has just created we can't meet another amount here.
-                            total_value_of_input_tokens.insert(token_id.clone(), *amount_to_issue);
-                        }
-                        Some(OutputData::TokenTransferV1 {
-                            ref token_id,
-                            amount,
-                            ..
-                        }) => {
-                            total_value_of_input_tokens.insert(
-                                token_id.clone(),
+                for (_, (_, input_vec)) in all_inputs_map.iter().enumerate() {
+                    for (_, input_utxo) in input_vec {
+                        match &input_utxo.data {
+                            Some(OutputData::TokenIssuanceV1 {
+                                ref token_id,
+                                token_ticker,
+                                amount_to_issue,
+                                number_of_decimals,
+                                metadata_uri,
+                            }) => {
+                                // We have to check is this token already issued?
+                                ensure!(
+                                    PointerToIssueToken::<T>::contains_key(token_id),
+                                    "token has never been issued"
+                                );
+                                ensure!(
+                                    token_id != &TokenId::mlt(),
+                                    "unable to use mlt as a token id"
+                                );
+                                ensure!(
+                                    token_ticker.is_ascii(),
+                                    "token ticker has none ascii characters"
+                                );
+                                ensure!(
+                                    metadata_uri.is_ascii(),
+                                    "metadata uri has none ascii characters"
+                                );
+                                ensure!(token_ticker.len() <= 5, "token ticker is too long");
+                                ensure!(!token_ticker.is_empty(), "token ticker can't be empty");
+                                ensure!(
+                                    metadata_uri.len() <= 100,
+                                    "token metadata uri is too long"
+                                );
+                                ensure!(amount_to_issue > &0u128, "output value must be nonzero");
+                                ensure!(number_of_decimals <= &18, "too long decimals");
+                                // If token has just created we can't meet another amount here.
                                 total_value_of_input_tokens
-                                    .get(token_id)
-                                    .unwrap_or(&0)
-                                    .checked_add(*amount)
-                                    .ok_or("input value overflow")?,
-                            );
-                        }
-                        Some(OutputData::TokenBurnV1 { .. }) => {
-                            // Nothing to do here because tokens no longer exist.
-                        }
-                        Some(OutputData::NftMintV1 { ref token_id, .. }) => {
-                            // If NFT has just created we can't meet another NFT part here.
-                            total_value_of_input_tokens.insert(token_id.clone(), 1);
-                        }
-                        None => {
-                            mlt_amount = mlt_amount
-                                .checked_add(input_utxo.value)
-                                .ok_or("input value overflow")?;
+                                    .insert(token_id.clone(), *amount_to_issue);
+                                // But probably in this input we have a fee
+                                mlt_amount = mlt_amount
+                                    .checked_add(input_utxo.value)
+                                    .ok_or("input value overflow")?;
+                            }
+                            Some(OutputData::TokenTransferV1 {
+                                ref token_id,
+                                amount,
+                                ..
+                            }) => {
+                                total_value_of_input_tokens.insert(
+                                    token_id.clone(),
+                                    total_value_of_input_tokens
+                                        .get(token_id)
+                                        .unwrap_or(&0)
+                                        .checked_add(*amount)
+                                        .ok_or("input value overflow")?,
+                                );
+                                // But probably in this input we have a fee
+                                mlt_amount = mlt_amount
+                                    .checked_add(input_utxo.value)
+                                    .ok_or("input value overflow")?;
+                            }
+                            Some(OutputData::TokenBurnV1 { .. }) => {
+                                // Nothing to do here because tokens no longer exist.
+                            }
+                            Some(OutputData::NftMintV1 {
+                                ref token_id,
+                                data_hash,
+                                metadata_uri,
+                            }) => {
+                                // We have to check is this token already issued?
+                                ensure!(
+                                    PointerToIssueToken::<T>::contains_key(token_id),
+                                    "unable to use an input where NFT has not minted yet"
+                                );
+
+                                // Check is this digital data unique?
+                                ensure!(
+                                    NftUniqueDataHash::<T>::contains_key(data_hash),
+                                    "unable to use an input where NFT digital data was changed"
+                                );
+
+                                ensure!(
+                                    token_id != &TokenId::mlt(),
+                                    "unable to use mlt as a token id"
+                                );
+                                ensure!(
+                                    metadata_uri.is_ascii(),
+                                    "metadata uri has none ascii characters"
+                                );
+                                // If NFT has just created we can't meet another NFT part here.
+                                total_value_of_input_tokens.insert(token_id.clone(), 1);
+                            }
+                            None => {
+                                mlt_amount = mlt_amount
+                                    .checked_add(input_utxo.value)
+                                    .ok_or("input value overflow")?;
+                            }
                         }
                     }
                 }
@@ -101,44 +182,109 @@ macro_rules! implement_transaction_verifier {
             }
 
             fn init_total_value_of_output_tokens(
-                all_outputs_map: &BTreeMap<TokenId, TransactionOutputFor<T>>,
+                all_outputs_map: &BTreeMap<TokenId, Vec<TransactionOutputFor<T>>>,
             ) -> Result<BTreeMap<TokenId, Value>, &'static str> {
                 let mut total_value_of_output_tokens: BTreeMap<TokenId, Value> = BTreeMap::new();
                 let mut mlt_amount: Value = 0;
-                for x in all_outputs_map {
-                    match &x.1.data {
-                        Some(OutputData::TokenIssuanceV1 {
-                            ref token_id,
-                            amount_to_issue,
-                            ..
-                        }) => {
-                            // If token has just created we can't meet another amount here.
-                            total_value_of_output_tokens.insert(token_id.clone(), *amount_to_issue);
-                        }
-                        Some(OutputData::TokenTransferV1 {
-                            ref token_id,
-                            amount,
-                            ..
-                        }) => {
-                            total_value_of_output_tokens.insert(
-                                token_id.clone(),
+                for (_, (_, outputs_vec)) in all_outputs_map.iter().enumerate() {
+                    for utxo in outputs_vec {
+                        // for x in all_outputs_map {
+                        match &utxo.data {
+                            Some(OutputData::TokenIssuanceV1 {
+                                ref token_id,
+                                token_ticker,
+                                amount_to_issue,
+                                number_of_decimals,
+                                metadata_uri,
+                            }) => {
+                                // We have to check is this token already issued?
+                                ensure!(
+                                    !PointerToIssueToken::<T>::contains_key(token_id),
+                                    "token has already been issued"
+                                );
+                                ensure!(
+                                    token_id != &TokenId::mlt(),
+                                    "unable to use mlt as a token id"
+                                );
+                                ensure!(
+                                    token_ticker.is_ascii(),
+                                    "token ticker has none ascii characters"
+                                );
+                                ensure!(
+                                    metadata_uri.is_ascii(),
+                                    "metadata uri has none ascii characters"
+                                );
+                                ensure!(token_ticker.len() <= 5, "token ticker is too long");
+                                ensure!(!token_ticker.is_empty(), "token ticker can't be empty");
+                                ensure!(
+                                    metadata_uri.len() <= 100,
+                                    "token metadata uri is too long"
+                                );
+                                ensure!(amount_to_issue > &0u128, "output value must be nonzero");
+                                ensure!(number_of_decimals <= &18, "too long decimals");
+
+                                // If token has just created we can't meet another amount here.
                                 total_value_of_output_tokens
-                                    .get(token_id)
-                                    .unwrap_or(&0)
-                                    .checked_add(*amount)
-                                    .ok_or("input value overflow")?,
-                            );
-                        }
-                        Some(OutputData::TokenBurnV1 { .. }) => {
-                            // Nothing to do here because tokens no longer exist.
-                        }
-                        Some(OutputData::NftMintV1 { ref token_id, .. }) => {
-                            // If NFT has just created we can't meet another NFT part here.
-                            total_value_of_output_tokens.insert(token_id.clone(), 1);
-                        }
-                        None => {
-                            mlt_amount =
-                                mlt_amount.checked_add(x.1.value).ok_or("input value overflow")?;
+                                    .insert(token_id.clone(), *amount_to_issue);
+                                // But probably in this input we have a fee
+                                mlt_amount = mlt_amount
+                                    .checked_add(utxo.value)
+                                    .ok_or("input value overflow")?;
+                            }
+                            Some(OutputData::TokenTransferV1 {
+                                ref token_id,
+                                amount,
+                                ..
+                            }) => {
+                                total_value_of_output_tokens.insert(
+                                    token_id.clone(),
+                                    total_value_of_output_tokens
+                                        .get(token_id)
+                                        .unwrap_or(&0)
+                                        .checked_add(*amount)
+                                        .ok_or("output value overflow")?,
+                                );
+                                // But probably in this input we have a fee
+                                mlt_amount = mlt_amount
+                                    .checked_add(utxo.value)
+                                    .ok_or("input value overflow")?;
+                            }
+                            Some(OutputData::TokenBurnV1 { .. }) => {
+                                // Nothing to do here because tokens no longer exist.
+                            }
+                            Some(OutputData::NftMintV1 {
+                                ref token_id,
+                                data_hash,
+                                metadata_uri,
+                            }) => {
+                                // We have to check is this token already issued?
+                                ensure!(
+                                    !PointerToIssueToken::<T>::contains_key(token_id),
+                                    "token has already been issued"
+                                );
+
+                                // Check is this digital data unique?
+                                ensure!(
+                                    !<NftUniqueDataHash<T>>::contains_key(data_hash),
+                                    "digital data has already been minted"
+                                );
+
+                                ensure!(
+                                    token_id != &TokenId::mlt(),
+                                    "unable to use mlt as a token id"
+                                );
+                                ensure!(
+                                    metadata_uri.is_ascii(),
+                                    "metadata uri has none ascii characters"
+                                );
+                                // If NFT has just created we can't meet another NFT part here.
+                                total_value_of_output_tokens.insert(token_id.clone(), 1);
+                            }
+                            None => {
+                                mlt_amount = mlt_amount
+                                    .checked_add(utxo.value)
+                                    .ok_or("output value overflow")?;
+                            }
                         }
                     }
                 }
@@ -147,8 +293,8 @@ macro_rules! implement_transaction_verifier {
             }
 
             pub fn new(tx: &TransactionFor<T>) -> Result<TransactionVerifier<T>, &'static str> {
-                let all_inputs_map = Self::init_inputs(&tx);
-                let all_outputs_map = Self::init_outputs(&tx);
+                let all_inputs_map = Self::init_inputs(&tx)?;
+                let all_outputs_map = Self::init_outputs(&tx)?;
                 let total_value_of_input_tokens =
                     Self::init_total_value_of_input_tokens(&all_inputs_map)?;
                 let total_value_of_output_tokens =
@@ -207,10 +353,11 @@ macro_rules! implement_transaction_verifier {
                 //WARNING workshop code has a bug here
                 //https://github.com/substrate-developer-hub/utxo-workshop/blob/workshop/runtime/src/utxo.rs
                 //input_map.len() > transaction.inputs.len() //THIS IS WRONG
-
+                let input_map: BTreeMap<_, ()> =
+                    self.tx.inputs.iter().map(|input| (input.outpoint, ())).collect();
                 //we want map size and input size to be equal to ensure each is used only once
                 ensure!(
-                    self.all_inputs_map.len() == self.tx.inputs.len(),
+                    input_map.len() == self.tx.inputs.len(),
                     "each input should be used only once"
                 );
                 Ok(())
@@ -229,56 +376,66 @@ macro_rules! implement_transaction_verifier {
                 //map each output to btree to count unique elements
                 //WARNING example code has a bug here
                 //out_map.len() != transaction.outputs.len() //THIS IS WRONG
+                let out_map: BTreeMap<_, ()> =
+                    self.tx.outputs.iter().map(|output| (output, ())).collect();
 
                 //check each output is defined only once
                 ensure!(
-                    self.all_outputs_map.len() == self.tx.outputs.len(),
+                    out_map.len() == self.tx.outputs.len(),
                     "each output should be used once"
                 );
                 Ok(())
             }
 
             pub fn checking_signatures(&self) -> Result<(), &'static str> {
-                for (index, (_, (input, input_utxo))) in self.all_inputs_map.iter().enumerate() {
-                    let spending: Vec<TransactionOutput<T::AccountId>> = self
-                        .all_inputs_map
-                        .iter()
-                        .map(|(_, (_, ref input_utxo))| input_utxo.clone())
-                        .collect();
-                    match &input_utxo.destination {
-                        Destination::Pubkey(pubkey) => {
-                            let msg = TransactionSigMsg::construct(
-                                SigHash::default(),
-                                &self.tx,
-                                // todo: Check with Lukas is it correct or no
-                                &spending[..],
-                                index as u64,
-                                u32::MAX,
-                            );
-                            let ok = crate::sign::Public::Schnorr(*pubkey)
-                                .parse_sig(&input.witness[..])
-                                .ok_or("bad signature format")?
-                                .verify(&msg);
-                            ensure!(ok, "signature must be valid");
-                        }
-                        Destination::CreatePP(_, _) => {
-                            log::info!("TODO validate spending of OP_CREATE");
-                        }
-                        Destination::CallPP(_, _) => {
-                            log::info!("TODO validate spending of OP_CALL");
-                        }
-                        Destination::ScriptHash(_hash) => {
-                            let witness = input.witness.clone();
-                            let lock = input.lock.clone();
-                            crate::script::verify(
-                                &self.tx,
-                                // todo: Check with Lukas is it correct or no
-                                &spending[..],
-                                index as u64,
-                                witness,
-                                lock,
-                            )
-                            .map_err(|_| "script verification failed")?;
+                for (index, (_, inputs_vec)) in self.all_inputs_map.iter().enumerate() {
+                    for (sub_index, (input, input_utxo)) in inputs_vec.iter().enumerate() {
+                        let spending_utxos: Vec<TransactionOutput<T::AccountId>> = self
+                            .all_inputs_map
+                            .iter()
+                            .map(|(_, inputs_vec)| {
+                                inputs_vec
+                                    .iter()
+                                    .map(|item| item.1.clone())
+                                    .collect::<Vec<TransactionOutput<T::AccountId>>>()
+                            })
+                            .flatten()
+                            .collect();
+                        match &input_utxo.destination {
+                            Destination::Pubkey(pubkey) => {
+                                let msg = TransactionSigMsg::construct(
+                                    SigHash::default(),
+                                    &self.tx,
+                                    // todo: Check with Lukas is it correct or no
+                                    &spending_utxos[..],
+                                    (index + sub_index) as u64,
+                                    u32::MAX,
+                                );
+                                let ok = crate::sign::Public::Schnorr(*pubkey)
+                                    .parse_sig(&input.witness[..])
+                                    .ok_or("bad signature format")?
+                                    .verify(&msg);
+                                ensure!(ok, "signature must be valid");
+                            }
+                            Destination::CreatePP(_, _) => {
+                                log::info!("TODO validate spending of OP_CREATE");
+                            }
+                            Destination::CallPP(_, _) => {
+                                log::info!("TODO validate spending of OP_CALL");
+                            }
+                            Destination::ScriptHash(_hash) => {
+                                let witness = input.witness.clone();
+                                let lock = input.lock.clone();
+                                crate::script::verify(
+                                    &self.tx,
+                                    // todo: Check with Lukas is it correct or no
+                                    &spending_utxos[..],
+                                    (index + sub_index) as u64,
+                                    witness,
+                                    lock,
+                                )
+                                .map_err(|_| "script verification failed")?;
+                            }
                         }
                     }
                 }
@@ -287,25 +444,54 @@ macro_rules! implement_transaction_verifier {
             }
 
             pub fn checking_amounts(&self) -> Result<(), &'static str> {
-                // if all spent UTXOs are available, check the math and signatures
-                let mut new_token_exist = false;
-                for (_, (token_id, input_value)) in
-                    self.total_value_of_input_tokens.iter().enumerate()
+                let mut num_creations = 0;
+                for (_, (token_id, output_value)) in
+                    self.total_value_of_output_tokens.iter().enumerate()
                 {
-                    match self.total_value_of_output_tokens.get(token_id) {
-                        Some(output_value) => ensure!(
+                    match self.total_value_of_input_tokens.get(token_id) {
+                        Some(input_value) => ensure!(
                             input_value >= &output_value,
                             "output value must not exceed input value"
                         ),
                         None => {
-                            // If the transaction has one an output with a new token ID
-                            if new_token_exist {
-                                frame_support::fail!("input for the token not found")
-                            } else {
-                                new_token_exist = true;
+                            match self.all_outputs_map.get(token_id) {
+                                Some(outputs_vec) => {
+                                    // We have not any input for this token, perhaps it's token creation
+                                    ensure!(
+                                        outputs_vec.len() == 1,
+                                        "attempting double creation token failed"
+                                    );
+                                    match outputs_vec[0].data {
+                                        None
+                                        | Some(OutputData::TokenTransferV1 { .. })
+                                        | Some(OutputData::TokenBurnV1 { .. }) => {
+                                            frame_support::fail!("input for the token not found")
+                                        }
+                                        Some(OutputData::NftMintV1 { .. })
+                                        | Some(OutputData::TokenIssuanceV1 { .. }) => {
+                                            num_creations += 1;
+                                            continue;
+                                        }
+                                    }
+                                }
+                                None => unreachable!(),
                             }
                         }
                     }
+                }
+                // Check that enough fee
+
+                let mlt = self
+                    .total_value_of_input_tokens
+                    .get(&TokenId::mlt())
+                    .ok_or("not found MLT fees")?;
+                if cfg!(test) {
+                    ensure!(mlt >= &(num_creations * 10), "insufficient fee");
+                } else {
+                    ensure!(
+                        mlt >= &(num_creations * crate::tokens::Mlt(100).to_munit()),
+                        "insufficient fee"
+                    )
                 }
                 Ok(())
             }
@@ -337,22 +523,16 @@ macro_rules! implement_transaction_verifier {
                 };
 
                 // Check that outputs are valid
-                for (output_index, (token_id, output)) in self.all_outputs_map.iter().enumerate() {
-                    match output.destination {
-                        Destination::Pubkey(_) | Destination::ScriptHash(_) => {
-                            if token_id == &TokenId::mlt() {
-                                ensure!(output.value > 0, "output value must be nonzero");
-                            }
-                            let hash = self.tx.outpoint(output_index as u64);
-                            ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
-                            self.new_utxos.push(hash.as_fixed_bytes().to_vec());
+                for (output_index, (token_id, outputs_vec)) in
+                    self.all_outputs_map.iter().enumerate()
+                {
+                    for (sub_index, output) in outputs_vec.iter().enumerate() {
+                        let hash = self.tx.outpoint((output_index + sub_index) as u64);
+                        ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
+                        if token_id == &TokenId::mlt() {
+                            ensure!(output.value > 0, "output value must be nonzero");
                         }
-                        Destination::CreatePP(_, _) => {
-                            log::info!("TODO validate OP_CREATE");
-                        }
-                        Destination::CallPP(_, _) => {
-                            log::info!("TODO validate OP_CALL");
-                        }
+                        self.new_utxos.push(hash.as_fixed_bytes().to_vec());
                     }
                 }
                 Ok(())
@@ -363,6 +543,11 @@ macro_rules! implement_transaction_verifier {
             }
 
             pub fn checking_tokens_issued(&self) -> Result<(), &'static str> {
+                //
+                //                 for (output_index, (token_id, output)) in self.all_outputs_map.iter().enumerate() {
+                //     match output.destination {
+                //
+                //     }
                 unimplemented!()
             }
 

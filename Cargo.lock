@@ -4138,6 +4138,7 @@ dependencies = [
  "pallet-timestamp",
  "parity-scale-codec",
  "pp-api",
+ "rand 0.4.6",
  "serde",
  "sp-consensus-aura",
  "sp-core",

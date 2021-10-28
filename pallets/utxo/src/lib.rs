@@ -36,7 +36,7 @@ pub mod weights;
 #[frame_support::pallet]
 pub mod pallet {
     //    use crate::sign::{self, Scheme};
-    use crate::tokens::{/*Mlt,*/ OutputData, TokenId, Value};
+    use crate::tokens::{NftDataHash, OutputData, TokenId, Value};
     // use crate::verifier::TransactionVerifier;
     use super::implement_transaction_verifier;
     use bech32;
@@ -269,6 +269,16 @@ pub mod pallet {
                 data: None,
             }
         }
+
+        // Create a new output with a some data
+        pub fn new_with_data(value: Value, pubkey: H256, data: OutputData) -> Self {
+            let pubkey = sp_core::sr25519::Public::from_h256(pubkey);
+            Self {
+                value,
+                destination: Destination::Pubkey(pubkey.into()),
+                data: Some(data),
+            }
+        }
     }
 
     #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
@@ -325,6 +335,11 @@ pub mod pallet {
     #[pallet::getter(fn pointer_to_issue_token)]
     pub(super) type PointerToIssueToken<T: Config> =
         StorageMap<_, Identity, TokenId, /* UTXO */ H256, OptionQuery>;
+
+    #[pallet::storage]
+    #[pallet::getter(fn nft_unique_data_hash)]
+    pub(super) type NftUniqueDataHash<T: Config> =
+        StorageMap<_, Identity, NftDataHash, /* UTXO */ H256, OptionQuery>;
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -420,255 +435,8 @@ pub mod pallet {
         tv.checking_signatures()?;
         tv.checking_utxos_exists()?;
         tv.checking_amounts()?;
-        //tv.checking_tokens_transferring()?;
-        //tv.checking_tokens_issued()?;
-        //tv.checking_nft_mint()?;
-        //tv.checking_assets_burn()?;
         tv.calculating_reward()?;
         tv.collect_result()
-
-        /*
-               //ensure rather than assert to avoid panic
-               //both inputs and outputs should contain at least 1 and at most u32::MAX - 1 entries
-               ensure!(!tx.inputs.is_empty(), "no inputs");
-               ensure!(!tx.outputs.is_empty(), "no outputs");
-               ensure!(tx.inputs.len() < (u32::MAX as usize), "too many inputs");
-               ensure!(tx.outputs.len() < (u32::MAX as usize), "too many outputs");
-
-               //ensure each input is used only a single time
-               //maps each input into btree
-               //if map.len() > num of inputs then fail
-               //https://doc.rust-lang.org/std/collections/struct.BTreeMap.html
-               //WARNING workshop code has a bug here
-               //https://github.com/substrate-developer-hub/utxo-workshop/blob/workshop/runtime/src/utxo.rs
-               //input_map.len() > transaction.inputs.len() //THIS IS WRONG
-               {
-                   let input_map: BTreeMap<_, ()> =
-                       tx.inputs.iter().map(|input| (input.outpoint, ())).collect();
-                   //we want map size and input size to be equal to ensure each is used only once
-                   ensure!(
-                       input_map.len() == tx.inputs.len(),
-                       "each input should be used only once"
-                   );
-               }
-               //ensure each output is unique
-               //map each output to btree to count unique elements
-               //WARNING example code has a bug here
-               //out_map.len() != transaction.outputs.len() //THIS IS WRONG
-               {
-                   let out_map: BTreeMap<_, ()> = tx.outputs.iter().map(|output| (output, ())).collect();
-                   //check each output is defined only once
-                   ensure!(
-                       out_map.len() == tx.outputs.len(),
-                       "each output should be used once"
-                   );
-               }
-               let simple_tx = get_simple_transaction(tx);
-               let mut reward = 0;
-               // Resolve the transaction inputs by looking up UTXOs being spent by them.
-               //
-               // This will cointain one of the following:
-               // * Ok(utxos): a vector of UTXOs each input spends.
-               // * Err(missing): a vector of outputs missing from the store
-               let input_utxos = {
-                   let mut missing = Vec::new();
-                   let mut resolved: Vec<TransactionOutputFor<T>> = Vec::new();
-
-                   for input in &tx.inputs {
-                       if let Some(input_utxo) = <UtxoStore<T>>::get(&input.outpoint) {
-                           let lock_commitment = input_utxo.destination.lock_commitment();
-                           ensure!(
-                               input.lock_hash() == *lock_commitment,
-                               "Lock hash does not match"
-                           );
-                           resolved.push(input_utxo);
-                       } else {
-                           missing.push(input.outpoint.clone().as_fixed_bytes().to_vec());
-                       }
-                   }
-
-                   missing.is_empty().then(|| resolved).ok_or(missing)
-               };
-
-               let full_inputs: Vec<(TokenId, TransactionOutputFor<T>)> = tx
-                   .inputs
-                   .iter()
-                   .filter_map(|input| <UtxoStore<T>>::get(&input.outpoint))
-                   .filter_map(|output| match output.data {
-                       Some(ref data) => match data {
-                           OutputData::TokenTransferV1 { token_id, amount } => Some((*token_id, output)),
-                           OutputData::TokenIssuanceV1 {
-                               token_id,
-                               token_ticker,
-                               amount_to_issue,
-                               number_of_decimals,
-                               metadata_URI,
-                           } => Some((*token_id, output)),
-                           OutputData::TokenBurnV1 { .. } => {
-                               // frame_support::fail!("Token gone forever, we can't use it anymore").ok();
-                               None
-                           }
-                           OutputData::NftMintV1 {
-                               token_id,
-                               data_hash,
-                               metadata_URI,
-                           } => Some((*token_id, output)),
-                       },
-                       None => Some((H256::zero(), output)),
-                   })
-                   .collect();
-
-               let input_vec: Vec<(TokenId, Value)> =
-                   full_inputs.iter().map(|output| (output.0, output.1.value)).collect();
-
-               let out_vec: Vec<(TokenId, Value)> = tx
-                   .outputs
-                   .iter()
-                   .filter_map(|output| {
-                       match output.data {
-                           Some(OutputData::TokenTransferV1 { token_id, amount }) => {
-                               Some((token_id, amount))
-                           }
-                           Some(OutputData::TokenIssuanceV1 {
-                               token_id,
-                               amount_to_issue,
-                               ..
-                           }) => Some((token_id, amount_to_issue)),
-                           Some(OutputData::NftMintV1 { token_id, .. }) => Some((token_id, 1)),
-                           // Token gone forever, we can't use it anymore
-                           Some(OutputData::TokenBurnV1 { .. }) => None,
-                           None => Some((H256::zero(), output.value)),
-                       }
-                   })
-                   .collect();
-
-               // Check for token creation
-               for output in tx.outputs.iter() {
-                   let tid = match output.data {
-                       Some(OutputData::TokenTransferV1 { token_id, .. }) => token_id,
-                       Some(OutputData::TokenIssuanceV1 { token_id, .. }) => token_id,
-                       _ => continue,
-                   };
-                   // If we have input and output for the same token it's not a problem
-                   if full_inputs.iter().find(|&x| (x.0 == tid) && (x.1 != *output)).is_some() {
-                       continue;
-                   } else {
-                       // But when we don't have an input for token but token id exist in TokenList
-                       ensure!(
-                           !<PointerToIssueToken<T>>::contains_key(tid),
-                           "no inputs for the token id"
-                       );
-                   }
-               }
-
-               let mut new_utxos = Vec::new();
-               // Check that outputs are valid
-               for (output_index, output) in tx.outputs.iter().enumerate() {
-                   match output.destination {
-                       Destination::Pubkey(_) | Destination::ScriptHash(_) => {
-                           ensure!(output.value > 0, "output value must be nonzero");
-                           let hash = tx.outpoint(output_index as u64);
-                           ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
-                           new_utxos.push(hash.as_fixed_bytes().to_vec());
-                       }
-                       Destination::CreatePP(_, _) => {
-                           log::info!("TODO validate OP_CREATE");
-                       }
-                       Destination::CallPP(_, _) => {
-                           log::info!("TODO validate OP_CALL");
-                       }
-                   }
-               }
-
-               // if all spent UTXOs are available, check the math and signatures
-               if let Ok(input_utxos) = &input_utxos {
-                   // We have to check sum of input tokens is less or equal to output tokens.
-                   let mut inputs_sum: BTreeMap<TokenId, Value> = BTreeMap::new();
-                   let mut outputs_sum: BTreeMap<TokenId, Value> = BTreeMap::new();
-
-                   for x in input_vec {
-                       let value =
-                           x.1.checked_add(*inputs_sum.get(&x.0).unwrap_or(&0))
-                               .ok_or("input value overflow")?;
-                       inputs_sum.insert(x.0, value);
-                   }
-                   for x in out_vec {
-                       let value =
-                           x.1.checked_add(*outputs_sum.get(&x.0).unwrap_or(&0))
-                               .ok_or("output value overflow")?;
-                       outputs_sum.insert(x.0, value);
-                   }
-
-                   let mut new_token_exist = false;
-                   for output_token in &outputs_sum {
-                       match inputs_sum.get(&output_token.0) {
-                           Some(input_value) => ensure!(
-                               input_value >= &output_token.1,
-                               "output value must not exceed input value"
-                           ),
-                           None => {
-                               // If the transaction has one an output with a new token ID
-                               if new_token_exist {
-                                   frame_support::fail!("input for the token not found")
-                               } else {
-                                   new_token_exist = true;
-                               }
-                           }
-                       }
-                   }
-
-                   for (index, (input, input_utxo)) in tx.inputs.iter().zip(input_utxos).enumerate() {
-                       match &input_utxo.destination {
-                           Destination::Pubkey(pubkey) => {
-                               let msg = sign::TransactionSigMsg::construct(
-                                   sign::SigHash::default(),
-                                   &tx,
-                                   &input_utxos,
-                                   index as u64,
-                                   u32::MAX,
-                               );
-                               let ok = pubkey
-                                   .parse_sig(&input.witness[..])
-                                   .ok_or("bad signature format")?
-                                   .verify(&msg);
-                               ensure!(ok, "signature must be valid");
-                           }
-                           Destination::CreatePP(_, _) => {
-                               log::info!("TODO validate spending of OP_CREATE");
-                           }
-                           Destination::CallPP(_, _) => {
-                               log::info!("TODO validate spending of OP_CALL");
-                           }
-                           Destination::ScriptHash(_hash) => {
-                               let witness = input.witness.clone();
-                               let lock = input.lock.clone();
-                               crate::script::verify(&tx, &input_utxos, index as u64, witness, lock)
-                                   .map_err(|_| "script verification failed")?;
-                           }
-                       }
-                   }
-
-                   // Reward at the moment only in MLT
-                   reward = if inputs_sum.contains_key(&(H256::zero() as TokenId))
-                       && outputs_sum.contains_key(&(H256::zero() as TokenId))
-                   {
-                       inputs_sum[&(H256::default() as TokenId)]
-                           .checked_sub(outputs_sum[&(H256::zero() as TokenId)])
-                           .ok_or("reward underflow")?
-                   } else {
-                       *inputs_sum.get(&(H256::zero() as TokenId)).ok_or("fee doesn't exist")?
-                   };
-               }
-
-               Ok(ValidTransaction {
-                   priority: reward as u64,
-                   requires: input_utxos.map_or_else(|x| x, |_| Vec::new()),
-                   provides: new_utxos,
-                   longevity: TransactionLongevity::MAX,
-                   propagate: true,
-               })
-
-        */
     }
 
     /// Update storage to reflect changes made by transaction
@@ -696,6 +464,20 @@ pub mod pallet {
                     let hash = tx.outpoint(index as u64);
                     log::debug!("inserting to UtxoStore {:?} as key {:?}", output, hash);
                     <UtxoStore<T>>::insert(hash, Some(output));
+                    match &output.data {
+                        Some(OutputData::NftMintV1 {
+                            token_id,
+                            data_hash,
+                            ..
+                        }) => {
+                            <NftUniqueDataHash<T>>::insert(data_hash, hash);
+                            <PointerToIssueToken<T>>::insert(token_id, hash);
+                        }
+                        Some(OutputData::TokenIssuanceV1 { token_id, .. }) => {
+                            <PointerToIssueToken<T>>::insert(token_id, hash);
+                        }
+                        _ => continue,
+                    }
                 }
                 Destination::CreatePP(script, data) => {
                     create::<T>(caller, script, &data);
@@ -718,128 +500,6 @@ pub mod pallet {
         update_storage::<T>(caller, tx, tx_validity.priority as Value)?;
         Ok(().into())
     }
-
-    // pub fn token_create<T: Config>(
-    //     caller: &T::AccountId,
-    //     public: H256,
-    //     input_for_fee: TransactionInput,
-    //     token_name: Vec<u8>,
-    //     token_ticker: Vec<u8>,
-    //     supply: Value,
-    // ) -> Result<H256, DispatchErrorWithPostInfo<PostDispatchInfo>> {
-    // ensure!(token_name.len() <= 25, Error::<T>::Unapproved);
-    // ensure!(token_ticker.len() <= 5, Error::<T>::Unapproved);
-    // ensure!(!supply.is_zero(), Error::<T>::MinBalanceZero);
-    //
-    // // Input with MLT FEE
-    // let fee = UtxoStore::<T>::get(input_for_fee.outpoint).ok_or(Error::<T>::Unapproved)?.value;
-    // ensure!(fee >= Mlt(100).to_munit(), Error::<T>::Unapproved);
-    //
-    // // Save in UTXO
-    // let instance = crate::TokenInstance::new_normal(
-    //     BlakeTwo256::hash_of(&(&token_name, &token_ticker)),
-    //     token_name,
-    //     token_ticker,
-    //     supply,
-    // );
-    // let token_id = *instance.id();
-    //
-    // ensure!(
-    //     !<TokenList<T>>::contains_key(instance.id()),
-    //     Error::<T>::InUse
-    // );
-    //
-    // let mut tx = Transaction {
-    //     inputs: crate::vec![
-    //         // Fee an input equal 100 MLT
-    //         input_for_fee,
-    //     ],
-    //     outputs: crate::vec![
-    //         // Output a new tokens
-    //         TransactionOutput::new_token(*instance.id(), supply, public),
-    //     ],
-    // };
-    //
-    // // We shall make an output to return odd funds
-    // if fee > Mlt(100).to_munit() {
-    //     tx.outputs.push(TransactionOutput::new_pubkey(
-    //         fee - Mlt(100).to_munit(),
-    //         public,
-    //     ));
-    // }
-    //
-    // let sig = crypto::sr25519_sign(
-    //     SR25519,
-    //     &sp_core::sr25519::Public::from_h256(public),
-    //     &tx.encode(),
-    // )
-    // .ok_or(DispatchError::Token(sp_runtime::TokenError::CannotCreate))?;
-    // for i in 0..tx.inputs.len() {
-    //     tx.inputs[i].witness = sig.0.to_vec();
-    // }
-    // // Success
-    // spend::<T>(caller, &tx)?;
-    //
-    // // Save in Store
-    // <TokenList<T>>::insert(token_id, Some(instance));
-    // Ok(token_id)
-    // }
-
-    /*
-    fn mint<T: Config>(
-        caller: &T::AccountId,
-        creator_pubkey: sp_core::sr25519::Public,
-        data_url: Vec<u8>,
-        data: Vec<u8>,
-    ) -> Result<TokenId, DispatchErrorWithPostInfo<PostDispatchInfo>> {
-                let (fee, inputs_hashes) = pick_utxo::<T>(caller, Mlt(100).to_munit());
-               ensure!(fee >= Mlt(100).to_munit(), Error::<T>::Unapproved);
-               ensure!(data_url.len() <= 50, Error::<T>::Unapproved);
-
-               let instance = TokenInstance::new_nft(
-                   BlakeTwo256::hash_of(&data),
-                   data.clone(),
-                   data_url.clone(),
-                   creator_pubkey.to_vec(),
-               );
-
-               let inputs_for_fee = inputs_hashes
-                   .iter()
-                   .filter_map(|x| <UtxoStore<T>>::get(&x))
-                   .map(|output| TransactionInput::new_empty(BlakeTwo256::hash_of(&(&output, 0 as u64))))
-                   .collect();
-
-               ensure!(
-                   !TokenList::<T>::contains_key(instance.id()),
-                   Error::<T>::NftCollectionExists
-               );
-
-               let mut tx = Transaction {
-                   inputs: inputs_for_fee,
-                   outputs: crate::vec![
-                       // Output a new tokens
-                       TransactionOutput::new_nft(
-                           *instance.id(),
-                           data,
-                           data_url,
-                           H256::from(creator_pubkey)
-                       ),
-                   ],
-               };
-
-               let sig = crypto::sr25519_sign(SR25519, &creator_pubkey, &tx.encode())
-                   .ok_or(DispatchError::Token(sp_runtime::TokenError::CannotCreate))?;
-               for i in 0..tx.inputs.len() {
-                   tx.inputs[i].witness = sig.0.to_vec();
-               }
-               // Success
-               spend::<T>(caller, &tx)?;
-
-               // Save in Store
-               TokenList::<T>::insert(instance.id(), Some(instance.clone()));
-               Ok(*instance.id())
-    }
-        */
 
     /// Pick the UTXOs of `caller` from UtxoStore that satisfy request `value`
     ///

@@ -17,7 +17,7 @@ const LENGTH_BYTES_TO_REPRESENT_ID: usize = 20;
 
 pub type Value = u128;
 
-pub struct Mlt(Value);
+pub struct Mlt(pub Value);
 impl Mlt {
     pub fn to_munit(&self) -> Value {
         self.0 * 1_000 * 100_000_000
