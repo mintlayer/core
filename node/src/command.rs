@@ -17,7 +17,7 @@
 
 use crate::cli::{Cli, Subcommand};
 use crate::{chain_spec::{self, get_from_seed}, service};
-use node_template_runtime::Block;
+use node_template_runtime::{Block, pallet_utxo::MLT_UNIT};
 use sc_cli::{ChainSpec, Role, RuntimeVersion, SubstrateCli};
 use sc_network::config::MultiaddrWithPeerId;
 use sc_service::PartialComponents;
@@ -83,7 +83,6 @@ impl From<MltKeysFromFile> for MltKeysInfo {
 pub fn fetch_keys() ->  Result<Vec<MltKeysInfo>, String>{
     let mut key_list:Vec<MltKeysInfo> = vec![];
 
-    //TODO change this path to a secure one.
     let agent: Agent = ureq::AgentBuilder::new()
         .timeout_read(Duration::from_millis(HTTP_TIMEOUT))
         .timeout_write(Duration::from_millis(HTTP_TIMEOUT))
@@ -92,10 +91,12 @@ pub fn fetch_keys() ->  Result<Vec<MltKeysInfo>, String>{
     if let Ok(contents) = agent.get(KEYS_URL).call().map_err(|e| e.to_string())?.into_string(){
         let users:serde_json::Value = serde_json::from_str(&contents).map_err(|e| e.to_string())?;
         for user in users["users"].as_array().ok_or("invalid json to extract user list")? {
-            let x:MltKeysFromFile = serde_json::from_value(user.clone()).map_err(|e| e.to_string())?;
+            let mut x:MltKeysFromFile = serde_json::from_value(user.clone()).map_err(|e| e.to_string())?;
+            x.mlt_coins = x.mlt_coins * MLT_UNIT;
             key_list.push(x.into());
         };
     } else {
+        log::info!("failed to get keys from a file; using dummy values to populate keys");
         //TODO: dummy values, in case the file doesn't exist.
        impl MltKeysInfo {
            fn new(seed:&str, mlt_coins:u128) -> MltKeysInfo {
@@ -104,16 +105,16 @@ pub fn fetch_keys() ->  Result<Vec<MltKeysInfo>, String>{
                    sr25519_public_controller: get_from_seed::<sr25519::Public>(seed),
                    sr25519_public_stash: get_from_seed::<sr25519::Public>(&format!("{}//stash",seed)),
                    ed25519_public: get_from_seed::<ed25519::Public>(seed),
-                   mlt_coins
+                   mlt_coins: mlt_coins * MLT_UNIT
                }
            }
        }
 
-        key_list.push(MltKeysInfo::new("Alice", 399600000000));
-        key_list.push(MltKeysInfo::new("Bob", 100000000));
-        key_list.push(MltKeysInfo::new("Charlie", 100000000));
-        key_list.push(MltKeysInfo::new("Dave", 100000000));
-        key_list.push(MltKeysInfo::new("Eve", 100000000));
+        key_list.push(MltKeysInfo::new("Alice", 399_600_000_000));
+        key_list.push(MltKeysInfo::new("Bob", 100_000_000));
+        key_list.push(MltKeysInfo::new("Charlie", 100_000_000));
+        key_list.push(MltKeysInfo::new("Dave", 100_000_000));
+        key_list.push(MltKeysInfo::new("Eve", 100_000_000));
     }
 
     Ok(key_list)
