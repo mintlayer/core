@@ -22,13 +22,6 @@ pub fn get_from_seed<TPublic: Public>(seed: &str) -> <TPublic::Pair as Pair>::Pu
 
 pub type AccountPublic = <Signature as Verify>::Signer;
 
-/// Generate an account ID from public key.
-pub fn get_account_id_from_pub(public:sr25519::Public) -> AccountId
-where
-    AccountPublic: From<sr25519::Public>  {
-    AccountPublic::from(public).into_account()
-}
-
 /// Holds information about keys needed for the accounts
 #[derive(Default, Debug, Clone)]
 pub struct MltKeysInfo {
@@ -250,7 +243,7 @@ fn testnet_genesis(
         staking: StakingConfig {
             validator_count: NUM_OF_VALIDATOR_SLOTS,
             // The # of validators set should be the same number of locked_utxos specified in UtxoConfig.
-            minimum_validator_count: initial_authorities.len() as u32,
+            minimum_validator_count: 1,
             invulnerables: initial_authorities.iter().map(|x| x.controller_account_id()).collect(),
             slash_reward_fraction: sp_runtime::Perbill::from_percent(0), // nothing, since we're not using this at all.
             stakers,

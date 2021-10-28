@@ -435,14 +435,13 @@ impl onchain::Config for Runtime {
 
 parameter_types! {
     // TODO: how many sessions is in 1 era?
-    // we've settled on 10 blocks;
-    // currently period is at 2.
+    // we've settled on Period * # of Session blocks
     // Note: an era is when the change of validator set happens.
     pub const SessionsPerEra: sp_staking::SessionIndex = 2;
 
     // Note: upon unlocking funds, it doesn't mean withdrawal is activated.
     // TODO: How long should the stake stay "bonded" or "locked", until it's allowed to withdraw?
-    pub const BondingDuration: pallet_staking::EraIndex = 3;
+    pub const BondingDuration: pallet_staking::EraIndex = 2;
 
     pub const SlashDeferDuration: pallet_staking::EraIndex = 0;
     pub const MaxNominatorRewardedPerValidator: u32 = 0;

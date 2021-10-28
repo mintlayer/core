@@ -133,6 +133,9 @@ pub mod pallet {
         /// The hash outpoint key does not exist in the storage where it expects to be.
         OutpointDoesNotExist,
 
+        /// The hash outpoint key already exists in the storage where it expects to be.
+        OutpointAlreadyExist,
+
     }
 
     #[pallet::pallet]
@@ -666,15 +669,15 @@ pub mod pallet {
                     ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
                     new_utxos.push(hash.as_fixed_bytes().to_vec());
                 }
-                Destination::LockExtraForStaking(_) => {
+                Destination::LockExtraForStaking(controller_account) => {
                     let hash = tx.outpoint(output_index as u64);
                     new_utxos.push(hash.as_fixed_bytes().to_vec());
-                    staking::validate_lock_extra_for_staking_requirements::<T>(hash,output.value)?;
+                    staking::validate_lock_extra_for_staking_requirements::<T>(hash,output.value, controller_account)?;
                 }
-                Destination::LockForStaking {..} => {
+                Destination::LockForStaking { stash_account:_, controller_account, session_key:_ } => {
                    let hash = tx.outpoint(output_index as u64);
                     new_utxos.push(hash.as_fixed_bytes().to_vec());
-                    staking::validate_lock_for_staking_requirements::<T>(hash,output.value)?;
+                    staking::validate_lock_for_staking_requirements::<T>(hash,output.value, controller_account)?;
                 }
                 Destination::CreatePP(_, _) => {
                     log::info!("TODO validate OP_CREATE");
@@ -1032,10 +1035,10 @@ pub mod pallet {
         #[pallet::weight(T::WeightInfo::unlock_request_for_withdrawal(1 as u32))]
         pub fn unlock_request_for_withdrawal(
             origin: OriginFor<T>,
-            controller_pubkey: H256
+            controller_account: T::AccountId,
         ) -> DispatchResultWithPostInfo {
             ensure_signed(origin)?;
-            staking::unlock_request_for_withdrawal::<T>(&controller_pubkey)?;
+            staking::unlock_request_for_withdrawal::<T>(controller_account)?;
             Ok(().into())
         }
 
@@ -1047,11 +1050,11 @@ pub mod pallet {
         #[pallet::weight(T::WeightInfo::withdraw_stake(outpoints.len() as u32))]
         pub fn withdraw_stake(
             origin: OriginFor<T>,
-            controller_pubkey: H256,
+            controller_account: T::AccountId,
             outpoints: Vec<H256>
         ) -> DispatchResultWithPostInfo {
             ensure_signed(origin)?;
-            staking::withdraw::<T>(controller_pubkey,outpoints)?;
+            staking::withdraw::<T>(controller_account,outpoints)?;
             Ok(().into())
         }
     }
@@ -1070,8 +1073,7 @@ pub mod pallet {
         fn default() -> Self {
             Self {
                 genesis_utxos: vec![],
-                locked_utxos: vec![],
-               // initial_reward_amount: 100,
+                locked_utxos: vec![]
             }
         }
     }
