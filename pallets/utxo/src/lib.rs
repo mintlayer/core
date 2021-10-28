@@ -72,7 +72,6 @@ pub mod pallet {
         testing::SR25519,
         H256, H512,
     };
-    use sp_runtime::traits::AtLeast32Bit;
     implement_transaction_verifier!();
 
     #[pallet::error]
@@ -113,8 +112,6 @@ pub mod pallet {
     #[pallet::config]
     pub trait Config: frame_system::Config + pallet_timestamp::Config {
         type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
-
-        type AssetId: Parameter + AtLeast32Bit + Default + Copy;
 
         /// The overarching call type.
         type Call: Dispatchable + From<Call<Self>> + IsSubType<Call<Self>> + Clone;
@@ -283,7 +280,7 @@ pub mod pallet {
             }
         }
 
-        // Create a new output with a some data
+        // Create a new output with some data
         pub fn new_with_data(value: Value, pubkey: H256, data: OutputData) -> Self {
             let pubkey = sp_core::sr25519::Public::from_h256(pubkey);
             Self {

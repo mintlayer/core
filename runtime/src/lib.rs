@@ -302,7 +302,6 @@ impl pallet_utxo::Config for Runtime {
     type Call = Call;
     type WeightInfo = pallet_utxo::weights::WeightInfo<Runtime>;
     type ProgrammablePool = pallet_pp::Pallet<Runtime>;
-    type AssetId = u64;
 
     fn authorities() -> Vec<H256> {
         Aura::authorities()
