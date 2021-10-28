@@ -114,7 +114,7 @@ fn test_unchecked_2nd_output() {
         // Calculate output 1 hash.
         let utxo1_hash = tx1.outpoint(1);
         // Now artificially insert utxo1 (that pays to a pubkey) to the output set.
-        UtxoStore::<Test>::insert(utxo1_hash, Some(&tx1.outputs[1]));
+        UtxoStore::<Test>::insert(utxo1_hash, &tx1.outputs[1]);
         // When adding a transaction, the output should be reported as already present.
         assert_err!(
             Utxo::spend(Origin::signed(H256::zero()), tx1),
@@ -343,7 +343,7 @@ fn test_reward() {
 
         // if the previous spend succeeded, there should be one utxo
         // that has a value of 90 and a reward that has a value of 10
-        let utxos = UtxoStore::<Test>::iter_values().next().unwrap().unwrap();
+        let utxos = UtxoStore::<Test>::iter_values().next().unwrap();
         let reward = RewardTotal::<Test>::get();
 
         assert_eq!(utxos.value, 90);
