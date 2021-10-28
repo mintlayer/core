@@ -1,3 +1,20 @@
+// Copyright (c) 2021 RBB S.r.l
+// opensource@mintlayer.org
+// SPDX-License-Identifier: MIT
+// Licensed under the MIT License;
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// 	http://spdx.org/licenses/MIT
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// Author(s): A.Sinitsyn
+
 #[macro_export]
 // The Substrate has a big macros ecosystem. That could be easily broken if T:Config will using in
 // other mod instead of lib.rs. Due to we have not enough time for quality decomposition lib.rs to
@@ -7,7 +24,6 @@
 // and decide how it make it better. The main problem is that there are a lot of cycles. We should split into
 // stages and use all of these checks as an array of functions that we will call on a couple of main cycles.
 // But, at the moment it works and it is suitable for the test-net.
-
 macro_rules! implement_transaction_verifier {
     () => {
         use crate::sign::TransactionSigMsg;
@@ -28,7 +44,7 @@ macro_rules! implement_transaction_verifier {
             // Vec of outputs that should be written
             new_utxos: Vec<Vec<u8>>,
             // For more information have a look at checking_utxos_exists
-            spended_utxos: Result<
+            spent_utxo: Result<
                 Vec<TransactionOutput<<T as frame_system::Config>::AccountId>>,
                 Vec<Vec<u8>>,
             >,
@@ -57,7 +73,7 @@ macro_rules! implement_transaction_verifier {
                     total_value_of_input_tokens,
                     total_value_of_output_tokens,
                     new_utxos: Vec::new(),
-                    spended_utxos: Ok(Vec::new()),
+                    spent_utxo: Ok(Vec::new()),
                     reward: 0,
                 })
             }
@@ -93,21 +109,17 @@ macro_rules! implement_transaction_verifier {
             fn init_outputs(
                 tx: &TransactionFor<T>,
             ) -> Result<BTreeMap<TokenId, Vec<TransactionOutputFor<T>>>, &'static str> {
-                let mut count = 0;
                 let mut output_map: BTreeMap<TokenId, Vec<TransactionOutputFor<T>>> =
                     BTreeMap::new();
 
                 for output in &tx.outputs {
                     let token_id = TransactionVerifier::<'_, T>::get_token_id_from_output(&output);
                     if let Some(outputs) = output_map.get_mut(&token_id) {
-                        count += 1;
                         outputs.push(output.clone());
                     } else {
-                        count += 1;
                         output_map.insert(token_id, vec![output.clone()]);
                     }
                 }
-                ensure!(count == tx.outputs.len(), "can't load all outputs");
                 Ok(output_map)
             }
 
@@ -119,7 +131,7 @@ macro_rules! implement_transaction_verifier {
             ) -> Result<BTreeMap<TokenId, Value>, &'static str> {
                 let mut total_value_of_input_tokens: BTreeMap<TokenId, Value> = BTreeMap::new();
                 let mut mlt_amount: Value = 0;
-                for (_, (_, input_vec)) in all_inputs_map.iter().enumerate() {
+                for (_, input_vec) in all_inputs_map.iter() {
                     for (_, input_utxo) in input_vec {
                         match &input_utxo.data {
                             Some(OutputData::TokenIssuanceV1 {
@@ -228,7 +240,7 @@ macro_rules! implement_transaction_verifier {
             ) -> Result<BTreeMap<TokenId, Value>, &'static str> {
                 let mut total_value_of_output_tokens: BTreeMap<TokenId, Value> = BTreeMap::new();
                 let mut mlt_amount: Value = 0;
-                for (_, (_, outputs_vec)) in all_outputs_map.iter().enumerate() {
+                for (_, outputs_vec) in all_outputs_map.iter() {
                     for utxo in outputs_vec {
                         // for x in all_outputs_map {
                         match &utxo.data {
@@ -473,9 +485,7 @@ macro_rules! implement_transaction_verifier {
 
             pub fn checking_amounts(&self) -> Result<(), &'static str> {
                 let mut num_creations = 0;
-                for (_, (token_id, output_value)) in
-                    self.total_value_of_output_tokens.iter().enumerate()
-                {
+                for (token_id, output_value) in self.total_value_of_output_tokens.iter() {
                     match self.total_value_of_input_tokens.get(token_id) {
                         Some(input_value) => ensure!(
                             input_value >= &output_value,
@@ -532,7 +542,7 @@ macro_rules! implement_transaction_verifier {
                 // * Ok(utxos): a vector of UTXOs each input spends.
                 // * Err(missing): a vector of outputs missing from the store
 
-                self.spended_utxos = {
+                self.spent_utxo = {
                     let mut missing = Vec::new();
                     let mut resolved: Vec<TransactionOutputFor<T>> = Vec::new();
 
@@ -594,7 +604,7 @@ macro_rules! implement_transaction_verifier {
             pub fn collect_result(&self) -> Result<ValidTransaction, &'static str> {
                 Ok(ValidTransaction {
                     priority: self.reward,
-                    requires: self.spended_utxos.clone().map_or_else(|x| x, |_| Vec::new()),
+                    requires: self.spent_utxo.clone().map_or_else(|x| x, |_| Vec::new()),
                     provides: self.new_utxos.clone(),
                     longevity: TransactionLongevity::MAX,
                     propagate: true,
