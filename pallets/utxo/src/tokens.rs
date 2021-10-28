@@ -1,10 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-// use crate::ss58_nostd::*;
-// use crate::TransactionOutputFor;
 use crate::base58_nostd::{FromBase58, FromBase58Error, ToBase58};
 use codec::{Decode, Encode};
-// use frame_support::sp_runtime::traits::{BlakeTwo256, Hash};
 use frame_support::ensure;
 use frame_support::{dispatch::Vec, RuntimeDebug};
 #[cfg(feature = "std")]
@@ -27,7 +24,6 @@ impl Mlt {
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 #[derive(Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, RuntimeDebug)]
 enum TokenIdInner {
-    // todo: Need to check this
     MLT,
     Asset(H160),
 }
@@ -47,7 +43,7 @@ impl TokenId {
 
     pub fn new_asset(first_input_hash: H256) -> TokenId {
         TokenId {
-            // We are loosing the first bytes of H256 over here
+            // We are loosing the first bytes of H256 over here and save 20 the last bytes
             inner: TokenIdInner::Asset(H160::from(first_input_hash)),
         }
     }
@@ -103,7 +99,6 @@ impl AsRef<[u8]> for TokenId {
     }
 }
 
-// We should implement it for Ss58Codec
 impl Default for TokenId {
     fn default() -> Self {
         TokenId::mlt()
@@ -111,7 +106,6 @@ impl Default for TokenId {
 }
 
 #[cfg(feature = "std")]
-// Unfortunately, the default codec can't be used with std
 impl Ss58Codec for TokenId {}
 
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]

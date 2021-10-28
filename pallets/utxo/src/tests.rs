@@ -544,7 +544,7 @@ fn test_send_to_address() {
     })
 }
 
-// *Testing token creation:
+// Testing token creation:
 use crate::tokens::{NftDataHash, TokenId};
 use rand::Rng;
 
@@ -561,19 +561,16 @@ fn build_random_vec(len: usize) -> Vec<u8> {
 // Simple creation of tokens
 fn checking_tokens_issuance() {
     execute_with_alice(|alice_pub_key| {
-        // Alice wants to send herself a new utxo of value 50.
         let (utxo0, input0) = tx_input_gen_no_signature();
         let first_input_hash = BlakeTwo256::hash(&input0.outpoint.as_ref());
 
         let output_new = TransactionOutput {
             value: 0,
             destination: Destination::Pubkey(alice_pub_key),
-            // TransactionOutput::new_pubkey(50, H256::from(alice_pub_key)),
             data: Some(OutputData::TokenIssuanceV1 {
                 token_id: TokenId::new_asset(first_input_hash),
                 token_ticker: "BensT".as_bytes().to_vec(),
                 amount_to_issue: 1_000_000_000,
-                // Should be not more than 18 numbers
                 number_of_decimals: 2,
                 metadata_uri: "facebook.com".as_bytes().to_vec(),
             }),
@@ -612,14 +609,12 @@ fn checking_tokens_issuance() {
 // Simple creation of NFT
 fn checking_nft_mint() {
     execute_with_alice(|alice_pub_key| {
-        // Alice wants to send herself a new utxo of value 50.
         let (utxo0, input0) = tx_input_gen_no_signature();
         let first_input_hash = BlakeTwo256::hash(&input0.outpoint.as_ref());
         let data_hash = NftDataHash::Raw(vec![1, 2, 3, 4, 5]);
         let output = TransactionOutput {
             value: 0,
             destination: Destination::Pubkey(alice_pub_key),
-            // TransactionOutput::new_pubkey(50, H256::from(alice_pub_key)),
             data: Some(OutputData::NftMintV1 {
                 token_id: TokenId::new_asset(first_input_hash),
                 data_hash: data_hash.clone(),
@@ -656,7 +651,6 @@ fn checking_nft_mint() {
 // NFT might be only unique, we can't create a few nft for one item
 fn checking_nft_unique() {
     execute_with_alice(|alice_pub_key| {
-        // Alice wants to send herself a new utxo of value 50.
         let (utxo0, input0) = tx_input_gen_no_signature();
         let first_input_hash = BlakeTwo256::hash(&input0.outpoint.as_ref());
 
@@ -688,7 +682,6 @@ fn checking_nft_unique() {
         assert!(UtxoStore::<Test>::contains_key(new_utxo_hash));
         let new_utxo = tx.outputs[1].clone();
 
-        // Alice wants to send herself a new utxo of value 50 again
         if let OutputData::NftMintV1 {
             ref mut token_id, ..
         } = nft_data
@@ -718,7 +711,6 @@ fn checking_nft_unique() {
 // Creation a token with a pre-existing ID or re-creation of an already created token.
 fn checking_tokens_double_creation() {
     execute_with_alice(|alice_pub_key| {
-        // Alice wants to send herself a new utxo of value 50.
         let (utxo0, input0) = tx_input_gen_no_signature();
         let first_input_hash = BlakeTwo256::hash(&input0.outpoint.as_ref());
 
@@ -726,7 +718,6 @@ fn checking_tokens_double_creation() {
             token_id: TokenId::new_asset(first_input_hash),
             token_ticker: "BensT".as_bytes().to_vec(),
             amount_to_issue: 1_000_000_000,
-            // Should be not more than 18 numbers
             number_of_decimals: 2,
             metadata_uri: "facebook.com".as_bytes().to_vec(),
         };
@@ -765,7 +756,6 @@ fn checking_tokens_double_creation() {
         let new_utxo_hash = tx.outpoint(0);
         let new_utxo = tx.outputs[0].clone();
 
-        // Alice wants to send herself a new utxo of value 50 again
         let tx = Transaction {
             inputs: vec![TransactionInput::new_empty(new_utxo_hash.clone())],
             outputs: vec![TransactionOutput {
@@ -790,7 +780,6 @@ fn checking_tokens_with_invalid_data() {
     macro_rules! test_tx {
         ($data: ident, $checking: tt, $err: expr) => {
             execute_with_alice(|alice_pub_key| {
-                // Alice wants to send herself a new utxo of value 50.
                 let (utxo0, input0) = tx_input_gen_no_signature();
                 let output_new = TransactionOutput {
                     value: 1,
@@ -828,7 +817,6 @@ fn checking_tokens_with_invalid_data() {
         token_id: TokenId::mlt(),
         token_ticker: vec![],
         amount_to_issue: 0,
-        // Should be not more than 18 numbers
         number_of_decimals: 0,
         metadata_uri: vec![],
     };
@@ -920,7 +908,6 @@ fn checking_tokens_with_invalid_data() {
 fn checking_tokens_transferring() {
     let (mut test_ext, alice_pub_key, karl_pub_key) = new_test_ext_and_keys();
     test_ext.execute_with(|| {
-        // Round 1
         let token_id = TokenId::new_asset(H256::random());
         // Alice issue 1000 MLS-01, and send them to Karl and the rest back to herself
         let (utxo0, input0) = tx_input_gen_no_signature();
@@ -951,7 +938,6 @@ fn checking_tokens_transferring() {
         let token_utxo_hash = tx.outpoint(1);
         let token_utxo = tx.outputs[1].clone();
 
-        // Round 2
         // then send rest of the tokens to karl (proving that the first tx was successful)
         let _tx = Transaction {
             inputs: vec![TransactionInput::new_empty(new_utxo_hash)],
@@ -960,7 +946,7 @@ fn checking_tokens_transferring() {
         }
         .sign_unchecked(&[new_utxo.clone()], 0, &alice_pub_key);
 
-        // Round 3 - Let's fail on wrong token id
+        // Let's fail on wrong token id
         let tx = Transaction {
             inputs: vec![TransactionInput::new_empty(token_utxo_hash)],
             outputs: vec![TransactionOutput::new_with_data(
@@ -979,7 +965,7 @@ fn checking_tokens_transferring() {
             "input for the token not found"
         );
 
-        // Round 3 - Let's fail on exceed token amount
+        // Let's fail on exceed token amount
         let tx = Transaction {
             inputs: vec![TransactionInput::new_empty(token_utxo_hash)],
             outputs: vec![TransactionOutput::new_with_data(
@@ -998,7 +984,7 @@ fn checking_tokens_transferring() {
             "output value must not exceed input value"
         );
 
-        // Round 3 - Let's send a big amount of MLT with the correct tokens
+        // Let's send a big amount of MLT with the correct tokens
         let tx = Transaction {
             inputs: vec![TransactionInput::new_empty(token_utxo_hash)],
             outputs: vec![TransactionOutput::new_with_data(
@@ -1017,7 +1003,7 @@ fn checking_tokens_transferring() {
             "output value must not exceed input value"
         );
 
-        // Round 3 - should be success
+        // should be success
         let tx = Transaction {
             inputs: vec![TransactionInput::new_empty(token_utxo_hash)],
             outputs: vec![TransactionOutput::new_with_data(
@@ -1039,7 +1025,6 @@ fn checking_tokens_transferring() {
 fn checking_nft_transferring() {
     let (mut test_ext, alice_pub_key, karl_pub_key) = new_test_ext_and_keys();
     test_ext.execute_with(|| {
-        // Round 1
         let token_id = TokenId::new_asset(H256::random());
         // Alice issue 1000 MLS-01, and send them to Karl and the rest back to herself
         let (utxo0, input0) = tx_input_gen_no_signature();
@@ -1067,7 +1052,6 @@ fn checking_nft_transferring() {
         let token_utxo_hash = tx.outpoint(1);
         let token_utxo = tx.outputs[1].clone();
 
-        // Round 2
         // then send rest of the tokens to karl (proving that the first tx was successful)
         let _tx = Transaction {
             inputs: vec![TransactionInput::new_empty(new_utxo_hash)],
@@ -1076,7 +1060,7 @@ fn checking_nft_transferring() {
         }
         .sign_unchecked(&[new_utxo.clone()], 0, &alice_pub_key);
 
-        // Round 3 - Let's fail on wrong token id
+        // Let's fail on wrong token id
         let tx = Transaction {
             inputs: vec![TransactionInput::new_empty(token_utxo_hash)],
             outputs: vec![TransactionOutput::new_with_data(
@@ -1095,7 +1079,7 @@ fn checking_nft_transferring() {
             "input for the token not found"
         );
 
-        // Round 3 - Let's fail on exceed token amount
+        // Let's fail on exceed token amount
         let tx = Transaction {
             inputs: vec![TransactionInput::new_empty(token_utxo_hash)],
             outputs: vec![TransactionOutput::new_with_data(
@@ -1114,7 +1098,7 @@ fn checking_nft_transferring() {
             "output value must not exceed input value"
         );
 
-        // Round 3 - Let's send a big amount of MLT with the correct tokens
+        // Let's send a big amount of MLT with the correct tokens
         let tx = Transaction {
             inputs: vec![TransactionInput::new_empty(token_utxo_hash)],
             outputs: vec![TransactionOutput::new_with_data(
@@ -1133,7 +1117,7 @@ fn checking_nft_transferring() {
             "output value must not exceed input value"
         );
 
-        // Round 3 - should be success
+        // should be success
         let tx = Transaction {
             inputs: vec![TransactionInput::new_empty(token_utxo_hash)],
             outputs: vec![TransactionOutput::new_with_data(
@@ -1156,7 +1140,6 @@ fn checking_nft_transferring() {
 fn checking_tokens_creation_with_insufficient_fee() {
     let (mut test_ext, alice_pub_key, karl_pub_key) = new_test_ext_and_keys();
     test_ext.execute_with(|| {
-        // Round 1
         let token_id = TokenId::new_asset(H256::random());
         // Alice issue 1000 MLS-01, and send them to Karl and the rest back to herself
         let (utxo0, input0) = tx_input_gen_no_signature();
@@ -1171,7 +1154,6 @@ fn checking_tokens_creation_with_insufficient_fee() {
                         token_id: token_id.clone(),
                         token_ticker: "BensT".as_bytes().to_vec(),
                         amount_to_issue: 1_000_000_000,
-                        // Should be not more than 18 numbers
                         number_of_decimals: 2,
                         metadata_uri: "facebook.com".as_bytes().to_vec(),
                     },
@@ -1186,7 +1168,7 @@ fn checking_tokens_creation_with_insufficient_fee() {
         let token_utxo = tx.outputs[1].clone();
         let tx = Transaction {
             inputs: vec![
-                // Use here token issuance for examaple
+                // Use here token issuance for example
                 TransactionInput::new_empty(token_utxo_hash),
             ],
             outputs: vec![TransactionOutput::new_with_data(
@@ -1211,21 +1193,17 @@ fn checking_tokens_creation_with_insufficient_fee() {
     });
 }
 
-// Testing the compatibility of the old version with the new one
 #[test]
 fn checking_immutable_tx_format() {
     // todo: Testing the compatibility of the old version with the new one - not done yet
 }
 
-// Testing burn tokens
 #[test]
 fn checking_burn_tokens() {
     // todo: Burn tokens has not tested yet
 }
 
-// Testing the compatibility of the old version with the new one
 #[test]
 fn checking_token_id() {
     // todo: Testing token id - not done yet
-    // Token ID should be
 }

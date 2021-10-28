@@ -355,7 +355,6 @@ pub mod pallet {
     #[pallet::getter(fn utxo_store)]
     pub(super) type UtxoStore<T: Config> = StorageMap<_, Identity, H256, TransactionOutputFor<T>>;
 
-
     #[pallet::storage]
     #[pallet::getter(fn pointer_to_issue_token)]
     pub(super) type PointerToIssueToken<T: Config> =
@@ -511,17 +510,24 @@ pub mod pallet {
                 Destination::Pubkey(_) | Destination::ScriptHash(_) => {
                     let hash = tx.outpoint(index as u64);
                     log::debug!("inserting to UtxoStore {:?} as key {:?}", output, hash);
-                    <UtxoStore<T>>::insert(hash, Some(output));
+                    <UtxoStore<T>>::insert(hash, output);
                     match &output.data {
                         Some(OutputData::NftMintV1 {
                             token_id,
                             data_hash,
                             ..
                         }) => {
+                            // We have to control that digital data of NFT is unique.
+                            // Otherwise, anybody else might make a new NFT with exactly the same hash.
                             <NftUniqueDataHash<T>>::insert(data_hash, hash);
+                            // Also, we should provide possibility of find an output that by token_id.
+                            // This output is a place where token was created. It allow us to check that a token or
+                            // a NFT have not created yet.
                             <PointerToIssueToken<T>>::insert(token_id, hash);
                         }
                         Some(OutputData::TokenIssuanceV1 { token_id, .. }) => {
+                            // For MLS-01 we save a relation between token_id and the output where
+                            // token was created.
                             <PointerToIssueToken<T>>::insert(token_id, hash);
                         }
                         _ => continue,

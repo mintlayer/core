@@ -1,25 +1,67 @@
-// DRY (Don't Repeat Yourself)
 #[macro_export]
+// The Substrate has a big macros ecosystem. That could be easily broken if T:Config will using in
+// other mod instead of lib.rs. Due to we have not enough time for quality decomposition lib.rs to
+// I decide to move this part of the code in the macro.
+//
+// At the moment, this piece of code is rough. After the test-net, we will return to https://github.com/mintlayer/core/issues/81
+// and decide how it make it better. The main problem is that there are a lot of cycles. We should split into
+// stages and use all of these checks as an array of functions that we will call on a couple of main cycles.
+// But, at the moment it works and it is suitable for the test-net.
+
 macro_rules! implement_transaction_verifier {
     () => {
         use crate::sign::TransactionSigMsg;
         use chainscript::sighash::SigHash;
 
+        // The main object, where stored temporary data about a tx
         pub struct TransactionVerifier<'a, T: Config> {
+            // Pointer to the transaction
             tx: &'a TransactionFor<T>,
+            // Vec of inputs for each Token ID
             all_inputs_map: BTreeMap<TokenId, Vec<(TransactionInput, TransactionOutputFor<T>)>>,
+            // Vec of outputs for each Token ID
             all_outputs_map: BTreeMap<TokenId, Vec<TransactionOutputFor<T>>>,
+            // The total summary value of the tokens in inputs for each TokenID
             total_value_of_input_tokens: BTreeMap<TokenId, Value>,
+            // The total summary value of the tokens in outputs for each TokenID
             total_value_of_output_tokens: BTreeMap<TokenId, Value>,
+            // Vec of outputs that should be written
             new_utxos: Vec<Vec<u8>>,
+            // For more information have a look at checking_utxos_exists
             spended_utxos: Result<
                 Vec<TransactionOutput<<T as frame_system::Config>::AccountId>>,
                 Vec<Vec<u8>>,
             >,
+            // The total reward for this tx
             reward: u64,
         }
 
         impl<T: Config> TransactionVerifier<'_, T> {
+            pub fn new(tx: &TransactionFor<T>) -> Result<TransactionVerifier<T>, &'static str> {
+                // Verify absolute time lock
+                ensure!(
+                    tx.check_time_lock::<T>(),
+                    "Time lock restrictions not satisfied"
+                );
+                // Init
+                let all_inputs_map = Self::init_inputs(&tx)?;
+                let all_outputs_map = Self::init_outputs(&tx)?;
+                let total_value_of_input_tokens =
+                    Self::init_total_value_of_input_tokens(&all_inputs_map)?;
+                let total_value_of_output_tokens =
+                    Self::init_total_value_of_output_tokens(&all_outputs_map)?;
+                Ok(TransactionVerifier {
+                    tx,
+                    all_inputs_map,
+                    all_outputs_map,
+                    total_value_of_input_tokens,
+                    total_value_of_output_tokens,
+                    new_utxos: Vec::new(),
+                    spended_utxos: Ok(Vec::new()),
+                    reward: 0,
+                })
+            }
+
             // Turn Vector into BTreeMap
             fn init_inputs(
                 tx: &TransactionFor<T>,
@@ -292,32 +334,7 @@ macro_rules! implement_transaction_verifier {
                 Ok(total_value_of_output_tokens)
             }
 
-            pub fn new(tx: &TransactionFor<T>) -> Result<TransactionVerifier<T>, &'static str> {
-                // Verify absolute time lock
-                ensure!(
-                    tx.check_time_lock::<T>(),
-                    "Time lock restrictions not satisfied"
-                );
-                let all_inputs_map = Self::init_inputs(&tx)?;
-                let all_outputs_map = Self::init_outputs(&tx)?;
-                let total_value_of_input_tokens =
-                    Self::init_total_value_of_input_tokens(&all_inputs_map)?;
-                let total_value_of_output_tokens =
-                    Self::init_total_value_of_output_tokens(&all_outputs_map)?;
-                Ok(TransactionVerifier {
-                    tx,
-                    all_inputs_map,
-                    all_outputs_map,
-                    total_value_of_input_tokens,
-                    total_value_of_output_tokens,
-                    new_utxos: Vec::new(),
-                    spended_utxos: Ok(Vec::new()),
-                    reward: 0,
-                })
-            }
-
             fn get_token_id_from_input(outpoint: H256) -> Result<TokenId, &'static str> {
-                //if let Some(input_utxo) = crate::UtxoStore::<T>::get(&outpoint) {
                 if let Some(input_utxo) = <UtxoStore<T>>::get(outpoint) {
                     match input_utxo.data {
                         Some(data) => data.id().ok_or("Token had burned or input incorrect"),
@@ -491,14 +508,15 @@ macro_rules! implement_transaction_verifier {
                     }
                 }
                 // Check that enough fee
-
                 let mlt = self
                     .total_value_of_input_tokens
                     .get(&TokenId::mlt())
                     .ok_or("not found MLT fees")?;
                 if cfg!(test) {
+                    // For tests we will use a small amount of MLT
                     ensure!(mlt >= &(num_creations * 10), "insufficient fee");
                 } else {
+                    // If we are not in tests, we should use 100 MLT for each token creation
                     ensure!(
                         mlt >= &(num_creations * crate::tokens::Mlt(100).to_munit()),
                         "insufficient fee"
