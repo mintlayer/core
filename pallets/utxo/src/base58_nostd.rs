@@ -7,7 +7,8 @@
 use sp_std::vec;
 use sp_std::vec::Vec;
 
-const ALPHABET: &'static [u8] = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+const BASE58_ALPHABET: &'static [u8] =
+    b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
 const B58_DIGITS_MAP: &'static [i8] = &[
     -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
@@ -56,8 +57,6 @@ impl ToBase58 for [u8] {
                 carry += 256 * buffer[j] as u32;
                 buffer[j] = (carry % 58) as u8;
                 carry /= 58;
-
-                // in original trezor implementation it was underflowing
                 if j > 0 {
                     j -= 1;
                 }
@@ -75,7 +74,7 @@ impl ToBase58 for [u8] {
         }
 
         while j < size {
-            result.push(ALPHABET[buffer[j] as usize]);
+            result.push(BASE58_ALPHABET[buffer[j] as usize]);
             j += 1;
         }
 

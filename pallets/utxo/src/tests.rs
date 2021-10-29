@@ -551,7 +551,7 @@ use rand::Rng;
 fn build_random_vec(len: usize) -> Vec<u8> {
     let mut rng = rand::thread_rng();
     let mut vec = Vec::with_capacity(len);
-    for _ in 1..len {
+    for _ in 0..len {
         vec.push(rng.gen::<u8>());
     }
     vec
@@ -559,7 +559,7 @@ fn build_random_vec(len: usize) -> Vec<u8> {
 
 #[test]
 // Simple creation of tokens
-fn checking_tokens_issuance() {
+fn test_token_issuance() {
     execute_with_alice(|alice_pub_key| {
         let (utxo0, input0) = tx_input_gen_no_signature();
         let first_input_hash = BlakeTwo256::hash(&input0.outpoint.as_ref());
@@ -583,7 +583,9 @@ fn checking_tokens_issuance() {
         .sign_unchecked(&[utxo0], 0, &alice_pub_key);
         let new_utxo_hash = tx.outpoint(0);
         let (_, init_utxo) = genesis_utxo();
-        // Spend
+        // submit tx - in the test it makes a new UTXO. Checks before that this UTXO has not created yet.
+        // After calling `Utxo::spend`, we should check that Storages successfully changed.
+        // If it successfully wrote a new UTXO in the Storage, tx goes through all verifications correctly.
         assert!(UtxoStore::<Test>::contains_key(H256::from(init_utxo)));
         assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx));
         assert!(!UtxoStore::<Test>::contains_key(H256::from(init_utxo)));
@@ -607,7 +609,7 @@ fn checking_tokens_issuance() {
 
 #[test]
 // Simple creation of NFT
-fn checking_nft_mint() {
+fn test_nft_mint() {
     execute_with_alice(|alice_pub_key| {
         let (utxo0, input0) = tx_input_gen_no_signature();
         let first_input_hash = BlakeTwo256::hash(&input0.outpoint.as_ref());
@@ -649,7 +651,7 @@ fn checking_nft_mint() {
 
 #[test]
 // NFT might be only unique, we can't create a few nft for one item
-fn checking_nft_unique() {
+fn test_nft_unique() {
     execute_with_alice(|alice_pub_key| {
         let (utxo0, input0) = tx_input_gen_no_signature();
         let first_input_hash = BlakeTwo256::hash(&input0.outpoint.as_ref());
@@ -709,7 +711,7 @@ fn checking_nft_unique() {
 
 #[test]
 // Creation a token with a pre-existing ID or re-creation of an already created token.
-fn checking_tokens_double_creation() {
+fn test_token_double_creation() {
     execute_with_alice(|alice_pub_key| {
         let (utxo0, input0) = tx_input_gen_no_signature();
         let first_input_hash = BlakeTwo256::hash(&input0.outpoint.as_ref());
@@ -776,7 +778,7 @@ fn checking_tokens_double_creation() {
 }
 
 #[test]
-fn checking_tokens_with_invalid_data() {
+fn test_tokens_with_invalid_data() {
     macro_rules! test_tx {
         ($data: ident, $checking: tt, $err: expr) => {
             execute_with_alice(|alice_pub_key| {
@@ -905,7 +907,7 @@ fn checking_tokens_with_invalid_data() {
 }
 
 #[test]
-fn checking_tokens_transferring() {
+fn test_tokens_transferring() {
     let (mut test_ext, alice_pub_key, karl_pub_key) = new_test_ext_and_keys();
     test_ext.execute_with(|| {
         let token_id = TokenId::new_asset(H256::random());
@@ -1022,7 +1024,7 @@ fn checking_tokens_transferring() {
 }
 
 #[test]
-fn checking_nft_transferring() {
+fn test_nft_transferring() {
     let (mut test_ext, alice_pub_key, karl_pub_key) = new_test_ext_and_keys();
     test_ext.execute_with(|| {
         let token_id = TokenId::new_asset(H256::random());
@@ -1137,7 +1139,7 @@ fn checking_nft_transferring() {
 
 #[test]
 // Test tx where Input with token and without MLT, output has token (without MLT)
-fn checking_tokens_creation_with_insufficient_fee() {
+fn test_token_creation_with_insufficient_fee() {
     let (mut test_ext, alice_pub_key, karl_pub_key) = new_test_ext_and_keys();
     test_ext.execute_with(|| {
         let token_id = TokenId::new_asset(H256::random());
@@ -1194,16 +1196,16 @@ fn checking_tokens_creation_with_insufficient_fee() {
 }
 
 #[test]
-fn checking_immutable_tx_format() {
+fn test_immutable_tx_format() {
     // todo: Testing the compatibility of the old version with the new one - not done yet
 }
 
 #[test]
-fn checking_burn_tokens() {
+fn test_burn_tokens() {
     // todo: Burn tokens has not tested yet
 }
 
 #[test]
-fn checking_token_id() {
+fn test_token_id() {
     // todo: Testing token id - not done yet
 }
