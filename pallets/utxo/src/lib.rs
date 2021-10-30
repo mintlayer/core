@@ -1080,6 +1080,8 @@ where
             time_lock: Default::default(),
         };
 
+		log::info!("{:#?}", tx);
+
         spend::<T>(caller, &tx).map_err(|_| "Failed to spend the transaction!")?;
         Ok(())
     }

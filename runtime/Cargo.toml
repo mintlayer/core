@@ -17,6 +17,7 @@ branch = "master"
 
 [dependencies]
 pallet-utxo-tokens = { path = "../pallets/utxo/tokens" }
+log = "0.4.8"
 
 [dependencies.codec]
 default-features = false

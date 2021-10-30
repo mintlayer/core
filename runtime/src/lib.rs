@@ -118,7 +118,7 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 /// up by `pallet_aura` to implement `fn slot_duration()`.
 ///
 /// Change this to adjust the block time.
-pub const MILLISECS_PER_BLOCK: u64 = 60_000; //1 min
+pub const MILLISECS_PER_BLOCK: u64 = 60_00; //1 min
 
 // NOTE: Currently it is not possible to change the slot duration after the chain has started.
 //       Attempting to do so will brick block production.
@@ -474,6 +474,9 @@ impl_runtime_apis! {
             tx: <Block as BlockT>::Extrinsic,
             block_hash: <Block as BlockT>::Hash,
         ) -> TransactionValidity {
+            
+            log::error!("{:#?}", source);
+            
             if let Some(pallet_utxo::Call::spend(ref tx)) =
             IsSubType::<pallet_utxo::Call::<Runtime>>::is_sub_type(&tx.function) {
                 match pallet_utxo::validate_transaction::<Runtime>(&tx) {

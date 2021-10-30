@@ -54,6 +54,11 @@ class Client:
             matching = lambda e: e[1].destination.get_pubkey() == keypair.public_key
         return filter(matching, self.utxos())
 
+    """ Get all extrinsics of given block """
+    def extrinsics(self, blk_hash):
+        blk = self.substrate.get_block()
+        return blk['extrinsics']
+
     """ Submit a transaction onto the blockchain """
     def submit(self, keypair, tx):
         call = self.substrate.compose_call(

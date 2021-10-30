@@ -1,0 +1,222 @@
+{
+  "metadataVersion": "0.1.0",
+  "source": {
+    "hash": "0x0831799d9c40313feb42dc96047a05208d4264df65fd3ed7abaaa78b8b42b8bd",
+    "language": "ink! 3.0.0-rc4",
+    "compiler": "rustc 1.56.0-nightly"
+  },
+  "contract": {
+    "name": "pooltester",
+    "version": "0.1.0",
+    "authors": [
+      "RBB S.r.l"
+    ]
+  },
+  "spec": {
+    "constructors": [
+      {
+        "args": [
+          {
+            "name": "value",
+            "type": {
+              "displayName": [
+                "i64"
+              ],
+              "type": 1
+            }
+          }
+        ],
+        "docs": [],
+        "name": [
+          "new"
+        ],
+        "selector": "0x9bae9d5e"
+      },
+      {
+        "args": [],
+        "docs": [],
+        "name": [
+          "default"
+        ],
+        "selector": "0xed4b9d1b"
+      }
+    ],
+    "docs": [],
+    "events": [],
+    "messages": [
+      {
+        "args": [],
+        "docs": [],
+        "mutates": true,
+        "name": [
+          "get"
+        ],
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "i64"
+          ],
+          "type": 1
+        },
+        "selector": "0x2f865bd9"
+      },
+      {
+        "args": [],
+        "docs": [],
+        "mutates": true,
+        "name": [
+          "flip"
+        ],
+        "payable": false,
+        "returnType": null,
+        "selector": "0x633aa551"
+      },
+      {
+        "args": [
+          {
+            "name": "dest",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          }
+        ],
+        "docs": [],
+        "mutates": true,
+        "name": [
+          "send_to_pubkey"
+        ],
+        "payable": false,
+        "returnType": null,
+        "selector": "0xd10be299"
+      },
+      {
+        "args": [],
+        "docs": [],
+        "mutates": true,
+        "name": [
+          "fund"
+        ],
+        "payable": false,
+        "returnType": null,
+        "selector": "0x4aafa343"
+      },
+      {
+        "args": [],
+        "docs": [],
+        "mutates": true,
+        "name": [
+          "send_to_self"
+        ],
+        "payable": false,
+        "returnType": null,
+        "selector": "0xba6ee83a"
+      },
+      {
+        "args": [
+          {
+            "name": "dest",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 2
+            }
+          },
+          {
+            "name": "selector",
+            "type": {
+              "displayName": [
+                "Vec"
+              ],
+              "type": 5
+            }
+          },
+          {
+            "name": "value",
+            "type": {
+              "displayName": [
+                "u32"
+              ],
+              "type": 6
+            }
+          }
+        ],
+        "docs": [],
+        "mutates": true,
+        "name": [
+          "call_contract"
+        ],
+        "payable": false,
+        "returnType": null,
+        "selector": "0xc7c0b7ca"
+      }
+    ]
+  },
+  "storage": {
+    "struct": {
+      "fields": [
+        {
+          "layout": {
+            "cell": {
+              "key": "0x0000000000000000000000000000000000000000000000000000000000000000",
+              "ty": 1
+            }
+          },
+          "name": "value"
+        }
+      ]
+    }
+  },
+  "types": [
+    {
+      "def": {
+        "primitive": "i64"
+      }
+    },
+    {
+      "def": {
+        "composite": {
+          "fields": [
+            {
+              "type": 3,
+              "typeName": "[u8; 32]"
+            }
+          ]
+        }
+      },
+      "path": [
+        "ink_env",
+        "types",
+        "AccountId"
+      ]
+    },
+    {
+      "def": {
+        "array": {
+          "len": 32,
+          "type": 4
+        }
+      }
+    },
+    {
+      "def": {
+        "primitive": "u8"
+      }
+    },
+    {
+      "def": {
+        "sequence": {
+          "type": 4
+        }
+      }
+    },
+    {
+      "def": {
+        "primitive": "u32"
+      }
+    }
+  ]
+}

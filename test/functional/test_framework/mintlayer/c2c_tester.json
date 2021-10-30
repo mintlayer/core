@@ -1,0 +1,90 @@
+{
+  "metadataVersion": "0.1.0",
+  "source": {
+    "hash": "0x241e86037e1803891112031bb03b7816d4b00d50effc920dae39c2004efb2ca4",
+    "language": "ink! 3.0.0-rc4",
+    "compiler": "rustc 1.56.0-nightly"
+  },
+  "contract": {
+    "name": "c2c_tester",
+    "version": "0.1.0",
+    "authors": [
+      "RBB S.r.l"
+    ]
+  },
+  "spec": {
+    "constructors": [
+      {
+        "args": [],
+        "docs": [],
+        "name": [
+          "default"
+        ],
+        "selector": "0xed4b9d1b"
+      }
+    ],
+    "docs": [],
+    "events": [],
+    "messages": [
+      {
+        "args": [
+          {
+            "name": "value",
+            "type": {
+              "displayName": [
+                "u32"
+              ],
+              "type": 1
+            }
+          }
+        ],
+        "docs": [],
+        "mutates": true,
+        "name": [
+          "set_value"
+        ],
+        "payable": false,
+        "returnType": null,
+        "selector": "0xc6298215"
+      },
+      {
+        "args": [],
+        "docs": [],
+        "mutates": false,
+        "name": [
+          "get"
+        ],
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "u32"
+          ],
+          "type": 1
+        },
+        "selector": "0x2f865bd9"
+      }
+    ]
+  },
+  "storage": {
+    "struct": {
+      "fields": [
+        {
+          "layout": {
+            "cell": {
+              "key": "0x0000000000000000000000000000000000000000000000000000000000000000",
+              "ty": 1
+            }
+          },
+          "name": "value"
+        }
+      ]
+    }
+  },
+  "types": [
+    {
+      "def": {
+        "primitive": "u32"
+      }
+    }
+  ]
+}
