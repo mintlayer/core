@@ -78,10 +78,10 @@ class Client(Staking):
 
         try:
             receipt = self.substrate.submit_extrinsic(extrinsic, wait_for_inclusion=True)
-            print("Extrinsic '{}' sent and included in block '{}'".format(receipt.extrinsic_hash, receipt.block_hash))
+            self.log.debug("Extrinsic '{}' sent and included in block '{}'".format(receipt.extrinsic_hash, receipt.block_hash))
             return (receipt.extrinsic_hash, receipt.block_hash, receipt.triggered_events)
         except SubstrateRequestException as e:
-            print("Failed to send: {}".format(e))
+            self.log.debug("Failed to send: {}".format(e))
 
     """ Submit a transaction onto the blockchain: unlock """
     def unlock_request_for_withdrawal(self, keypair):
@@ -92,14 +92,14 @@ class Client(Staking):
         )
         #TODO ^ same code as above; put them in 1 func
         extrinsic = self.substrate.create_signed_extrinsic(call=call, keypair=keypair)
-        print("extrinsic submitted...")
+        self.log.debug("unlock request extrinsic submitted...")
 
         try:
             receipt = self.substrate.submit_extrinsic(extrinsic, wait_for_inclusion=True)
-            print("Extrinsic '{}' sent and included in block '{}'".format(receipt.extrinsic_hash, receipt.block_hash))
+            self.log.debug("Extrinsic '{}' sent and included in block '{}'".format(receipt.extrinsic_hash, receipt.block_hash))
             return (receipt.extrinsic_hash, receipt.block_hash, receipt.triggered_events)
         except SubstrateRequestException as e:
-            print("Failed to send: {}".format(e))
+            self.log.debug("Failed to send: {}".format(e))
 
     """ Submit a transaction onto the blockchain: withdraw """
     def withdraw_stake(self, keypair, outpoints):
@@ -110,11 +110,11 @@ class Client(Staking):
         )
         #TODO ^ same code as above; put them in 1 func
         extrinsic = self.substrate.create_signed_extrinsic(call=call, keypair=keypair)
-        print("extrinsic submitted...")
+        self.log.debug("withdraw extrinsic submitted...")
 
         try:
             receipt = self.substrate.submit_extrinsic(extrinsic, wait_for_inclusion=True)
-            print("Extrinsic '{}' sent and included in block '{}'".format(receipt.extrinsic_hash, receipt.block_hash))
+            self.log.debug("Extrinsic '{}' sent and included in block '{}'".format(receipt.extrinsic_hash, receipt.block_hash))
             return (receipt.extrinsic_hash, receipt.block_hash, receipt.triggered_events)
         except SubstrateRequestException as e:
             self.log.info("Failed to send: {}".format(e))

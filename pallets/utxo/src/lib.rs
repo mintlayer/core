@@ -96,7 +96,7 @@ pub mod pallet {
     pub struct Mlt(Value);
     impl Mlt {
         pub fn to_munit(&self) -> Value {
-            self.0 * MLT_UNIT
+            &self.0 * MLT_UNIT
         }
     }
 
@@ -989,7 +989,7 @@ pub mod pallet {
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
-        #[pallet::weight(T::WeightInfo::spend(tx.inputs.len().saturating_add(tx.outputs.len()) as u32))]
+        #[pallet::weight(<T as Config>::WeightInfo::spend(tx.inputs.len().saturating_add(tx.outputs.len()) as u32))]
         pub fn spend(
             origin: OriginFor<T>,
             tx: Transaction<T::AccountId>,
@@ -999,7 +999,7 @@ pub mod pallet {
             Ok(().into())
         }
 
-        #[pallet::weight(T::WeightInfo::token_create(768_usize.saturating_add(token_name.len()) as u32))]
+        #[pallet::weight(<T as Config>::WeightInfo::token_create(768_usize.saturating_add(token_name.len()) as u32))]
         pub fn token_create(
             origin: OriginFor<T>,
             public: H256,
@@ -1021,7 +1021,7 @@ pub mod pallet {
             Ok(().into())
         }
 
-        #[pallet::weight(T::WeightInfo::send_to_address(16_u32.saturating_add(address.len() as u32)))]
+        #[pallet::weight(<T as Config>::WeightInfo::send_to_address(16_u32.saturating_add(address.len() as u32)))]
         pub fn send_to_address(
             origin: OriginFor<T>,
             value: Value,
@@ -1075,6 +1075,7 @@ pub mod pallet {
                     },
                     TransactionOutput::new_pubkey(total - value, H256::from(pubkey_raw)),
                 ],
+                time_lock: Default::default(),
             };
 
             for i in 0..tx.inputs.len() {
@@ -1089,7 +1090,7 @@ pub mod pallet {
         /// unlock the stake, if user wants to stop validating and withdraw the locked utxos.
         /// If used with `pallet-staking`, it uses the `BondingDuration`
         /// to set the period/era on when to withdraw.
-        #[pallet::weight(T::WeightInfo::unlock_request_for_withdrawal(1 as u32))]
+        #[pallet::weight(<T as Config>::WeightInfo::unlock_request_for_withdrawal(1 as u32))]
         pub fn unlock_request_for_withdrawal(
             origin: OriginFor<T>,
             controller_account: T::AccountId,
@@ -1104,7 +1105,7 @@ pub mod pallet {
         /// its ledger of datatype `StakingLedger`,
         /// the field `unlocking` of datatype `UnlockChunk`,
         /// and at field `era`.
-        #[pallet::weight(T::WeightInfo::withdraw_stake(outpoints.len() as u32))]
+        #[pallet::weight(<T as Config>::WeightInfo::withdraw_stake(outpoints.len() as u32))]
         pub fn withdraw_stake(
             origin: OriginFor<T>,
             controller_account: T::AccountId,
@@ -1139,7 +1140,7 @@ pub mod pallet {
     impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
         fn build(&self) {
             self.genesis_utxos.iter().cloned().for_each(|u| {
-                UtxoStore::<T>::insert(BlakeTwo256::hash_of(&u), Some(u));
+                UtxoStore::<T>::insert(BlakeTwo256::hash_of(&u), u);
             });
 
             self.locked_utxos.iter().cloned().enumerate().for_each(|(index, u)| {
@@ -1212,7 +1213,53 @@ where
             &Transaction {
                 inputs: vec![TransactionInput::new_with_signature(utxo, sig)],
                 outputs: vec![TransactionOutputFor::<T>::new_pubkey(value, address)],
+                time_lock: Default::default(),
             },
         )
+    }
+
+    fn send_conscrit_p2pk(
+        caller: &T::AccountId,
+        dest: &T::AccountId,
+        value: u128,
+        outpoints: &Vec<H256>,
+    ) -> Result<(), DispatchError> {
+        let pubkey_raw: [u8; 32] =
+            dest.encode().try_into().map_err(|_| "Failed to get caller's public key")?;
+
+        spend::<T>(
+            caller,
+            &Transaction {
+                inputs: coin_picker::<T>(outpoints)?,
+                outputs: vec![TransactionOutput::new_pubkey(value, H256::from(pubkey_raw))],
+                time_lock: Default::default(),
+            },
+        )
+        .map_err(|_| "Failed to spend the transaction!")?;
+        Ok(())
+    }
+
+    fn send_conscrit_c2c(
+        caller: &Self::AccountId,
+        dest: &Self::AccountId,
+        value: u128,
+        data: &Vec<u8>,
+        outpoints: &Vec<H256>,
+    ) -> Result<(), DispatchError> {
+        spend::<T>(
+            caller,
+            &Transaction {
+                inputs: coin_picker::<T>(outpoints)?,
+                outputs: vec![TransactionOutput::new_call_pp(
+                    value,
+                    dest.clone(),
+                    true,
+                    data.clone(),
+                )],
+                time_lock: Default::default(),
+            },
+        )
+        .map_err(|_| "Failed to spend the transaction!")?;
+        Ok(())
     }
 }

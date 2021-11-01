@@ -81,7 +81,7 @@ pub(crate) fn withdraw<T: Config>(controller_account: T::AccountId, outpoints: V
 
     let hash = BlakeTwo256::hash_of(&outpoints);
     let utxo = TransactionOutput::new_pubkey(total, controller_pubkey);
-    <UtxoStore<T>>::insert(hash, Some(utxo));
+    <UtxoStore<T>>::insert(hash, utxo);
 
     let reward_total = <RewardTotal<T>>::take();
     <RewardTotal<T>>::put(reward_total + fee);

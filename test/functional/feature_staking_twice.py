@@ -118,7 +118,7 @@ class ExampleTest(MintlayerTestFramework):
 
         # Get Charlie
         charlie_count = list(filter(lambda e: e[0].value == charlie.public_key , updated_count))[0][1]
-        print("CHARLIE COUNT: ", charlie_count)
+
         # charlie should have 2 locked utxos
         assert_equal(charlie_count[0], 2)
 #

@@ -63,7 +63,7 @@ pub(crate) fn reward_block_author<T:Config>(block_number: T::BlockNumber) {
             };
 
             if !<UtxoStore<T>>::contains_key(hash) {
-                <UtxoStore<T>>::insert(hash, Some(utxo.clone()));
+                <UtxoStore<T>>::insert(hash, utxo.clone());
 
                 <Pallet<T>>::deposit_event(Event::<T>::BlockAuthorRewarded(utxo));
             }
