@@ -1153,8 +1153,9 @@ pub mod pallet {
     #[pallet::genesis_build]
     impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
         fn build(&self) {
-            self.genesis_utxos.iter().cloned().for_each(|u| {
-                UtxoStore::<T>::insert(BlakeTwo256::hash_of(&u), u);
+            self.genesis_utxos.iter().cloned().enumerate().for_each(|(index,u)| {
+                // added the index and the `genesis` on the hashing, to indicate that these utxos are from the beginning of the chain.
+                UtxoStore::<T>::insert(BlakeTwo256::hash_of(&(&u, index as u64, "genesis")), u);
             });
 
             self.locked_utxos.iter().cloned().enumerate().for_each(|(index, u)| {

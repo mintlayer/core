@@ -269,6 +269,13 @@ impl SysConfig for Test {
     type OnSetCode = ();
 }
 
+impl pallet_timestamp::Config for Test {
+    type Moment = u64;
+    type OnTimestampSet = ();
+    type MinimumPeriod = MinimumPeriod;
+    type WeightInfo = ();
+}
+
 parameter_types! {
     pub const MaxAuthorities: u32 = 1000;
     pub const MinimumStake: u128 = 10;

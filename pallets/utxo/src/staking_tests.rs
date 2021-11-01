@@ -46,6 +46,7 @@ fn simple_staking() {
                 ),
                 TransactionOutput::new_pubkey(90, H256::from(karl_pub_key)),
             ],
+            time_lock: Default::default(),
         }
         .sign(&[utxo], 0, &karl_pub_key)
         .expect("karl's pub key not found");
@@ -85,6 +86,7 @@ fn less_than_minimum_stake() {
                 ),
                 TransactionOutput::new_pubkey(90, H256::from(karl_pub_key)),
             ],
+            time_lock: Default::default(),
         };
         let karl_sig = crypto::sr25519_sign(SR25519, &karl_pub_key, &tx.encode()).unwrap();
         tx.inputs[0].witness = karl_sig.0.to_vec();
@@ -115,13 +117,14 @@ fn staker_staking_again() {
                 ),
                 TransactionOutput::new_pubkey(90, H256::from(alice_pub_key)),
             ],
+            time_lock: Default::default(),
         }
         .sign(&[utxo], 0, &alice_pub_key)
         .expect(" alice's pub key not found");
 
         assert_err!(
             Utxo::spend(Origin::signed(H256::zero()), tx),
-            Error::<Test>::ControllerAccountAlreadyRegistered
+            "ControllerAccountAlreadyRegistered"
         );
     })
 }
@@ -146,6 +149,7 @@ fn stash_account_is_staking() {
                 ),
                 TransactionOutput::new_pubkey(90, H256::from(tom_pub_key)),
             ],
+            time_lock: Default::default(),
         }
         .sign(&[utxo.clone()], 0, &tom_pub_key)
         .expect("tom's public key not found");
@@ -170,6 +174,7 @@ fn simple_staking_extra() {
                 TransactionOutput::new_lock_extra_for_staking(20, H256::from(alice_pub_key)),
                 TransactionOutput::new_pubkey(70, H256::from(alice_pub_key)),
             ],
+            time_lock: Default::default(),
         }
         .sign(&[utxo], 0, &alice_pub_key)
         .expect(" alice's pub key not found");
@@ -202,6 +207,7 @@ fn non_validator_staking_extra() {
                 TransactionOutput::new_lock_extra_for_staking(20, H256::from(greg_pub_key)),
                 TransactionOutput::new_pubkey(100, H256::from(greg_pub_key)),
             ],
+            time_lock: Default::default(),
         }
         .sign(&[utxo], 0, &greg_pub_key)
         .expect("greg's pub key not found");
