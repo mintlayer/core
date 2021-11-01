@@ -327,6 +327,14 @@ pub fn run_script<'a, Ctx: Context>(
                         let _ = exec_stack.pop().ok_or(Error::UnbalancedIfElse)?;
                     }
                 },
+                opcodes::Class::TimeLock(opcode) if executing => {
+                    let time = script::read_scriptint_size(stack.top(0)?.as_ref(), 8)?;
+                    let ok = match opcode {
+                        opcodes::TimeLock::OP_CLTV => ctx.check_lock_time(time),
+                        opcodes::TimeLock::OP_CSV => ctx.check_sequence(time),
+                    };
+                    ensure!(ok, Error::TimeLock);
+                }
                 opcodes::Class::Ordinary(opcode) if executing => {
                     execute_opcode(opcode, &mut stack)?;
                 }
@@ -334,7 +342,10 @@ pub fn run_script<'a, Ctx: Context>(
             },
         }
 
-        ensure!((stack.len() + alt_stack.len()) <= Ctx::MAX_STACK_ELEMENTS, Error::StackSize);
+        ensure!(
+            (stack.len() + alt_stack.len()) <= Ctx::MAX_STACK_ELEMENTS,
+            Error::StackSize
+        );
         cur_instr_num = cur_instr_num.saturating_add(1);
     }
 
@@ -519,6 +530,7 @@ fn op_hash<T: AsRef<[u8]>>(stack: &mut Stack, f: impl FnOnce(&[u8]) -> T) -> cra
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::opcodes::all as opc;
     use crate::{context::testcontext::TestContext, script::Builder, util::sha256};
     use hex_literal::hex;
     use proptest::{collection::SizeRange, prelude::*};
@@ -836,6 +848,19 @@ mod test {
             let script = builder.into_script();
             let result = run_script(&TestContext::default(), &script, vec![].into());
             prop_assert_eq!(result, Err(Error::StackSize));
+        }
+
+        #[test]
+        fn prop_abs_time_lock(cur_block in 0i64..100_000, lock_time in 0i64..100_000) {
+            let script = Builder::new().push_int(lock_time).push_opcode(opc::OP_CLTV).into_script();
+            let ctx = TestContext::new_at_height(Vec::new(), cur_block as u64);
+            let result = run_script(&ctx, &script, Vec::new().into());
+            if cur_block >= lock_time {
+                let final_stack = vec![script::build_scriptint(lock_time).into()].into();
+                prop_assert_eq!(result, Ok(final_stack));
+            } else {
+                prop_assert_eq!(result, Err(Error::TimeLock));
+            }
         }
     }
 }

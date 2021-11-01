@@ -41,8 +41,20 @@ mod sign;
 pub mod staking;
 pub mod weights;
 
+use chainscript::Builder;
+use codec::Encode;
+use core::convert::TryInto;
+use frame_support::{
+    inherent::Vec,
+    pallet_prelude::{DispatchError, DispatchResultWithPostInfo},
+};
+use sp_core::{crypto::UncheckedFrom, H256, H512};
+use sp_runtime::sp_std::vec;
+use utxo_api::UtxoApi;
+
 #[frame_support::pallet]
 pub mod pallet {
+    pub use crate::script::{BlockTime, RawBlockTime};
     use crate::sign::{self, Scheme};
     use crate::{OutputHeaderData, OutputHeaderHelper, TXOutputHeader, TokenID, TokenType};
     use crate::{rewards::reward_block_author};
@@ -56,9 +68,9 @@ pub mod pallet {
         dispatch::{DispatchResultWithPostInfo, Vec},
         pallet_prelude::*,
         sp_io::crypto,
-        sp_runtime::traits::{BlakeTwo256, Dispatchable, Hash},
         sp_runtime::Percent,
-        traits::IsSubType,
+        sp_runtime::traits::{BlakeTwo256, Dispatchable, Hash},
+        traits::{IsSubType, UnixTime},
     };
     use frame_system::pallet_prelude::*;
     use hex_literal::hex;
@@ -73,9 +85,7 @@ pub mod pallet {
         testing::SR25519,
         H256, H512,
     };
-    use sp_runtime::traits::{
-        AtLeast32Bit, Zero, /*, StaticLookup , AtLeast32BitUnsigned, Member, One */
-    };
+    use sp_runtime::traits::{AtLeast32Bit, Zero};
     use sp_runtime::DispatchErrorWithPostInfo;
 
     pub type Value = u128;
@@ -144,7 +154,7 @@ pub mod pallet {
 
     /// runtime configuration
     #[pallet::config]
-    pub trait Config: frame_system::Config {
+    pub trait Config: frame_system::Config + pallet_timestamp::Config {
         type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 
         type AssetId: Parameter + AtLeast32Bit + Default + Copy;
@@ -182,7 +192,6 @@ pub mod pallet {
         type StakingHelper: StakingHelper<Self::AccountId>;
 
         fn authorities() -> Vec<H256>;
-
     }
 
     pub trait WeightInfo {
@@ -265,8 +274,9 @@ pub mod pallet {
         Pubkey(sr25519::Public),
         /// Pay to fund a new programmable pool. Takes code and data.
         CreatePP(Vec<u8>, Vec<u8>),
-        /// Pay to an existing contract. Takes a destination account and input data.
-        CallPP(AccountId, Vec<u8>),
+        /// Pay to an existing contract. Takes a destination account,
+        /// whether the call funds the contract, and input data.
+        CallPP(AccountId, bool, Vec<u8>),
         /// Pay to script hash
         ScriptHash(H256),
         /// First attempt of staking.
@@ -358,11 +368,16 @@ pub mod pallet {
         }
 
         /// Create a new output to call a smart contract routine.
-        pub fn new_call_pp(value: Value, dest_account: AccountId, input: Vec<u8>) -> Self {
+        pub fn new_call_pp(
+            value: Value,
+            dest_account: AccountId,
+            fund: bool,
+            input: Vec<u8>,
+        ) -> Self {
             Self {
                 value,
                 header: 0,
-                destination: Destination::CallPP(dest_account, input),
+                destination: Destination::CallPP(dest_account, fund, input),
             }
         }
 
@@ -414,6 +429,7 @@ pub mod pallet {
     pub struct Transaction<AccountId> {
         pub(crate) inputs: Vec<TransactionInput>,
         pub(crate) outputs: Vec<TransactionOutput<AccountId>>,
+        pub(crate) time_lock: RawBlockTime,
     }
 
     impl<AccountId: Encode> Transaction<AccountId> {
@@ -439,6 +455,17 @@ pub mod pallet {
             self.inputs[index].witness =
                 crypto::sr25519_sign(SR25519, pk, &msg.encode())?.0.to_vec();
             Some(self)
+        }
+
+        pub fn check_time_lock<T: Config>(&self) -> bool {
+            match self.time_lock.time() {
+                BlockTime::Blocks(lock_block_num) => {
+                    <frame_system::Pallet<T>>::block_number() >= lock_block_num.into()
+                }
+                BlockTime::Timestamp(lock_time) => {
+                    <pallet_timestamp::Pallet<T> as UnixTime>::now() >= lock_time
+                }
+            }
         }
     }
 
@@ -468,8 +495,7 @@ pub mod pallet {
 
     #[pallet::storage]
     #[pallet::getter(fn utxo_store)]
-    pub(super) type UtxoStore<T: Config> =
-    StorageMap<_, Identity, H256, Option<TransactionOutputFor<T>>, ValueQuery>;
+    pub(super) type UtxoStore<T: Config> = StorageMap<_, Identity, H256, TransactionOutputFor<T>>;
 
     /// Represents the validators' stakes. When a validator chooses to stop validating,
     /// the utxo here is transferred back to `UtxoStore`.
@@ -511,7 +537,6 @@ pub mod pallet {
         }
     }
 
-
     // Strips a transaction of its Signature fields by replacing value with ZERO-initialized fixed hash.
     pub fn get_simple_transaction<AccountId: Encode + Clone>(
         tx: &Transaction<AccountId>,
@@ -523,19 +548,40 @@ pub mod pallet {
         trx.encode()
     }
 
-    pub fn create<T: Config>(caller: &T::AccountId, code: &Vec<u8>, data: &Vec<u8>) {
+    pub fn create<T: Config>(
+        caller: &T::AccountId,
+        code: &Vec<u8>,
+        utxo_hash: H256,
+        utxo_value: u128,
+        data: &Vec<u8>,
+    ) {
         let weight: Weight = 6000000000;
 
-        match T::ProgrammablePool::create(caller, weight, code, data) {
+        match T::ProgrammablePool::create(caller, weight, code, utxo_hash, utxo_value, data) {
             Ok(_) => log::info!("success!"),
             Err(e) => log::error!("failure: {:#?}", e),
         }
     }
 
-    pub fn call<T: Config>(caller: &T::AccountId, dest: &T::AccountId, data: &Vec<u8>) {
+    pub fn call<T: Config>(
+        caller: &T::AccountId,
+        dest: &T::AccountId,
+        utxo_hash: H256,
+        utxo_value: u128,
+        fund_contract: bool,
+        data: &Vec<u8>,
+    ) {
         let weight: Weight = 6000000000;
 
-        match T::ProgrammablePool::call(caller, dest, weight, data) {
+        match T::ProgrammablePool::call(
+            caller,
+            dest,
+            weight,
+            utxo_hash,
+            utxo_value,
+            fund_contract,
+            data,
+        ) {
             Ok(_) => log::info!("success!"),
             Err(e) => log::error!("failure: {:#?}", e),
         }
@@ -579,6 +625,12 @@ pub mod pallet {
                 "each output should be used once"
             );
         }
+
+        // Verify absolute time lock
+        ensure!(
+            tx.check_time_lock::<T>(),
+            "Time lock restrictions not satisfied"
+        );
 
         // In order to avoid race condition in network we maintain a list of required utxos for a tx
         // Example of race condition:
@@ -661,29 +713,27 @@ pub mod pallet {
                 log::error!("Header error: {}", e);
             }
             ensure!(res.is_ok(), "header error. Please check the logs.");
+            ensure!(output.value > 0, "output value must be nonzero");
+            let hash = tx.outpoint(output_index as u64);
+            new_utxos.push(hash.as_fixed_bytes().to_vec());
 
             match &output.destination {
-                Destination::Pubkey(_) | Destination::ScriptHash(_) => {
-                    ensure!(output.value > 0, "output value must be nonzero");
-                    let hash = tx.outpoint(output_index as u64);
+                Destination::CreatePP(_, _) => {
                     ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
-                    new_utxos.push(hash.as_fixed_bytes().to_vec());
+                    log::info!("TODO validate CreatePP as output");
+                }
+                Destination::CallPP(_, _, _) => {
+                    ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
+                    log::info!("TODO validate CallPP as output");
+                }
+                Destination::Pubkey(_) | Destination::ScriptHash(_) => {
+                    ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
                 }
                 Destination::LockExtraForStaking(_) => {
-                    let hash = tx.outpoint(output_index as u64);
-                    new_utxos.push(hash.as_fixed_bytes().to_vec());
                     staking::validate_lock_extra_for_staking_requirements::<T>(hash,output.value)?;
                 }
                 Destination::LockForStaking { stash_account:_, controller_account, session_key:_ } => {
-                   let hash = tx.outpoint(output_index as u64);
-                    new_utxos.push(hash.as_fixed_bytes().to_vec());
                     staking::validate_lock_for_staking_requirements::<T>(hash,output.value, controller_account)?;
-                }
-                Destination::CreatePP(_, _) => {
-                    log::info!("TODO validate OP_CREATE");
-                }
-                Destination::CallPP(_, _) => {
-                    log::info!("TODO validate OP_CALL");
                 }
             }
         }
@@ -742,10 +792,16 @@ pub mod pallet {
                         ensure!(ok, "signature must be valid");
                     }
                     Destination::CreatePP(_, _) => {
-                        log::info!("TODO validate spending of OP_CREATE");
+                        log::info!("TODO validate spending of CreatePP");
                     }
-                    Destination::CallPP(_, _) => {
-                        log::info!("TODO validate spending of OP_CALL");
+                    Destination::CallPP(_, _, _) => {
+                        let spend =
+                            u16::from_le_bytes(input.witness[1..].try_into().or_else(|_| {
+                                Err(DispatchError::Other(
+                                    "Failed to convert witness to an opcode",
+                                ))
+                            })?);
+                        ensure!(spend == 0x1337, "OP_SPEND not found");
                     }
                     Destination::ScriptHash(_hash) => {
                         let witness = input.witness.clone();
@@ -800,26 +856,28 @@ pub mod pallet {
         }
 
         for (index, output) in tx.outputs.iter().enumerate() {
-            match &output.destination {
-                Destination::Pubkey(_) | Destination::ScriptHash(_) => {
-                    let hash = tx.outpoint(index as u64);
-                    log::debug!("inserting to UtxoStore {:?} as key {:?}", output, hash);
-                    <UtxoStore<T>>::insert(hash, Some(output));
-                }
+            let hash = tx.outpoint(index as u64);
 
+            match &output.destination {
+                Destination::CreatePP(script, data) => {
+                    log::debug!("inserting to UtxoStore {:?} as key {:?}", output, hash);
+                    <UtxoStore<T>>::insert(hash, output);
+                    create::<T>(caller, script, hash, output.value, &data);
+                }
+                Destination::CallPP(acct_id, fund, data) => {
+                    log::debug!("inserting to UtxoStore {:?} as key {:?}", output, hash);
+                    <UtxoStore<T>>::insert(hash, output);
+                    call::<T>(caller, acct_id, hash, output.value, *fund, data);
+                }
+                Destination::Pubkey(_) | Destination::ScriptHash(_) => {
+                    log::debug!("inserting to UtxoStore {:?} as key {:?}", output, hash);
+                    <UtxoStore<T>>::insert(hash, output);
+                }
                 Destination::LockForStaking { .. } => {
-                    let hash = tx.outpoint(index as u64);
                     staking::lock_for_staking::<T>(hash,output)?;
                 }
                 Destination::LockExtraForStaking(_) => {
-                    let hash = tx.outpoint(index as u64);
                     staking::locking_extra_utxos::<T>(hash,output)?;
-                }
-                Destination::CreatePP(script, data) => {
-                    create::<T>(caller, script, &data);
-                }
-                Destination::CallPP(acct_id, data) => {
-                    call::<T>(caller, acct_id, data);
                 }
             }
         }
@@ -868,6 +926,7 @@ pub mod pallet {
                 // Output a new tokens
                 TransactionOutput::new_token(token_id, supply, public),
             ],
+            time_lock: Default::default(),
         };
 
         // We shall make an output to return odd funds
@@ -909,8 +968,6 @@ pub mod pallet {
         let mut total = 0;
 
         for (hash, utxo) in UtxoStore::<T>::iter() {
-            let utxo = utxo.unwrap();
-
             match utxo.destination {
                 Destination::Pubkey(pubkey) => {
                     if caller.encode() == pubkey.encode() {
@@ -1081,23 +1138,17 @@ pub mod pallet {
     #[pallet::genesis_build]
     impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
         fn build(&self) {
-
-            self.genesis_utxos.iter().cloned().enumerate().for_each(|(index,u)| {
-                // added the index and the `genesis` on the hashing, to indicate that these utxos are from the beginning of the chain.
-                let x = BlakeTwo256::hash_of(&(&u, index as u64, "genesis"));
-                log::info!("genesis insert: {:?}",x);
-                UtxoStore::<T>::insert(x, Some(u));
+            self.genesis_utxos.iter().cloned().for_each(|u| {
+                UtxoStore::<T>::insert(BlakeTwo256::hash_of(&u), Some(u));
             });
 
             self.locked_utxos.iter().cloned().enumerate().for_each(|(index, u)| {
-                //TODO: change back to Public/H256 or something, after UI testing.
                 if let Destination::LockForStaking { stash_account:_, controller_account, session_key:_ } =  &u.destination {
                     if let Ok(controller_pubkey) = convert_to_h256::<T>(controller_account){
                         <StakingCount<T>>::insert(controller_pubkey,(1, u.value));
                     }
                 }
 
-                log::info!("genesis insert lock: {:?}",u);
                 // added the index and the `genesis` on the hashing, to indicate that these utxos are from the beginning of the chain.
                 LockedUtxos::<T>::insert(BlakeTwo256::hash_of(&(&u, index as u64, "genesis")), u);
             });
@@ -1117,13 +1168,31 @@ impl<T: Config> crate::Pallet<T> {
     }
 }
 
-use frame_support::pallet_prelude::DispatchResultWithPostInfo;
-use sp_core::{
-    crypto::UncheckedFrom,
-    {H256, H512},
-};
-use sp_runtime::sp_std::vec;
-use utxo_api::UtxoApi;
+fn coin_picker<T: Config>(outpoints: &Vec<H256>) -> Result<Vec<TransactionInput>, DispatchError> {
+    let mut inputs: Vec<TransactionInput> = Vec::new();
+
+    // consensus-critical sorting function...
+    let mut outpoints = outpoints.clone();
+    outpoints.sort();
+
+    for outpoint in outpoints.iter() {
+        let tx = <UtxoStore<T>>::get(&outpoint).ok_or("UTXO doesn't exist!")?;
+        match tx.destination {
+            Destination::CallPP(_, _, _) => {
+                inputs.push(TransactionInput::new_script(
+                    *outpoint,
+                    Builder::new().into_script(),
+                    Builder::new().push_int(0x1337).into_script(),
+                ));
+            }
+            _ => {
+                return Err(DispatchError::Other("Only CallPP vouts can be spent!"));
+            }
+        }
+    }
+
+    Ok(inputs)
+}
 
 impl<T: Config> UtxoApi for Pallet<T>
 where

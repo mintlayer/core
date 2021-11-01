@@ -691,7 +691,10 @@ impl All {
             || self == all::OP_RSHIFT
         {
             Class::IllegalOp
-        // 11 opcodes
+        // 2 opcodes, have to catch this before the NOPs below
+        } else if let Some(opc) = TimeLock::try_from_all(self) {
+            Class::TimeLock(opc)
+        // 9 opcodes
         } else if self == all::OP_NOP
             || (all::OP_NOP1.code <= self.code && self.code <= all::OP_NOP10.code)
         {
@@ -782,6 +785,8 @@ pub enum Class {
     AltStack(AltStack),
     /// Opcodes to do with verifying signatures
     Signature(Signature),
+    /// Time-lock opcodes
+    TimeLock(TimeLock),
     /// Any opcode not covered above
     Ordinary(Ordinary),
 }
@@ -838,6 +843,11 @@ opcode_category! {
 // Pushdata opcodes
 opcode_category! {
     PushData -> OP_PUSHDATA1, OP_PUSHDATA2, OP_PUSHDATA4
+}
+
+// Time lock opcodes
+opcode_category! {
+    TimeLock -> OP_CLTV, OP_CSV
 }
 
 // "Ordinary" opcodes

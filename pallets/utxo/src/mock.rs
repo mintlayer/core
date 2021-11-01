@@ -81,6 +81,8 @@ impl<T: SysConfig> ProgrammablePoolApi for MockPool<T> {
         _origin: &Self::AccountId,
         _weight: Weight,
         _code: &Vec<u8>,
+        _utxo_hash: H256,
+        _utxo_value: u128,
         _data: &Vec<u8>,
     ) -> Result<(), &'static str> {
         Ok(())
@@ -90,6 +92,9 @@ impl<T: SysConfig> ProgrammablePoolApi for MockPool<T> {
         _caller: &Self::AccountId,
         _dest: &Self::AccountId,
         _gas_limit: Weight,
+        _utxo_hash: H256,
+        _utxo_value: u128,
+        _fund_contract: bool,
         _input_data: &Vec<u8>,
     ) -> Result<(), &'static str> {
         Ok(())

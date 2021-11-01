@@ -1,35 +1,22 @@
-# core
+# Mintlayer core
 
+https://www.mintlayer.org/
 
-Code base uses the substrate node v3.0.0 template as a base.
-More information can be found on substrate.dev
+For a more technical introduction to Mintlayer visit [our docs](https://docs.mintlayer.org/).
 
-To build this use cargo build --release
+A draft of the consensus paper can be found [here](https://www.mintlayer.org/docs/DSA-consensus-paper-draft.pdf).
 
-To build and run use cargo run --release -- --dev --tmp
+## Security issues
+If you find an issue related to the security of Mintlayer then please contact us at security@mintlayer.org so we can address the issue. Mintlayer has a [bug bounty program](https://www.mintlayer.org/bug-bounties) so if your security issue is valid you are elligble for a reward paid in MLT. Do not disclose the security issue publicly until the core Mintlayer team has agreed the issue can be disclosed. See [SECURITY.md](https://github.com/mintlayer/core/blob/master/SECURITY.md) for more info.
 
-To purge the chain ./target/release/mintlayer-core purge-chain --dev
+## Bugs
+Non-security related bugs should be opened as [issues](https://github.com/mintlayer/core/issues/new) in the core Mintlayer repo. Give as much detail as possible. If you want to fix a bug then see our guidelines for [contributing](https://github.com/mintlayer/core/blob/master/CONTRIBUTING.md).
 
-
-## Substrate Node Template
-
-[![Try on playground](https://img.shields.io/badge/Playground-Node_Template-brightgreen?logo=Parity%20Substrate)](https://playground.substrate.dev/?deploy=node-template)
-
-A fresh FRAME-based [Substrate](https://www.substrate.io/) node, ready for hacking :rocket:
-
-## Getting Started
-
-Follow the steps below to get started with the Node Template, or get it up and running right from your browser
-in just a few clicks using [Playground](https://playground.substrate.dev/) :hammer_and_wrench:
-
-### Using Nix
-
-Install [nix](https://nixos.org/) and optionally [direnv](https://github.com/direnv/direnv) and [lorri](https://github.com/target/lorri) for a fully plug
-and play experience for setting up the development environment. To get all the correct dependencies activate direnv `direnv allow` and lorri `lorri shell`.
+## How to build and run Mintlayer
 
 ### Rust Setup
 
-First, complete the [basic Rust setup instructions](./docs/rust-setup.md).
+First, complete the [basic Rust setup instructions](https://github.com/mintlayer/core/blob/master/doc/rust-setup.md).
 
 ### Run
 
@@ -47,8 +34,13 @@ without launching it:
 ```sh
 cargo build --release
 ```
+or 
 
-### Embedded Docs
+`cargo build` to build a debug version
+
+to purge the local chain run `./target/release/mintlayer-core purge-chain --dev`
+
+### Docs
 
 Once the project has been built, the following command can be used to explore all parameters and
 subcommands:
@@ -57,11 +49,8 @@ subcommands:
 ./target/release/mintlayer-core -h
 ```
 
-## Run
+You can also find docs in the docs directory and within the directory for a specific pallet or lib.
 
-The provided `cargo run` command will launch a temporary node and its state will be discarded after
-you terminate the process. After the project has been built, there are other ways to launch the
-node.
 
 ### Single-Node Development Chain
 
@@ -88,139 +77,61 @@ RUST_LOG=debug RUST_BACKTRACE=1 ./target/release/mintlayer-core -lruntime=debug 
 Once the node template is running locally, you can connect it with **Polkadot-JS Apps** front-end
 to interact with your chain. [Click here](https://polkadot.js.org/apps/#/explorer?rpc=ws://localhost:9944) connecting the Apps to your local node template.
 
+### Connect with Mintlayer's UI
+TODO
+
 ### Multi-Node Local Testnet
 
 If you want to see the multi-node consensus algorithm in action, refer to
 [our Start a Private Network tutorial](https://substrate.dev/docs/en/tutorials/start-a-private-network/).
 
-## Template Structure
-
-A Substrate project such as this consists of a number of components that are spread across a few
-directories.
+## Project Structure
 
 ### Node
 
-A blockchain node is an application that allows users to participate in a blockchain network.
-Substrate-based blockchain nodes expose a number of capabilities:
+- Networking: Mintlayer uses [libp2p](https://libp2p.io/) as its native networking stack for all inter-node communication.
+- Bootnodes: Mintlayer has [bootnodes](https://github.com/mintlayer/core/blob/master/assets/bootnodes.json) that a new node will attempt to boot to unless a specific node is specified by the user
+- Consensus: Mintlayer uses [AURA](https://docs.rs/sc-consensus-aura/0.9.0/sc_consensus_aura/) as its base consensus algorithm for the time being. There will be an update to introduce [DSA](https://www.mintlayer.org/docs/DSA-consensus-paper-draft.pdf) in the future but DSA is still in development. 
+- Finality: Since we are using AURA for our consensus we currently rely on [GRANDPA](https://docs.rs/sc-finality-grandpa/0.9.0/sc_finality_grandpa/) for finality.
+- Chain Spec: You can find our chain specification in [chain_spec.rs](https://github.com/mintlayer/core/blob/master/node/src/chain_spec.rs). It defines the basics of the chain such as the genesis block and the bootnodes.
+- Services: [service.rs](https://github.com/mintlayer/core/blob/master/node/src/service.rs) defines the node implementation itself. It is here you'll find the consensus setup.
 
--   Networking: Substrate nodes use the [`libp2p`](https://libp2p.io/) networking stack to allow the
-    nodes in the network to communicate with one another.
--   Consensus: Blockchains must have a way to come to
-    [consensus](https://substrate.dev/docs/en/knowledgebase/advanced/consensus) on the state of the
-    network. Substrate makes it possible to supply custom consensus engines and also ships with
-    several consensus mechanisms that have been built on top of
-    [Web3 Foundation research](https://research.web3.foundation/en/latest/polkadot/NPoS/index.html).
--   RPC Server: A remote procedure call (RPC) server is used to interact with Substrate nodes.
-
-There are several files in the `node` directory - take special note of the following:
-
--   [`chain_spec.rs`](./node/src/chain_spec.rs): A
-    [chain specification](https://substrate.dev/docs/en/knowledgebase/integrate/chain-spec) is a
-    source code file that defines a Substrate chain's initial (genesis) state. Chain specifications
-    are useful for development and testing, and critical when architecting the launch of a
-    production chain. Take note of the `development_config` and `testnet_genesis` functions, which
-    are used to define the genesis state for the local development chain configuration. These
-    functions identify some
-    [well-known accounts](https://substrate.dev/docs/en/knowledgebase/integrate/subkey#well-known-keys)
-    and use them to configure the blockchain's initial state.
--   [`service.rs`](./node/src/service.rs): This file defines the node implementation. Take note of
-    the libraries that this file imports and the names of the functions it invokes. In particular,
-    there are references to consensus-related topics, such as the
-    [longest chain rule](https://substrate.dev/docs/en/knowledgebase/advanced/consensus#longest-chain-rule),
-    the [Aura](https://substrate.dev/docs/en/knowledgebase/advanced/consensus#aura) block authoring
-    mechanism and the
-    [GRANDPA](https://substrate.dev/docs/en/knowledgebase/advanced/consensus#grandpa) finality
-    gadget.
-
-After the node has been [built](#build), refer to the embedded documentation to learn more about the
-capabilities and configuration parameters that it exposes:
-
-```shell
-./target/release/node-template --help
-```
 
 ### Runtime
 
-In Substrate, the terms
-"[runtime](https://substrate.dev/docs/en/knowledgebase/getting-started/glossary#runtime)" and
-"[state transition function](https://substrate.dev/docs/en/knowledgebase/getting-started/glossary#stf-state-transition-function)"
-are analogous - they refer to the core logic of the blockchain that is responsible for validating
-blocks and executing the state changes they define. The Substrate project in this repository uses
-the [FRAME](https://substrate.dev/docs/en/knowledgebase/runtime/frame) framework to construct a
-blockchain runtime. FRAME allows runtime developers to declare domain-specific logic in modules
-called "pallets". At the heart of FRAME is a helpful
-[macro language](https://substrate.dev/docs/en/knowledgebase/runtime/macros) that makes it easy to
-create pallets and flexibly compose them to create blockchains that can address
-[a variety of needs](https://www.substrate.io/substrate-users/).
+For more information on what a [runtime](https://substrate.dev/docs/en/knowledgebase/getting-started/glossary#runtime) is follow the link.
+Code in the runtime must be written in `no_std` Rust since it compiles to Wasm.
 
-Review the [FRAME runtime implementation](./runtime/src/lib.rs) included in this template and note
-the following:
+- lib.rs: The main file in Mintlayer's runtime. Here you'll find the Mintlayer specific code for block production such as the block production period.
+- staking.rs: Here you'll find Mintlayer's staking implementation.
 
--   This file configures several pallets to include in the runtime. Each pallet configuration is
-    defined by a code block that begins with `impl $PALLET_NAME::Config for Runtime`.
--   The pallets are composed into a single runtime by way of the
-    [`construct_runtime!`](https://crates.parity.io/frame_support/macro.construct_runtime.html)
-    macro, which is part of the core
-    [FRAME Support](https://substrate.dev/docs/en/knowledgebase/runtime/frame#support-library)
-    library.
 
 ### Pallets
 
-The runtime in this project is constructed using many FRAME pallets that ship with the
-[core Substrate repository](https://github.com/paritytech/substrate/tree/master/frame) and a
-template pallet that is [defined in the `pallets`](./pallets/template/src/lib.rs) directory.
+Mintlayer relies on a host of Substrate pallets and a few Mintlayer specific pallets.
 
-A FRAME pallet is compromised of a number of blockchain primitives:
+-   pp: The implementation of programmable pools on Mintlayer. Essentially Wasm smart contracts
+-   utxo: Mintlayer's UTXO system
+    
+### Libs
 
--   Storage: FRAME defines a rich set of powerful
-    [storage abstractions](https://substrate.dev/docs/en/knowledgebase/runtime/storage) that makes
-    it easy to use Substrate's efficient key-value database to manage the evolving state of a
-    blockchain.
--   Dispatchables: FRAME pallets define special types of functions that can be invoked (dispatched)
-    from outside of the runtime in order to update its state.
--   Events: Substrate uses [events](https://substrate.dev/docs/en/knowledgebase/runtime/events) to
-    notify users of important changes in the runtime.
--   Errors: When a dispatchable fails, it returns an error.
--   Config: The `Config` configuration interface is used to define the types and parameters upon
-    which a FRAME pallet depends.
+Libs is home to code that is code that Mintlayer relies on but isn't technically a pallet. 
 
-### Run in Docker
+-   chainscript: Mintlayer's bitcoin script implementation.
+-   bech32: code for handling transactions with destinations encoded using bech32
 
-First, install [Docker](https://docs.docker.com/get-docker/) and
-[Docker Compose](https://docs.docker.com/compose/install/).
+### Testing
 
-Then run the following command to start a single node development chain.
+You'll find unit tests littered throughout the codebase but the test directory is home to the functional test framework which is heavily based on Bitcoin's functional test framework. 
 
-```bash
-./scripts/docker_run.sh
-```
+### Crypto
+As it stands Mintlayer uses Schnorr for all crypto-related things. There is a plan to move to our BLS implementation in the near future but this, as it stands, is a work in progress.
 
-This command will firstly compile your code, and then start a local development network. You can
-also replace the default command (`cargo build --release && ./target/release/node-template --dev --ws-external`)
-by appending your own. A few useful ones are as follow.
-
-```bash
-# Run Substrate node without re-compiling
-./scripts/docker_run.sh ./target/release/node-template --dev --ws-external
-
-# Purge the local dev chain
-./scripts/docker_run.sh ./target/release/node-template purge-chain --dev
-
-# Check whether the code is compilable
-./scripts/docker_run.sh cargo check
-```
+### Contributing
+[See this guide](https://github.com/mintlayer/core/blob/master/CONTRIBUTING.md)
 
 ### Branches
-They key branches are master and staging. Master is used for fully tested code, staging is used as the development branch. Fixes or features should be created on new branches branched from staging. A pr is then created to merge the branch in to staging where it will require a review from a member of the Mintlayer team. To merge into master create a pr to merge staging to master, a review is required and CI will run. Only select people have push access to master.
-
-### pallet-utxo
-found at branch `pallet-utxo`:
-```bash
-# it is imported via a submodule.
-cd pallets/utxo
-git submodule init
-git submodule update # --init --recursive
-```
+The key branches are master and staging. Master is used for fully tested code, staging is used as the development branch. Fixes or features should be created on new branches branched from staging. A PR is then created to merge the branch into staging where it will require a review from a member of the Mintlayer team. To merge into master create a PR to merge staging to master, a review is required and CI will run. Only select people have push access to master.
 
 ### Firewall rules
 

@@ -13,6 +13,7 @@
 			"type": "struct",
 			"type_mapping": [
 				[ "dest_account", "AccountId" ],
+				[ "fund", "bool" ],
 				[ "input_data", "Vec<u8>" ]
 			]
 		},
@@ -55,7 +56,8 @@
 			"type": "struct",
 			"type_mapping": [
 				[ "inputs", "Vec<TransactionInput>" ],
-				[ "outputs", "Vec<TransactionOutput>" ]
+				[ "outputs", "Vec<TransactionOutput>" ],
+				[ "time_lock", "Compact<u64>" ]
 			]
 		},
 		"Outpoint": {
@@ -90,6 +92,7 @@
 				[ "sighash", "u8" ],
 				[ "inputs", "SignatureDataInputs" ],
 				[ "outputs", "SignatureDataOutputs" ],
+				[ "time_lock", "u64" ],
 				[ "codesep_pos", "u32" ]
 			]
 		},

@@ -4013,6 +4013,7 @@ dependencies = [
  "frame-support",
  "frame-system",
  "log",
+ "pallet-balances",
  "pallet-contracts",
  "pallet-contracts-primitives",
  "parity-scale-codec",
@@ -4616,6 +4617,7 @@ version = "3.0.0"
 dependencies = [
  "frame-support",
  "frame-system",
+ "sp-core",
  "sp-runtime",
  "sp-std",
 ]

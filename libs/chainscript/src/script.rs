@@ -131,11 +131,18 @@ pub fn build_scriptint(n: i64) -> Vec<u8> {
 /// simply say, anything in excess of 32 bits is no longer a number.
 /// This is basically a ranged type implementation.
 pub fn read_scriptint(v: &[u8]) -> Result<i64, Error> {
+    read_scriptint_size(v, 4)
+}
+
+/// Like [read_scriptint] but lets the client specify max input size in place of the default 4.
+/// The `max_size` can still be at most 8 to fit into an i64.
+pub fn read_scriptint_size(v: &[u8], max_size: usize) -> Result<i64, Error> {
+    assert!(max_size <= 8);
     let len = v.len();
     if len == 0 {
         return Ok(0);
     }
-    if len > 4 {
+    if len > max_size {
         return Err(Error::NumericOverflow);
     }
 

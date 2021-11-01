@@ -46,6 +46,8 @@ pub struct TransactionSigMsg {
     inputs: TransactionInputSigMsg,
     /// Information about outputs
     outputs: TransactionOutputSigMsg,
+    /// Time lock used
+    time_lock: u64,
     /// OP_CODESEPARATOR position (or 0xffffffff if none seen so far)
     codesep_idx: u32,
 }
@@ -133,6 +135,9 @@ impl TransactionSigMsg {
                     output: tx.outputs.get(idx).map_or(H256::zero(), BlakeTwo256::hash_of),
                 },
             },
+
+            // Time lock
+            time_lock: tx.time_lock.as_u64(),
 
             // Code separator position
             codesep_idx,

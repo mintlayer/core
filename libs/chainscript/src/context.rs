@@ -86,12 +86,12 @@ pub trait Context {
 
     /// Check absolute time lock.
     fn check_lock_time(&self, _lock_time: i64) -> bool {
-        false
+        true
     }
 
     /// Check relative time lock.
     fn check_sequence(&self, _sequence: i64) -> bool {
-        false
+        true
     }
 
     /// Enforce minimal push.
@@ -114,20 +114,33 @@ pub mod testcontext {
     use crate::util::sha256;
     use core::convert::TryFrom;
 
-    #[derive(Default)]
-    pub struct TestContext {
-        pub transaction: Vec<u8>,
-    }
-
     /// Test context.
     ///
     /// The Context implementation for testing. The transaction hash (just 4 bytes for tesing) has
     /// to be provided explicitly as a byte string. Signature scheme is very simple: The bitwise xor
     /// of transaction hash, signature and public key has to be equal to zero. Not recommended for
     /// production.
+    #[derive(Default)]
+    pub struct TestContext {
+        pub transaction: Vec<u8>,
+        pub block_height: u64,
+    }
+
     impl TestContext {
+        /// New test context
         pub fn new(transaction: Vec<u8>) -> Self {
-            Self { transaction }
+            Self {
+                transaction,
+                block_height: 0,
+            }
+        }
+
+        /// New test context at particular block height
+        pub fn new_at_height(transaction: Vec<u8>, block_height: u64) -> Self {
+            Self {
+                transaction,
+                block_height,
+            }
         }
     }
 
@@ -151,6 +164,10 @@ pub mod testcontext {
         fn verify_signature(&self, sig: &Self::SignatureData, subscript: &[u8], _ix: u32) -> bool {
             let msg = sha256(&[&self.transaction[..], subscript].concat());
             sig.iter().zip(msg.iter()).all(|(&s, &m)| (s ^ m) == 0)
+        }
+
+        fn check_lock_time(&self, lock_time: i64) -> bool {
+            self.block_height >= lock_time as u64
         }
     }
 }
