@@ -1,0 +1,20 @@
+[package]
+name = "base58_nostd"
+version = "0.1.0"
+edition = "2021"
+authors = ["Anton Sinitsyn <anton.sinitsyn@mintlayer.org>"]
+description = "Encodes and decodes the Bech32 format"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies.frame-support]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+version = '4.0.0-dev'
+branch = "master"
+
+[dependencies.sp-std]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+version = '4.0.0-dev'
+branch = "master"

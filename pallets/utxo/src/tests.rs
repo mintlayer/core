@@ -917,7 +917,7 @@ fn test_tokens_transferring() {
             inputs: vec![input0],
             outputs: vec![
                 TransactionOutput::new_pubkey(90, H256::from(alice_pub_key)),
-                TransactionOutput::new_with_data(
+                TransactionOutput::new_p2pk_with_data(
                     10,
                     H256::from(karl_pub_key),
                     OutputData::TokenIssuanceV1 {
@@ -951,7 +951,7 @@ fn test_tokens_transferring() {
         // Let's fail on wrong token id
         let tx = Transaction {
             inputs: vec![TransactionInput::new_empty(token_utxo_hash)],
-            outputs: vec![TransactionOutput::new_with_data(
+            outputs: vec![TransactionOutput::new_p2pk_with_data(
                 0,
                 H256::from(alice_pub_key),
                 OutputData::TokenTransferV1 {
@@ -970,7 +970,7 @@ fn test_tokens_transferring() {
         // Let's fail on exceed token amount
         let tx = Transaction {
             inputs: vec![TransactionInput::new_empty(token_utxo_hash)],
-            outputs: vec![TransactionOutput::new_with_data(
+            outputs: vec![TransactionOutput::new_p2pk_with_data(
                 0,
                 H256::from(alice_pub_key),
                 OutputData::TokenTransferV1 {
@@ -989,7 +989,7 @@ fn test_tokens_transferring() {
         // Let's send a big amount of MLT with the correct tokens
         let tx = Transaction {
             inputs: vec![TransactionInput::new_empty(token_utxo_hash)],
-            outputs: vec![TransactionOutput::new_with_data(
+            outputs: vec![TransactionOutput::new_p2pk_with_data(
                 1_000_000_000,
                 H256::from(alice_pub_key),
                 OutputData::TokenTransferV1 {
@@ -1008,7 +1008,7 @@ fn test_tokens_transferring() {
         // should be success
         let tx = Transaction {
             inputs: vec![TransactionInput::new_empty(token_utxo_hash)],
-            outputs: vec![TransactionOutput::new_with_data(
+            outputs: vec![TransactionOutput::new_p2pk_with_data(
                 0,
                 H256::from(alice_pub_key),
                 OutputData::TokenTransferV1 {
@@ -1034,7 +1034,7 @@ fn test_nft_transferring() {
             inputs: vec![input0],
             outputs: vec![
                 TransactionOutput::new_pubkey(90, H256::from(alice_pub_key)),
-                TransactionOutput::new_with_data(
+                TransactionOutput::new_p2pk_with_data(
                     10,
                     H256::from(karl_pub_key),
                     OutputData::NftMintV1 {
@@ -1065,7 +1065,7 @@ fn test_nft_transferring() {
         // Let's fail on wrong token id
         let tx = Transaction {
             inputs: vec![TransactionInput::new_empty(token_utxo_hash)],
-            outputs: vec![TransactionOutput::new_with_data(
+            outputs: vec![TransactionOutput::new_p2pk_with_data(
                 0,
                 H256::from(alice_pub_key),
                 OutputData::TokenTransferV1 {
@@ -1084,7 +1084,7 @@ fn test_nft_transferring() {
         // Let's fail on exceed token amount
         let tx = Transaction {
             inputs: vec![TransactionInput::new_empty(token_utxo_hash)],
-            outputs: vec![TransactionOutput::new_with_data(
+            outputs: vec![TransactionOutput::new_p2pk_with_data(
                 0,
                 H256::from(alice_pub_key),
                 OutputData::TokenTransferV1 {
@@ -1103,7 +1103,7 @@ fn test_nft_transferring() {
         // Let's send a big amount of MLT with the correct tokens
         let tx = Transaction {
             inputs: vec![TransactionInput::new_empty(token_utxo_hash)],
-            outputs: vec![TransactionOutput::new_with_data(
+            outputs: vec![TransactionOutput::new_p2pk_with_data(
                 1_000_000_000,
                 H256::from(alice_pub_key),
                 OutputData::TokenTransferV1 {
@@ -1122,7 +1122,7 @@ fn test_nft_transferring() {
         // should be success
         let tx = Transaction {
             inputs: vec![TransactionInput::new_empty(token_utxo_hash)],
-            outputs: vec![TransactionOutput::new_with_data(
+            outputs: vec![TransactionOutput::new_p2pk_with_data(
                 0,
                 H256::from(alice_pub_key),
                 OutputData::TokenTransferV1 {
@@ -1149,7 +1149,7 @@ fn test_token_creation_with_insufficient_fee() {
             inputs: vec![input0],
             outputs: vec![
                 TransactionOutput::new_pubkey(90, H256::from(alice_pub_key)),
-                TransactionOutput::new_with_data(
+                TransactionOutput::new_p2pk_with_data(
                     0,
                     H256::from(karl_pub_key),
                     OutputData::TokenIssuanceV1 {
@@ -1173,7 +1173,7 @@ fn test_token_creation_with_insufficient_fee() {
                 // Use here token issuance for example
                 TransactionInput::new_empty(token_utxo_hash),
             ],
-            outputs: vec![TransactionOutput::new_with_data(
+            outputs: vec![TransactionOutput::new_p2pk_with_data(
                 0,
                 H256::from(karl_pub_key),
                 OutputData::TokenIssuanceV1 {

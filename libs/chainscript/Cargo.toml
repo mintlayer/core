@@ -1,5 +1,5 @@
 [package]
-authors = ['Lukas Kuklinek <lukas.kuklinek@mintlayer.com>']
+authors = ['Lukas Kuklinek <lukas.kuklinek@mintlayer.org>']
 description = 'An interpreter for bitcoin script and its dialects'
 edition = '2018'
 name = 'chainscript'

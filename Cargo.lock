@@ -397,6 +397,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5024ee8015f02155eee35c711107ddd9a9bf3cb689cf2a9089c97e79b6e1ae83"
 
 [[package]]
+name = "base58_nostd"
+version = "0.1.0"
+dependencies = [
+ "frame-support",
+ "sp-std",
+]
+
+[[package]]
 name = "base64"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4128,6 +4136,7 @@ dependencies = [
 name = "pallet-utxo"
 version = "0.1.0"
 dependencies = [
+ "base58_nostd",
  "bech32",
  "chainscript",
  "frame-benchmarking",

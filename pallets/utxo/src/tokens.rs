@@ -1,12 +1,11 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use crate::base58_nostd::{FromBase58, FromBase58Error, ToBase58};
+use base58_nostd::{FromBase58, FromBase58Error, ToBase58};
 use codec::{Decode, Encode};
 use frame_support::ensure;
 use frame_support::{dispatch::Vec, RuntimeDebug};
 #[cfg(feature = "std")]
 use serde::{Deserialize, Serialize};
-#[cfg(feature = "std")]
 use sp_core::{H160, H256};
 
 const LENGTH_BYTES_TO_REPRESENT_ID: usize = 20;
@@ -68,6 +67,8 @@ impl TokenId {
         let data = data.from_base58().map_err(|x| match x {
             FromBase58Error::InvalidBase58Character { .. } => "Invalid Base58 character",
             FromBase58Error::InvalidBase58Length => "Invalid Base58 length",
+            FromBase58Error::InvalidChecksum => "Invalid checksum",
+            FromBase58Error::InvalidPrefix => "Invalid token id",
         })?;
 
         let hash = TokenId::hash160_from_bytes(data.as_slice())?;

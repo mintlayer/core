@@ -32,6 +32,11 @@ default-features = false
 path = '../../libs/bech32'
 version = '0.8.1'
 
+[dependencies.base58_nostd]
+default-features = false
+path = '../../libs/base58_nostd'
+version = '0.1.0'
+
 [dependencies.chainscript]
 default-features = false
 path = '../../libs/chainscript'

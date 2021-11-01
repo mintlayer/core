@@ -19,7 +19,6 @@
 
 pub use pallet::*;
 
-mod base58_nostd;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 #[cfg(test)]
@@ -280,8 +279,8 @@ pub mod pallet {
             }
         }
 
-        // Create a new output with some data
-        pub fn new_with_data(value: Value, pubkey: H256, data: OutputData) -> Self {
+        /// Create a new output with the data field. This is going to be paid to a public key.
+        pub fn new_p2pk_with_data(value: Value, pubkey: H256, data: OutputData) -> Self {
             let pubkey = sp_core::sr25519::Public::from_h256(pubkey);
             Self {
                 value,
