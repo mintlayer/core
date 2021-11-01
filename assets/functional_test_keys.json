@@ -1,0 +1,34 @@
+{
+	"users": [
+		{
+			"name": "Alice",
+			"sr25519_public_controller": "0xd43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d",
+			"sr25519_public_stash": "0xbe5ddb1579b72e84524fc29e78609e3caf42e85aa118ebfe0b0ad404b5bdd25f",
+			"ed25519_public": "0x88dc3417d5058ec4b4503e0c12ea1a0a89be200fe98922423d4334014fa6b0ee"
+		},
+		{
+			"name": "Bob",
+			"sr25519_public_controller": "0x8eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a48",
+			"sr25519_public_stash": "0xfe65717dad0447d715f660a0a58411de509b42e6efb8375f562f58a554d5860e",
+			"ed25519_public": "0xd17c2d7823ebf260fd138f2d7e27d114c0145d968b5ff5006125f2414fadae69"
+		},
+		{
+			"name": "Charlie",
+			"sr25519_public_controller": "0x90b5ab205c6974c9ea841be688864633dc9ca8a357843eeacf2314649965fe22",
+			"sr25519_public_stash": "0x1e07379407fecc4b89eb7dbd287c2c781cfb1907a96947a3eb18e4f8e7198625",
+			"ed25519_public": "0x439660b36c6c03afafca027b910b4fecf99801834c62a5e6006f27d978de234f"
+		},
+		{
+			"name": "Dave",
+			"sr25519_public_controller": "0x306721211d5404bd9da88e0204360a1a9ab8b87c66c1bc2fcdd37f3c2222cc20",
+			"sr25519_public_stash": "0xe860f1b1c7227f7c22602f53f15af80747814dffd839719731ee3bba6edc126c",
+			"ed25519_public": "0x5e639b43e0052c47447dac87d6fd2b6ec50bdd4d0f614e4299c665249bbd09d9"
+		},
+		{
+			"name": "Erin",
+			"sr25519_public_controller": "0xe659a7a1628cdd93febc04a4e0646ea20e9f5f0ce097d9a05290d4a9e054df4e",
+			"sr25519_public_stash": "0x8ac59e11963af19174d0b94d5d78041c233f55d2e19324665bafdfb62925af2d",
+			"ed25519_public": "0x1dfe3e22cc0d45c70779c1095f7489a8ef3cf52d62fbd8c2fa38c9f1723502b5"
+		}
+	]
+}
