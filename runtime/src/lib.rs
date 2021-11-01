@@ -601,7 +601,7 @@ impl_runtime_apis! {
             tx: <Block as BlockT>::Extrinsic,
             block_hash: <Block as BlockT>::Hash,
         ) -> TransactionValidity {
-            log::info!("transaction to validate: {:?}",tx);
+            log::debug!("transaction to validate: {:?}",tx);
             if let Some(pallet_utxo::Call::spend(ref tx)) =
             IsSubType::<pallet_utxo::Call::<Runtime>>::is_sub_type(&tx.function) {
                 match pallet_utxo::validate_transaction::<Runtime>(&tx) {

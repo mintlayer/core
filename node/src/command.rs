@@ -99,7 +99,7 @@ pub fn fetch_keys() -> Result<Vec<MltKeysInfo>, String> {
             key_list.push(x.into());
         }
     } else {
-        log::info!("failed to get keys from a file; using dummy values to populate keys");
+        log::debug!("failed to get keys from a file; using dummy values to populate keys");
         //TODO: dummy values, in case the file doesn't exist.
         impl MltKeysInfo {
             fn new(seed: &str, mlt_coins: u128) -> MltKeysInfo {
@@ -262,7 +262,7 @@ pub fn run() -> sc_cli::Result<()> {
                 }
 
                 let keys = fetch_keys()?;
-                log::info!("fetch all keys: {:?}", keys);
+                log::debug!("fetch all keys: {:?}", keys);
 
                 match config.role {
                     Role::Light => service::new_light(config),
