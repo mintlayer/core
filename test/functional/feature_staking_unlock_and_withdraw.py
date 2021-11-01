@@ -4,18 +4,21 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """An example functional test
 
-Send a transaction from Alice to Bob, then spend Bob's transaction
+Alice wants to unlock her locked utxos, and withdraw; leaving Bob all alone.
+This was tested with Block time of 20 seconds.
+
 """
 
 from substrateinterface import Keypair
 import test_framework.mintlayer.utxo as utxo
-
+import time
 from test_framework.test_framework import MintlayerTestFramework
 from test_framework.util import (
     assert_equal,
     connect_nodes,
     wait_until,
 )
+from test_framework.messages import COIN
 
 
 class ExampleTest(MintlayerTestFramework):
@@ -29,10 +32,9 @@ class ExampleTest(MintlayerTestFramework):
 
         This method must be overridden and num_nodes must be exlicitly set."""
         self.setup_clean_chain = True
-        self.num_nodes = 1
+        self.num_nodes = 2
         # Use self.extra_args to change command-line arguments for the nodes
-        self.extra_args = [[]]
-
+        self.extra_args = [['--alice'],['--bob']]
         # self.log.info("I've finished set_test_params")  # Oops! Can't run self.log before run_test()
 
     def setup_network(self):
@@ -45,6 +47,7 @@ class ExampleTest(MintlayerTestFramework):
         them to self.nodes, connect them and then sync."""
 
         self.setup_nodes()
+        connect_nodes(self.nodes[1], self.nodes[0])
 
     def custom_method(self):
         """Do some custom behaviour for this test
@@ -58,46 +61,49 @@ class ExampleTest(MintlayerTestFramework):
     def run_test(self):
         client = self.nodes[0].rpc_client
 
+        ledger = list(client.get_staking_ledger())
+        assert_equal(len(ledger[0][1]['unlocking']),0)
+
         alice = Keypair.create_from_uri('//Alice')
-        bob = Keypair.create_from_uri('//Bob')
 
         # fetch the genesis utxo from storage
         utxos = list(client.utxos_for(alice))
 
-        tx1 = utxo.Transaction(
-            client,
-            inputs=[
-                utxo.Input(utxos[0][0]),
-            ],
-            outputs=[
-                utxo.Output(
-                    value=50,
-                    header=0,
-                    destination=utxo.DestPubkey(bob.public_key)
-                ),
-            ]
-        ).sign(alice, [utxos[0][1]])
-        client.submit(alice, tx1)
+        # Alice's locked utxo
+        locked_utxos = list(map(lambda e: e[0].value, list(client.locked_utxos_for(alice))))
 
-        tx2 = utxo.Transaction(
-            client,
-            inputs=[
-                utxo.Input(tx1.outpoint(0)),
-            ],
-            outputs=[
-                utxo.Output(
-                    value=30,
-                    header=0,
-                    destination=utxo.DestPubkey(alice.public_key)
-                ),
-                utxo.Output(
-                    value=20,
-                    header=0,
-                    destination=utxo.DestPubkey(bob.public_key)
-                ),
-            ]
-        ).sign(bob, tx1.outputs)
-        client.submit(bob, tx2)
+        # there's 2 records of staking, Alice's and Bob's.
+        assert_equal( len(list(client.staking_count())), 2 )
+
+        (_, _, events) = client.unlock_request_for_withdrawal(alice)
+
+        assert_equal(events[0].value['module_id'],'Staking')
+        assert_equal(events[0].value['event_id'], 'Chilled')
+
+        assert_equal(events[1].value['module_id'],'Staking')
+        assert_equal(events[1].value['event_id'], 'Unbonded')
+
+        assert_equal(events[2].value['module_id'],'Utxo')
+        assert_equal(events[2].value['event_id'], 'StakeUnlocked')
+
+        ledger = list(client.get_staking_ledger())
+        assert_equal(len(ledger),2)
+
+        time.sleep(500)
+
+        (_, _, w_events) = client.withdraw_stake(alice,locked_utxos)
+
+
+        assert_equal(w_events[0].value['module_id'],'Staking')
+        assert_equal(w_events[0].value['event_id'], 'Withdrawn')
+
+        assert_equal(w_events[1].value['module_id'],'Utxo')
+        assert_equal(w_events[1].value['event_id'], 'StakeWithdrawn')
+
+        assert_equal( len(list(client.staking_count())), 1)
+
+        updated_ledger = list(client.get_staking_ledger())
+        assert_equal(len(updated_ledger),1)
 
 
 if __name__ == '__main__':

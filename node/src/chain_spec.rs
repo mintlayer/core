@@ -1,12 +1,9 @@
-use node_template_runtime::{
-    pallet_utxo, AccountId, AuraConfig, BalancesConfig, GenesisConfig, GrandpaConfig, PpConfig,
-    Signature, SudoConfig, SystemConfig, UtxoConfig, WASM_BINARY,
-};
+use node_template_runtime::{pallet_utxo, NUM_OF_VALIDATOR_SLOTS, AccountId, BalancesConfig, GenesisConfig, PpConfig, Signature, SudoConfig, SystemConfig, UtxoConfig, WASM_BINARY, SessionConfig, StakingConfig, StakerStatus, MINIMUM_STAKE};
 use sc_network::config::MultiaddrWithPeerId;
 use sc_service::ChainType;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-use sp_core::H256;
-use sp_core::{sr25519, Pair, Public};
+use sp_core::{H256, Public, Pair};
+use sp_core::sr25519;
 use sp_finality_grandpa::AuthorityId as GrandpaId;
 use sp_runtime::traits::{IdentifyAccount, Verify};
 
@@ -23,19 +20,26 @@ pub fn get_from_seed<TPublic: Public>(seed: &str) -> <TPublic::Pair as Pair>::Pu
         .public()
 }
 
-type AccountPublic = <Signature as Verify>::Signer;
+pub type AccountPublic = <Signature as Verify>::Signer;
 
-/// Generate an account ID from seed.
-pub fn get_account_id_from_seed<TPublic: Public>(seed: &str) -> AccountId
-where
-    AccountPublic: From<<TPublic::Pair as Pair>::Public>,
-{
-    AccountPublic::from(get_from_seed::<TPublic>(seed)).into_account()
+/// Holds information about keys needed for the accounts
+#[derive(Default, Debug, Clone)]
+pub struct MltKeysInfo {
+    pub name: String,
+    pub sr25519_public_controller: sr25519::Public,
+    pub sr25519_public_stash: sr25519::Public,
+    pub ed25519_public: sp_core::ed25519::Public,
+    pub mlt_coins: u128
 }
 
-/// Generate an Aura authority key.
-pub fn authority_keys_from_seed(s: &str) -> (AuraId, GrandpaId) {
-    (get_from_seed::<AuraId>(s), get_from_seed::<GrandpaId>(s))
+impl  MltKeysInfo {
+    fn controller_account_id(&self) -> AccountId {
+        AccountPublic::from(self.sr25519_public_controller).into_account()
+    }
+
+    fn stash_account_id(&self) -> AccountId {
+        AccountPublic::from(self.sr25519_public_stash).into_account()
+    }
 }
 
 /// Return a list of bootnodes
@@ -53,9 +57,12 @@ fn get_bootnodes() -> Vec<MultiaddrWithPeerId> {
     ]
 }
 
-pub fn development_config() -> Result<ChainSpec, String> {
+pub fn development_config(endowed_accounts:Vec<MltKeysInfo>) -> Result<ChainSpec, String> {
     let wasm_binary = WASM_BINARY.ok_or_else(|| "Development wasm not available".to_string())?;
     let bootnodes = get_bootnodes();
+
+    // only Alice
+    let sudo = endowed_accounts.first().cloned().ok_or("endowed accounts is empty")?;
 
     Ok(ChainSpec::from_genesis(
         // Name
@@ -66,22 +73,14 @@ pub fn development_config() -> Result<ChainSpec, String> {
         move || {
             testnet_genesis(
                 wasm_binary,
-                // Initial PoA authorities
-                vec![authority_keys_from_seed("Alice")],
+                // Initial PoA authorities; 2
+                endowed_accounts.iter().cloned().take(2).collect(),
                 // Sudo account
-                get_account_id_from_seed::<sr25519::Public>("Alice"),
-                // Pre-funded accounts
-                vec![
-                    get_account_id_from_seed::<sr25519::Public>("Alice"),
-                    get_account_id_from_seed::<sr25519::Public>("Bob"),
-                    get_account_id_from_seed::<sr25519::Public>("Alice//stash"),
-                    get_account_id_from_seed::<sr25519::Public>("Bob//stash"),
-                ],
-                vec![
-                    get_from_seed::<sr25519::Public>("Alice"),
-                    get_from_seed::<sr25519::Public>("Bob"),
-                ],
-                true,
+                sudo.controller_account_id(),
+                // Pre-funded accounts; only Alice has a pre-funded utxo
+                endowed_accounts.iter().cloned().take(2).collect(),
+                // Pre-fund all accounts in the pallet-balance
+                endowed_accounts.clone()
             )
         },
         // Bootnodes
@@ -97,9 +96,12 @@ pub fn development_config() -> Result<ChainSpec, String> {
     ))
 }
 
-pub fn local_testnet_config() -> Result<ChainSpec, String> {
+pub fn local_testnet_config(endowed_accounts:Vec<MltKeysInfo>) -> Result<ChainSpec, String> {
     let wasm_binary = WASM_BINARY.ok_or_else(|| "Development wasm not available".to_string())?;
     let bootnodes = get_bootnodes();
+
+    // only Alice
+    let sudo = endowed_accounts.first().cloned().ok_or("endowed accounts is empty")?;
 
     Ok(ChainSpec::from_genesis(
         // Name
@@ -111,29 +113,13 @@ pub fn local_testnet_config() -> Result<ChainSpec, String> {
             testnet_genesis(
                 wasm_binary,
                 // Initial PoA authorities
-                vec![authority_keys_from_seed("Alice"), authority_keys_from_seed("Bob")],
-                // Sudo account
-                get_account_id_from_seed::<sr25519::Public>("Alice"),
-                // Pre-funded accounts
-                vec![
-                    get_account_id_from_seed::<sr25519::Public>("Alice"),
-                    get_account_id_from_seed::<sr25519::Public>("Bob"),
-                    get_account_id_from_seed::<sr25519::Public>("Charlie"),
-                    get_account_id_from_seed::<sr25519::Public>("Dave"),
-                    get_account_id_from_seed::<sr25519::Public>("Eve"),
-                    get_account_id_from_seed::<sr25519::Public>("Ferdie"),
-                    get_account_id_from_seed::<sr25519::Public>("Alice//stash"),
-                    get_account_id_from_seed::<sr25519::Public>("Bob//stash"),
-                    get_account_id_from_seed::<sr25519::Public>("Charlie//stash"),
-                    get_account_id_from_seed::<sr25519::Public>("Dave//stash"),
-                    get_account_id_from_seed::<sr25519::Public>("Eve//stash"),
-                    get_account_id_from_seed::<sr25519::Public>("Ferdie//stash"),
-                ],
-                vec![
-                    get_from_seed::<sr25519::Public>("Alice"),
-                    get_from_seed::<sr25519::Public>("Bob"),
-                ],
-                true,
+                endowed_accounts.iter().cloned().take(2).collect(),
+                // Sudo account; the first one, being Alice
+                sudo.controller_account_id(),
+                // Pre-funded utxos for the ff. accounts
+                endowed_accounts.clone(),
+                // Pre-funded all the accounts in the pallet-balance
+                endowed_accounts.clone()
             )
         },
         // Bootnodes
@@ -152,23 +138,76 @@ pub fn local_testnet_config() -> Result<ChainSpec, String> {
 /// Configure initial storage state for FRAME modules.
 fn testnet_genesis(
     wasm_binary: &[u8],
-    initial_authorities: Vec<(AuraId, GrandpaId)>,
+    initial_authorities: Vec<MltKeysInfo>,
     root_key: AccountId,
-    endowed_accounts: Vec<AccountId>,
-    endowed_utxos: Vec<sr25519::Public>,
-    _enable_println: bool,
+    endowed_utxos:Vec<MltKeysInfo>,
+    endowed_accounts:Vec<MltKeysInfo>
 ) -> GenesisConfig {
-    // only Alice contains 400 million coins.
-    let genesis = endowed_utxos
-        .first()
-        .map(|x| {
-            // may need to create a const variable to represent 1_000 and 100_000_000
-            pallet_utxo::TransactionOutput::new_pubkey(
-                1_000 * 100_000_000 * 400_000_000 as pallet_utxo::Value,
-                H256::from_slice(x.as_slice()),
-            )
-        })
-        .unwrap();
+    //TODO: clean up this code
+    // Endowment for the pallet-balances.
+    // Bigger endowment means security from all fees or costs generated by doing multiple actions;
+    // actions which are not charged when dealing with the utxo system.
+    // An example is the first time staking; that involves 3 steps; but in the utxo system, it's only 1.
+    const ENDOWMENT: u128 = 1 << 90;
+
+    let (  locked_utxos, stakers, session_keys)
+        = initial_authorities.iter().fold( (
+                   vec![], // the utxos locked
+                   vec![], // the stakers: (<stash_account_id>, <controller_account_id>, <stash_amount>, <role>)
+                   vec![]  // session keys: (<account_id>, <validator_id a.k.a. account_id>, <runtime_defined_keys>). See Pallet-Session
+               ), | (
+                     mut locked_utxos,
+                     mut stakers,
+                     mut session_keys
+                 ), auth_keys| {
+
+            // initial authorities meaning they're also validators.
+            // locking some values as a stake from validators
+            //TODO: change back to Public/H256 or something, after UI testing.
+            locked_utxos.push(pallet_utxo::TransactionOutput::<AccountId>::new_lock_for_staking(
+                // this is the minimum stake amount
+                MINIMUM_STAKE,
+                auth_keys.stash_account_id(),
+                auth_keys.controller_account_id(),
+                vec![]
+            ));
+
+            // to initialize the pallet-staking
+            stakers.push(
+                (
+                    auth_keys.stash_account_id(),
+                    auth_keys.controller_account_id(),
+                    // minimum balance set in the runtime. check `lib.rs` of runtime module.
+                    MINIMUM_STAKE,
+                    // the role is `validator`. See pallet-staking
+                    StakerStatus::Validator)
+            );
+
+            // Where aura and grandpa are initialized.
+            session_keys.push((
+                   auth_keys.stash_account_id(),
+                   auth_keys.stash_account_id(),
+                   node_template_runtime::opaque::SessionKeys {
+                       aura: AuraId::from(auth_keys.sr25519_public_controller),
+                       grandpa: GrandpaId::from(auth_keys.ed25519_public)
+                   }
+            ));
+
+            (locked_utxos, stakers, session_keys)
+        });
+
+    let genesis_utxos:Vec<pallet_utxo::TransactionOutput::<AccountId>> = endowed_utxos.into_iter().map(|info| {
+        pallet_utxo::TransactionOutput::<AccountId>::new_pubkey(
+            info.mlt_coins,
+            H256::from(info.sr25519_public_controller),
+        )
+    }).collect();
+
+    let balances = endowed_accounts.iter().fold(vec![], |mut acc, info| {
+        acc.push( (info.controller_account_id(), ENDOWMENT));
+        acc.push( (info.stash_account_id(), ENDOWMENT));
+        acc
+    });
 
     GenesisConfig {
         system: SystemConfig {
@@ -177,25 +216,38 @@ fn testnet_genesis(
             changes_trie_config: Default::default(),
         },
         balances: BalancesConfig {
-            // Configure endowed accounts with initial balance of 1 << 60.
-            balances: endowed_accounts.iter().cloned().map(|k| (k, 1 << 60)).collect(),
+            // Configure endowed accounts
+            balances,
         },
-        aura: AuraConfig {
-            authorities: initial_authorities.iter().map(|x| (x.0.clone())).collect(),
-        },
-        grandpa: GrandpaConfig {
-            authorities: initial_authorities.iter().map(|x| (x.1.clone(), 1)).collect(),
-        },
+        // This has been initialized from the session config
+        aura: Default::default(),
+        // This has been initialized from the session config
+        grandpa: Default::default(),
         sudo: SudoConfig {
             // Assign network admin rights.
             key: root_key,
         },
         utxo: UtxoConfig {
-            genesis_utxos: vec![genesis],
-            _marker: Default::default(),
+            genesis_utxos,
+            // The # of validators set should also be the same here.
+            // This should be the same as what's set as the initial authorities
+            locked_utxos,
+            // initial_reward_amount: 100 * MLT_UNIT
         },
         pp: PpConfig {
             _marker: Default::default(),
         },
+        session: SessionConfig {
+            keys: session_keys
+        },
+        staking: StakingConfig {
+            validator_count: NUM_OF_VALIDATOR_SLOTS,
+            // The # of validators set should be the same number of locked_utxos specified in UtxoConfig.
+            minimum_validator_count: 1,
+            invulnerables: initial_authorities.iter().map(|x| x.controller_account_id()).collect(),
+            slash_reward_fraction: sp_runtime::Perbill::from_percent(0), // nothing, since we're not using this at all.
+            stakers,
+            .. Default::default()
+        }
     }
 }

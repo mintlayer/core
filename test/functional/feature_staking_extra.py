@@ -4,7 +4,7 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """An example functional test
 
-Send a transaction from Alice to Bob, then spend Bob's transaction
+Alice stakes an extra 40_000 utxo
 """
 
 from substrateinterface import Keypair
@@ -16,6 +16,7 @@ from test_framework.util import (
     connect_nodes,
     wait_until,
 )
+from test_framework.messages import COIN
 
 
 class ExampleTest(MintlayerTestFramework):
@@ -59,10 +60,18 @@ class ExampleTest(MintlayerTestFramework):
         client = self.nodes[0].rpc_client
 
         alice = Keypair.create_from_uri('//Alice')
-        bob = Keypair.create_from_uri('//Bob')
 
         # fetch the genesis utxo from storage
         utxos = list(client.utxos_for(alice))
+
+
+        staking_count = list(client.staking_count())
+        # Get Alice
+        orig_count = list(filter(lambda e: e[0].value == alice.public_key , staking_count))[0][1]
+        # there should be 1 count of alice's locked utxo
+        assert_equal(orig_count[0],1)
+        # the amount that alice locked is 40_000 * MLT_UNIT
+        assert_equal(orig_count[1],40000 * COIN)
 
         tx1 = utxo.Transaction(
             client,
@@ -71,34 +80,21 @@ class ExampleTest(MintlayerTestFramework):
             ],
             outputs=[
                 utxo.Output(
-                    value=50,
+                    value=40000 * COIN,
                     header=0,
-                    destination=utxo.DestPubkey(bob.public_key)
+                    destination=utxo.DestLockExtraForStaking(alice.public_key)
                 ),
             ]
         ).sign(alice, [utxos[0][1]])
         client.submit(alice, tx1)
 
-        tx2 = utxo.Transaction(
-            client,
-            inputs=[
-                utxo.Input(tx1.outpoint(0)),
-            ],
-            outputs=[
-                utxo.Output(
-                    value=30,
-                    header=0,
-                    destination=utxo.DestPubkey(alice.public_key)
-                ),
-                utxo.Output(
-                    value=20,
-                    header=0,
-                    destination=utxo.DestPubkey(bob.public_key)
-                ),
-            ]
-        ).sign(bob, tx1.outputs)
-        client.submit(bob, tx2)
-
+        staking_count = list(client.staking_count())
+        # Get Alice
+        new_count = list(filter(lambda e: e[0].value == alice.public_key , staking_count))[0][1]
+        # there should already by 2 utxos locked
+        assert_equal(new_count[0],2)
+        # the original stake + new stake
+        assert_equal(new_count[1],80000 * COIN)
 
 if __name__ == '__main__':
     ExampleTest().main()

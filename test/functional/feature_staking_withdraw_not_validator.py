@@ -4,7 +4,7 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """An example functional test
 
-Send a transaction from Alice to Bob, then spend Bob's transaction
+Charlie tries to withdraw a stake which is not his.
 """
 
 from substrateinterface import Keypair
@@ -16,6 +16,7 @@ from test_framework.util import (
     connect_nodes,
     wait_until,
 )
+from test_framework.messages import COIN
 
 
 class ExampleTest(MintlayerTestFramework):
@@ -58,46 +59,24 @@ class ExampleTest(MintlayerTestFramework):
     def run_test(self):
         client = self.nodes[0].rpc_client
 
+        ledger = list(client.get_staking_ledger())
+        assert_equal(len(ledger[0][1]['unlocking']),0)
+        assert_equal(len(ledger[1][1]['unlocking']),0)
+
         alice = Keypair.create_from_uri('//Alice')
-        bob = Keypair.create_from_uri('//Bob')
+        charlie = Keypair.create_from_uri('//Charlie')
+        # Alice's locked utxo
+        outpoints = list(map(lambda e: e[0].value, list(client.locked_utxos_for(alice))))
 
-        # fetch the genesis utxo from storage
-        utxos = list(client.utxos_for(alice))
+        (_, _, events) = client.withdraw_stake(charlie,outpoints)
 
-        tx1 = utxo.Transaction(
-            client,
-            inputs=[
-                utxo.Input(utxos[0][0]),
-            ],
-            outputs=[
-                utxo.Output(
-                    value=50,
-                    header=0,
-                    destination=utxo.DestPubkey(bob.public_key)
-                ),
-            ]
-        ).sign(alice, [utxos[0][1]])
-        client.submit(alice, tx1)
+        ledger = list(client.get_staking_ledger())
+        assert_equal(len(ledger[0][1]['unlocking']),0)
+        assert_equal(len(ledger[1][1]['unlocking']),0)
 
-        tx2 = utxo.Transaction(
-            client,
-            inputs=[
-                utxo.Input(tx1.outpoint(0)),
-            ],
-            outputs=[
-                utxo.Output(
-                    value=30,
-                    header=0,
-                    destination=utxo.DestPubkey(alice.public_key)
-                ),
-                utxo.Output(
-                    value=20,
-                    header=0,
-                    destination=utxo.DestPubkey(bob.public_key)
-                ),
-            ]
-        ).sign(bob, tx1.outputs)
-        client.submit(bob, tx2)
+        locked_utxos = list(client.utxos('LockedUtxos'))
+        # there should still be 2 utxo locked, no actual withdrawal happened.
+        assert_equal(len(locked_utxos),2)
 
 
 if __name__ == '__main__':

@@ -16,9 +16,16 @@ To run the test cases, just run command `cargo test`.
       "Pubkey": "Pubkey",
       "CreatePP": "DestinationCreatePP",
       "CallPP": "DestinationCallPP",
-      "ScriptHash": "H256"
-    }
-  },
+      "ScriptHash": "H256",
+      "LockForStaking": "DestinationStake", 
+       "LockExtraForStaking": "AccountId"
+      }
+   },
+   "DestinationStake": {
+      "stash_account": "AccountId",
+      "controller_account": "AccountId",
+      "session_key": "Vec<u8>"
+   },
   "DestinationCreatePP": {
     "code": "Vec<u8>",
     "data": "Vec<u8>"

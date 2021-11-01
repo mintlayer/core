@@ -16,18 +16,25 @@
 // limitations under the License.
 
 use crate::cli::{Cli, Subcommand};
-use crate::{chain_spec, service};
-use node_template_runtime::Block;
+use crate::{chain_spec::{self, get_from_seed}, service};
+use node_template_runtime::{Block, pallet_utxo::MLT_UNIT};
 use sc_cli::{ChainSpec, Role, RuntimeVersion, SubstrateCli};
 use sc_network::config::MultiaddrWithPeerId;
 use sc_service::PartialComponents;
+use sp_core::{sr25519, ed25519};
 use std::error::Error;
 use std::time::Duration;
 use ureq::Agent;
+use sp_core::H256;
+use crate::chain_spec::MltKeysInfo;
 
 const BOOTNODE_LIST_URL: &str =
     "https://raw.githubusercontent.com/mintlayer/core/master/assets/bootnodes.json";
 const HTTP_TIMEOUT: u64 = 3000;
+
+//TODO: change this path to the exact one we need
+const KEYS_URL:&str =
+    "https://raw.githubusercontent.com/mintlayer/core/rewards_and_staking/assets/test_keys.json";
 
 /// Fetch an up-to-date list of bootnodes from Github
 fn fetch_bootnode_list() -> Result<Vec<MultiaddrWithPeerId>, Box<dyn Error>> {
@@ -47,6 +54,70 @@ fn fetch_bootnode_list() -> Result<Vec<MultiaddrWithPeerId>, Box<dyn Error>> {
     }
 
     Ok(parsed_nodes)
+}
+
+
+#[derive(Default, Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct MltKeysFromFile {
+     name: String,
+     sr25519_public_controller: H256,
+     sr25519_public_stash: H256,
+     ed25519_public: H256,
+     mlt_coins: u128
+}
+
+impl From<MltKeysFromFile> for MltKeysInfo {
+    fn from(x: MltKeysFromFile) -> Self {
+        Self {
+            name: x.name,
+            sr25519_public_controller: sr25519::Public::from_h256(x.sr25519_public_controller),
+            sr25519_public_stash: sr25519::Public::from_h256(x.sr25519_public_stash),
+            ed25519_public: ed25519::Public::from_h256(x.ed25519_public),
+            mlt_coins: x.mlt_coins
+        }
+    }
+}
+
+
+/// fetching all the needed keys for the accounts.
+pub fn fetch_keys() ->  Result<Vec<MltKeysInfo>, String>{
+    let mut key_list:Vec<MltKeysInfo> = vec![];
+
+    let agent: Agent = ureq::AgentBuilder::new()
+        .timeout_read(Duration::from_millis(HTTP_TIMEOUT))
+        .timeout_write(Duration::from_millis(HTTP_TIMEOUT))
+        .build();
+
+    if let Ok(contents) = agent.get(KEYS_URL).call().map_err(|e| e.to_string())?.into_string(){
+        let users:serde_json::Value = serde_json::from_str(&contents).map_err(|e| e.to_string())?;
+        for user in users["users"].as_array().ok_or("invalid json to extract user list")? {
+            let mut x:MltKeysFromFile = serde_json::from_value(user.clone()).map_err(|e| e.to_string())?;
+            x.mlt_coins = x.mlt_coins * MLT_UNIT;
+            key_list.push(x.into());
+        };
+    } else {
+        log::info!("failed to get keys from a file; using dummy values to populate keys");
+        //TODO: dummy values, in case the file doesn't exist.
+       impl MltKeysInfo {
+           fn new(seed:&str, mlt_coins:u128) -> MltKeysInfo {
+               MltKeysInfo {
+                   name: seed.to_string(),
+                   sr25519_public_controller: get_from_seed::<sr25519::Public>(seed),
+                   sr25519_public_stash: get_from_seed::<sr25519::Public>(&format!("{}//stash",seed)),
+                   ed25519_public: get_from_seed::<ed25519::Public>(seed),
+                   mlt_coins: mlt_coins * MLT_UNIT
+               }
+           }
+       }
+
+        key_list.push(MltKeysInfo::new("Alice", 399_600_000_000));
+        key_list.push(MltKeysInfo::new("Bob", 100_000_000));
+        key_list.push(MltKeysInfo::new("Charlie", 100_000_000));
+        key_list.push(MltKeysInfo::new("Dave", 100_000_000));
+        key_list.push(MltKeysInfo::new("Eve", 100_000_000));
+    }
+
+    Ok(key_list)
 }
 
 impl SubstrateCli for Cli {
@@ -76,8 +147,8 @@ impl SubstrateCli for Cli {
 
     fn load_spec(&self, id: &str) -> Result<Box<dyn sc_service::ChainSpec>, String> {
         Ok(match id {
-            "dev" => Box::new(chain_spec::development_config()?),
-            "" | "local" => Box::new(chain_spec::local_testnet_config()?),
+            "dev" => Box::new(chain_spec::development_config(fetch_keys()?)?),
+            "" | "local" => Box::new(chain_spec::local_testnet_config(fetch_keys()?)?),
             path => Box::new(chain_spec::ChainSpec::from_json_file(
                 std::path::PathBuf::from(path),
             )?),
@@ -183,6 +254,9 @@ pub fn run() -> sc_cli::Result<()> {
                         Err(e) => log::error!("Failed to update bootnode list: {:?}", e),
                     },
                 }
+
+                let keys = fetch_keys()?;
+                log::info!("fetch all keys: {:?}",keys);
 
                 match config.role {
                     Role::Light => service::new_light(config),
