@@ -121,14 +121,14 @@ class ExampleTest(MintlayerTestFramework):
 
         # charlie should have 2 locked utxos
         assert_equal(charlie_count[0], 2)
-#
-#         # charlie should have a total of 50000 * COINS locked
-#         assert_equal(charlie_count[1], 50000 * COIN)
-#
-#         # fetch the locked utxos from storage
-#         locked_utxos = list(client.utxos('LockedUtxos'))
-#         # there should already be 4 in the list; 1 from alice, 1 from bob, 2 from charlie
-#         assert_equal(len(locked_utxos),4)
+
+        # charlie should have a total of 50000 * COINS locked
+        assert_equal(charlie_count[1], 50000 * COIN)
+
+        # fetch the locked utxos from storage
+        locked_utxos = list(client.utxos('LockedUtxos'))
+        # there should already be 4 in the list; 1 from alice, 1 from bob, 2 from charlie
+        assert_equal(len(locked_utxos),4)
 
 
 if __name__ == '__main__':
