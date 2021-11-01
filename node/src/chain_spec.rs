@@ -65,7 +65,7 @@ pub fn development_config(endowed_accounts: Vec<MltKeysInfo>) -> Result<ChainSpe
     let wasm_binary = WASM_BINARY.ok_or_else(|| "Development wasm not available".to_string())?;
     let bootnodes = get_bootnodes();
 
-    // only Alice
+    // only Alice has sudo powers
     let sudo = endowed_accounts.first().cloned().ok_or("endowed accounts is empty")?;
 
     Ok(ChainSpec::from_genesis(
@@ -81,7 +81,8 @@ pub fn development_config(endowed_accounts: Vec<MltKeysInfo>) -> Result<ChainSpe
                 endowed_accounts.iter().cloned().take(2).collect(),
                 // Sudo account
                 sudo.controller_account_id(),
-                // Pre-funded accounts; only Alice has a pre-funded utxo
+                // Pre-funded accounts; only the first 2 are funded. This is important for
+                // the functional tests.
                 endowed_accounts.iter().cloned().take(2).collect(),
                 // Pre-fund all accounts in the pallet-balance
                 endowed_accounts.clone(),

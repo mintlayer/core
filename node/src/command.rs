@@ -59,8 +59,9 @@ fn fetch_bootnode_list() -> Result<Vec<MultiaddrWithPeerId>, Box<dyn Error>> {
     Ok(parsed_nodes)
 }
 
+// Just to help translate json from the file.
 #[derive(Default, Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct MltKeysFromFile {
+struct MltKeysFromFile {
     name: String,
     sr25519_public_controller: H256,
     sr25519_public_stash: H256,
