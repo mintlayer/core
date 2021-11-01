@@ -17,9 +17,9 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
+pub use authorship::*;
 pub use header::*;
 pub use pallet::*;
-pub use authorship::*;
 
 #[cfg(test)]
 mod mock;
@@ -54,11 +54,11 @@ use utxo_api::UtxoApi;
 
 #[frame_support::pallet]
 pub mod pallet {
+    use crate::rewards::reward_block_author;
     pub use crate::script::{BlockTime, RawBlockTime};
     use crate::sign::{self, Scheme};
-    use crate::{OutputHeaderData, OutputHeaderHelper, TXOutputHeader, TokenID, TokenType};
-    use crate::{rewards::reward_block_author};
     use crate::staking::{self, StakingHelper};
+    use crate::{OutputHeaderData, OutputHeaderHelper, TXOutputHeader, TokenID, TokenType};
     use bech32;
     use chainscript::Script;
     use codec::{Decode, Encode};
@@ -68,8 +68,8 @@ pub mod pallet {
         dispatch::{DispatchResultWithPostInfo, Vec},
         pallet_prelude::*,
         sp_io::crypto,
-        sp_runtime::Percent,
         sp_runtime::traits::{BlakeTwo256, Dispatchable, Hash},
+        sp_runtime::Percent,
         traits::{IsSubType, UnixTime},
     };
     use frame_system::pallet_prelude::*;
@@ -91,7 +91,6 @@ pub mod pallet {
     pub type Value = u128;
     pub type String = Vec<u8>;
     pub const MLT_UNIT: Value = 1_000 * 100_000_000;
-
 
     pub struct Mlt(Value);
     impl Mlt {
@@ -145,7 +144,6 @@ pub mod pallet {
 
         /// The hash outpoint key already exists in the storage where it expects to be.
         OutpointAlreadyExist,
-
     }
 
     #[pallet::pallet]
@@ -168,23 +166,23 @@ pub mod pallet {
 
         /// the rate of diminishing reward
         #[pallet::constant]
-        type InitialReward:Get<Value>;
+        type InitialReward: Get<Value>;
 
         /// the rate of diminishing reward
         #[pallet::constant]
-        type RewardReductionFraction:Get<Percent>;
+        type RewardReductionFraction: Get<Percent>;
 
         /// duration of unchanged rewards, before applying the RewardReductionFraction
         #[pallet::constant]
-        type RewardReductionPeriod:Get<Self::BlockNumber>;
+        type RewardReductionPeriod: Get<Self::BlockNumber>;
 
         /// the minimum value for initial staking.
         #[pallet::constant]
-        type MinimumStake:Get<Value>;
+        type MinimumStake: Get<Value>;
 
         /// how much are we charging for withdrawing the unlocked stake.
         #[pallet::constant]
-        type StakeWithdrawalFee:Get<Value>;
+        type StakeWithdrawalFee: Get<Value>;
 
         /// helps in dealing with staking, using the logic outside of this pallet.
         /// An example is the `pallet-staking`, where it deals with multiple operations
@@ -281,13 +279,13 @@ pub mod pallet {
         ScriptHash(H256),
         /// First attempt of staking.
         /// Must assign a controller, in order to bond and validate. see pallet-staking
-        LockForStaking{
-            stash_account:AccountId, //TODO: change back to Public/H256 or something, after UI testing.
-            controller_account:AccountId, //TODO: change back to Public/H256 or something, after UI testing.
-            session_key: Vec<u8>
+        LockForStaking {
+            stash_account: AccountId, //TODO: change back to Public/H256 or something, after UI testing.
+            controller_account: AccountId, //TODO: change back to Public/H256 or something, after UI testing.
+            session_key: Vec<u8>,
         },
         /// lock more funds
-        LockExtraForStaking(AccountId) //TODO: change back to Public/H256 or something, after UI testing.
+        LockExtraForStaking(AccountId), //TODO: change back to Public/H256 or something, after UI testing.
     }
 
     impl<AccountId> Destination<AccountId> {
@@ -340,11 +338,20 @@ pub mod pallet {
         /// * `session_key` - for every new validator candidate, you want to link it to a session key.
         /// Generation of `session_key` is done through an rpc call `author_rotateKeys`.
         /// See https://docs.substrate.io/v3/concepts/session-keys/
-        pub fn new_lock_for_staking(value: Value, stash_account:AccountId, controller_account:AccountId, session_key:Vec<u8>) -> Self {
+        pub fn new_lock_for_staking(
+            value: Value,
+            stash_account: AccountId,
+            controller_account: AccountId,
+            session_key: Vec<u8>,
+        ) -> Self {
             Self {
                 value,
                 header: 0,
-                destination: Destination::LockForStaking { stash_account, controller_account, session_key }
+                destination: Destination::LockForStaking {
+                    stash_account,
+                    controller_account,
+                    session_key,
+                },
             }
         }
 
@@ -354,7 +361,7 @@ pub mod pallet {
             Self {
                 value,
                 header: 0,
-                destination: Destination::LockExtraForStaking(controller_account)
+                destination: Destination::LockExtraForStaking(controller_account),
             }
         }
 
@@ -414,8 +421,7 @@ pub mod pallet {
         }
     }
 
-
-    pub fn convert_to_h256<T: Config>(account:&T::AccountId) -> Result<H256,DispatchError> {
+    pub fn convert_to_h256<T: Config>(account: &T::AccountId) -> Result<H256, DispatchError> {
         let pubkey_raw: [u8; 32] = account
             .encode()
             .try_into()
@@ -502,12 +508,13 @@ pub mod pallet {
     #[pallet::storage]
     #[pallet::getter(fn locked_utxos)]
     pub(super) type LockedUtxos<T: Config> =
-    StorageMap<_, Identity, H256, TransactionOutputFor<T>, OptionQuery>;
+        StorageMap<_, Identity, H256, TransactionOutputFor<T>, OptionQuery>;
 
     /// this is to count how many stakings done for that controller account.
     #[pallet::storage]
     #[pallet::getter(fn staking_count)]
-    pub(super) type StakingCount<T: Config> = StorageMap<_, Identity,H256,(u64, Value), OptionQuery>;
+    pub(super) type StakingCount<T: Config> =
+        StorageMap<_, Identity, H256, (u64, Value), OptionQuery>;
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -520,14 +527,13 @@ pub mod pallet {
         /// \[utxo_for_block_author\]
         BlockAuthorRewarded(TransactionOutput<T::AccountId>),
 
-
         /// Unstaking is enabled after the end of bonding duration, as set in pallet-staking.
         /// \[controller_account_H256_address\]
         StakeUnlocked(H256),
 
         /// Unlocked stake has been withdrawn.
         /// \[total_stake, controller_account_H256_address\]
-        StakeWithdrawn(Value, H256)
+        StakeWithdrawn(Value, H256),
     }
 
     #[pallet::hooks]
@@ -730,10 +736,18 @@ pub mod pallet {
                     ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
                 }
                 Destination::LockExtraForStaking(_) => {
-                    staking::validate_lock_extra_for_staking_requirements::<T>(hash,output.value)?;
+                    staking::validate_lock_extra_for_staking_requirements::<T>(hash, output.value)?;
                 }
-                Destination::LockForStaking { stash_account:_, controller_account, session_key:_ } => {
-                    staking::validate_lock_for_staking_requirements::<T>(hash,output.value, controller_account)?;
+                Destination::LockForStaking {
+                    stash_account: _,
+                    controller_account,
+                    session_key: _,
+                } => {
+                    staking::validate_lock_for_staking_requirements::<T>(
+                        hash,
+                        output.value,
+                        controller_account,
+                    )?;
                 }
             }
         }
@@ -809,7 +823,7 @@ pub mod pallet {
                         crate::script::verify(&tx, &input_utxos, index as u64, witness, lock)
                             .map_err(|_| "script verification failed")?;
                     }
-                    Destination::LockForStaking {..} | Destination::LockExtraForStaking(_) => {
+                    Destination::LockForStaking { .. } | Destination::LockExtraForStaking(_) => {
                         log::info!("TODO validate STAKE spending");
                     }
                 }
@@ -874,10 +888,10 @@ pub mod pallet {
                     <UtxoStore<T>>::insert(hash, output);
                 }
                 Destination::LockForStaking { .. } => {
-                    staking::lock_for_staking::<T>(hash,output)?;
+                    staking::lock_for_staking::<T>(hash, output)?;
                 }
                 Destination::LockExtraForStaking(_) => {
-                    staking::locking_extra_utxos::<T>(hash,output)?;
+                    staking::locking_extra_utxos::<T>(hash, output)?;
                 }
             }
         }
@@ -1109,10 +1123,10 @@ pub mod pallet {
         pub fn withdraw_stake(
             origin: OriginFor<T>,
             controller_account: T::AccountId,
-            outpoints: Vec<H256>
+            outpoints: Vec<H256>,
         ) -> DispatchResultWithPostInfo {
             ensure_signed(origin)?;
-            staking::withdraw::<T>(controller_account,outpoints)?;
+            staking::withdraw::<T>(controller_account, outpoints)?;
             Ok(().into())
         }
     }
@@ -1131,7 +1145,7 @@ pub mod pallet {
         fn default() -> Self {
             Self {
                 genesis_utxos: vec![],
-                locked_utxos: vec![]
+                locked_utxos: vec![],
             }
         }
     }
@@ -1144,9 +1158,14 @@ pub mod pallet {
             });
 
             self.locked_utxos.iter().cloned().enumerate().for_each(|(index, u)| {
-                if let Destination::LockForStaking { stash_account:_, controller_account, session_key:_ } =  &u.destination {
-                    if let Ok(controller_pubkey) = convert_to_h256::<T>(controller_account){
-                        <StakingCount<T>>::insert(controller_pubkey,(1, u.value));
+                if let Destination::LockForStaking {
+                    stash_account: _,
+                    controller_account,
+                    session_key: _,
+                } = &u.destination
+                {
+                    if let Ok(controller_pubkey) = convert_to_h256::<T>(controller_account) {
+                        <StakingCount<T>>::insert(controller_pubkey, (1, u.value));
                     }
                 }
 

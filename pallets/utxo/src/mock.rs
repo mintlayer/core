@@ -15,30 +15,30 @@
 //
 // Author(s): C. Yap
 use crate as pallet_utxo;
-use pallet_utxo::TransactionOutput;
 use pallet_utxo::staking::StakingHelper;
+use pallet_utxo::TransactionOutput;
 use pp_api::ProgrammablePoolApi;
 
+use frame_support::dispatch::DispatchResultWithPostInfo;
 use frame_support::{dispatch::Vec, weights::Weight};
 use frame_support::{
     parameter_types,
     sp_io::TestExternalities,
     sp_runtime::{
-        Percent,
         testing::Header,
         traits::{BlakeTwo256, Hash, IdentityLookup},
+        Percent,
     },
     traits::GenesisBuild,
 };
+use frame_system::Config as SysConfig;
 use sp_core::{
-    sp_std::{marker::PhantomData, vec, collections::btree_map::BTreeMap, cell::RefCell},
+    sp_std::{cell::RefCell, collections::btree_map::BTreeMap, marker::PhantomData, vec},
     sr25519::Public,
     testing::SR25519,
     H256,
 };
 use sp_keystore::{testing::KeyStore, KeystoreExt, SyncCryptoStore};
-use frame_support::dispatch::DispatchResultWithPostInfo;
-use frame_system::Config as SysConfig;
 
 pub type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 pub type Block = frame_system::mocking::MockBlock<Test>;
@@ -46,13 +46,13 @@ pub type Block = frame_system::mocking::MockBlock<Test>;
 pub type BlockNumber = u64;
 pub type AccountId = H256;
 
-pub struct MockStaking<T:pallet_utxo::Config>{
+pub struct MockStaking<T: pallet_utxo::Config> {
     pub withdrawal_span: T::BlockNumber,
     pub current_block: T::BlockNumber,
-    pub lock_map: BTreeMap<T::AccountId,Option<T::BlockNumber>>,
-    pub stash_map:BTreeMap<T::AccountId,T::AccountId>,
-    pub lock_stash_map:BTreeMap<T::AccountId,T::AccountId>,
-    pub marker: PhantomData<T>
+    pub lock_map: BTreeMap<T::AccountId, Option<T::BlockNumber>>,
+    pub stash_map: BTreeMap<T::AccountId, T::AccountId>,
+    pub lock_stash_map: BTreeMap<T::AccountId, T::AccountId>,
+    pub marker: PhantomData<T>,
 }
 
 thread_local! {
@@ -67,7 +67,7 @@ pub fn genesis_utxo() -> (TransactionOutput<H256>, H256) {
     let keystore = KeyStore::new();
     let alice_pub_key = create_pub_key(&keystore, ALICE_PHRASE);
     let output = TransactionOutput::<H256>::new_pubkey(100, H256::from(alice_pub_key));
-    let hash =  BlakeTwo256::hash_of(&(&output, 0u64, "genesis"));
+    let hash = BlakeTwo256::hash_of(&(&output, 0u64, "genesis"));
     (output, hash)
 }
 
@@ -109,7 +109,7 @@ impl MockStaking<Test> {
             lock_map: BTreeMap::new(),
             stash_map: BTreeMap::new(),
             lock_stash_map: BTreeMap::new(),
-            marker: Default::default()
+            marker: Default::default(),
         }
     }
 }
@@ -117,17 +117,21 @@ impl MockStaking<Test> {
 pub fn next_block() {
     MOCK_STAKING.with(|stake_info| {
         let mut stake_info = stake_info.borrow_mut();
-        stake_info.current_block +=1;
+        stake_info.current_block += 1;
     })
 }
 
-impl <T:pallet_utxo::Config> StakingHelper<AccountId> for MockStaking<T>
-{
+impl<T: pallet_utxo::Config> StakingHelper<AccountId> for MockStaking<T> {
     fn get_account_id(pub_key: &H256) -> AccountId {
         pub_key.clone()
     }
 
-    fn lock_for_staking(stash_account: &AccountId, controller_account: &AccountId, _rotate_keys:  &Vec<u8>, _value:u128) -> DispatchResultWithPostInfo {
+    fn lock_for_staking(
+        stash_account: &AccountId,
+        controller_account: &AccountId,
+        _rotate_keys: &Vec<u8>,
+        _value: u128,
+    ) -> DispatchResultWithPostInfo {
         MOCK_STAKING.with(|stake_info| {
             let mut stake_info = stake_info.borrow_mut();
 
@@ -143,15 +147,20 @@ impl <T:pallet_utxo::Config> StakingHelper<AccountId> for MockStaking<T>
                 Err("CANNOT STAKE. STASH ACCOUNT EXISTS IN STASH MAP")?
             }
 
-            stake_info.lock_map.insert(controller_account.clone(),None);
-            stake_info.lock_stash_map.insert(controller_account.clone(), stash_account.clone());
-            stake_info.stash_map.insert(stash_account.clone(),controller_account.clone());
+            stake_info.lock_map.insert(controller_account.clone(), None);
+            stake_info
+                .lock_stash_map
+                .insert(controller_account.clone(), stash_account.clone());
+            stake_info.stash_map.insert(stash_account.clone(), controller_account.clone());
 
             Ok(().into())
-        } )
+        })
     }
 
-    fn lock_extra_for_staking(controller_account: &AccountId, _value: u128) -> DispatchResultWithPostInfo {
+    fn lock_extra_for_staking(
+        controller_account: &AccountId,
+        _value: u128,
+    ) -> DispatchResultWithPostInfo {
         MOCK_STAKING.with(|stake_info| {
             let stake_info = stake_info.borrow();
 
@@ -185,7 +194,7 @@ impl <T:pallet_utxo::Config> StakingHelper<AccountId> for MockStaking<T>
             }
 
             let withdrawal_block = stake_info.current_block + stake_info.withdrawal_span;
-            stake_info.lock_map.insert(controller_account.clone(),Some(withdrawal_block));
+            stake_info.lock_map.insert(controller_account.clone(), Some(withdrawal_block));
 
             Ok(().into())
         })
@@ -198,7 +207,8 @@ impl <T:pallet_utxo::Config> StakingHelper<AccountId> for MockStaking<T>
             if !stake_info.stash_map.contains_key(controller_account) {
                 if let Some(Some(withdrawal_block)) = stake_info.lock_map.get(controller_account) {
                     if *withdrawal_block <= stake_info.current_block {
-                        let stash_account = stake_info.lock_stash_map.remove(controller_account).unwrap();
+                        let stash_account =
+                            stake_info.lock_stash_map.remove(controller_account).unwrap();
                         stake_info.stash_map.remove(&stash_account);
                         stake_info.lock_map.remove(controller_account);
 
@@ -265,7 +275,7 @@ parameter_types! {
     pub const InitialReward: u128 = 100;
     pub const StakeWithdrawalFee: u128 = 1;
     pub const RewardReductionPeriod: BlockNumber = 5;
-	pub const RewardReductionFraction: Percent = Percent::from_percent(25);
+    pub const RewardReductionFraction: Percent = Percent::from_percent(25);
 }
 
 impl pallet_utxo::Config for Test {
@@ -278,13 +288,13 @@ impl pallet_utxo::Config for Test {
     type RewardReductionPeriod = RewardReductionPeriod;
 
     fn authorities() -> Vec<H256> {
-        AUTHORITIES.with( |auths|{
+        AUTHORITIES.with(|auths| {
             let auths = auths.borrow();
             auths.iter().map(|x| H256::from(x.0)).collect()
         })
     }
 
-    type StakingHelper =MockStaking<Test>;
+    type StakingHelper = MockStaking<Test>;
     type MinimumStake = MinimumStake;
     type StakeWithdrawalFee = StakeWithdrawalFee;
     type InitialReward = InitialReward;
@@ -336,17 +346,14 @@ pub fn alice_test_ext_and_keys() -> (TestExternalities, Public, Public) {
     (ext, alice_pub_key, karl_pub_key)
 }
 
-
-pub fn multiple_keys_test_ext()  -> (TestExternalities, Vec<(Public,H256)>) {
-
+pub fn multiple_keys_test_ext() -> (TestExternalities, Vec<(Public, H256)>) {
     const KARL_PHRASE: &str =
         "monitor exhibit resource stumble subject nut valid furnace obscure misery satoshi assume";
 
     const GREG_PHRASE: &str =
         "infant salmon buzz patrol maple subject turtle cute legend song vital leisure";
 
-    const TOM_PHRASE: &str =
-        "clip organ olive upper oak void inject side suit toilet stick narrow";
+    const TOM_PHRASE: &str = "clip organ olive upper oak void inject side suit toilet stick narrow";
 
     let keystore = KeyStore::new();
 
@@ -368,24 +375,29 @@ pub fn multiple_keys_test_ext()  -> (TestExternalities, Vec<(Public,H256)>) {
     let mut t = frame_system::GenesisConfig::default().build_storage::<Test>().unwrap();
 
     pallet_utxo::GenesisConfig::<Test> {
-        genesis_utxos: vec![alice_genesis.clone(), karl_genesis.clone(), greg_genesis.clone(), tom_genesis.clone()],
+        genesis_utxos: vec![
+            alice_genesis.clone(),
+            karl_genesis.clone(),
+            greg_genesis.clone(),
+            tom_genesis.clone(),
+        ],
         locked_utxos: vec![
             // tom is a stash account and alice is the controller.
-            TransactionOutput::new_lock_for_staking(10,tom_hash,alice_hash,vec![3,1])
+            TransactionOutput::new_lock_for_staking(10, tom_hash, alice_hash, vec![3, 1]),
         ],
         // initial_reward_amount: 1,
     }
-        .assimilate_storage(&mut t)
-        .unwrap();
+    .assimilate_storage(&mut t)
+    .unwrap();
 
     let mut ext = TestExternalities::from(t);
     ext.register_extension(KeystoreExt(std::sync::Arc::new(keystore)));
 
     MOCK_STAKING.with(|stake_info| {
         let mut stake_info = stake_info.borrow_mut();
-        stake_info.lock_map.insert(alice_hash,None);
+        stake_info.lock_map.insert(alice_hash, None);
         stake_info.lock_stash_map.insert(alice_hash, tom_hash);
-        stake_info.stash_map.insert(tom_hash,alice_hash);
+        stake_info.stash_map.insert(tom_hash, alice_hash);
     });
 
     AUTHORITIES.with(|auths| {
@@ -393,11 +405,25 @@ pub fn multiple_keys_test_ext()  -> (TestExternalities, Vec<(Public,H256)>) {
         auths.push(alice_pub_key);
     });
 
-
-    (ext, vec![
-        (alice_pub_key, BlakeTwo256::hash_of(&(&alice_genesis, 0u64, "genesis"))),
-        (karl_pub_key, BlakeTwo256::hash_of(&(&karl_genesis, 1u64, "genesis"))),
-        (greg_pub_key,BlakeTwo256::hash_of(&(&greg_genesis, 2u64, "genesis"))),
-        (tom_pub_key,BlakeTwo256::hash_of(&(&tom_genesis, 3u64, "genesis"))),
-    ])
+    (
+        ext,
+        vec![
+            (
+                alice_pub_key,
+                BlakeTwo256::hash_of(&(&alice_genesis, 0u64, "genesis")),
+            ),
+            (
+                karl_pub_key,
+                BlakeTwo256::hash_of(&(&karl_genesis, 1u64, "genesis")),
+            ),
+            (
+                greg_pub_key,
+                BlakeTwo256::hash_of(&(&greg_genesis, 2u64, "genesis")),
+            ),
+            (
+                tom_pub_key,
+                BlakeTwo256::hash_of(&(&tom_genesis, 3u64, "genesis")),
+            ),
+        ],
+    )
 }

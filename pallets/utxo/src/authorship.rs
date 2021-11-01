@@ -15,26 +15,27 @@
 //
 // Author(s): C. Yap
 
-use crate::{Config, BlockAuthor};
-use frame_support::{traits::FindAuthor,ConsensusEngineId};
+use crate::{BlockAuthor, Config};
 use frame_support::traits::ValidatorSet;
+use frame_support::{traits::FindAuthor, ConsensusEngineId};
 
 /// Get the `H256` version of the BlockAuthor.
 /// The BlockAuthor is known by its index position only.
 /// To return the actual accountId, the Validators set is required.
-pub struct FindAccountFromAuthorIndex<T,Inner,Validators>(core::marker::PhantomData<(T,Inner,Validators)>);
-
+pub struct FindAccountFromAuthorIndex<T, Inner, Validators>(
+    core::marker::PhantomData<(T, Inner, Validators)>,
+);
 
 /// The inner `FindAuthor` will point to the BlockAuthor's index position, given the digest.
 /// That index position points to an index of a list of validators, which this pallet doesn't have.
 /// The `Validators` is a list that can be used to retrieve the account Id.
-impl<T: Config, Inner: FindAuthor<u32>, Validators:ValidatorSet<T::AccountId>>
-FindAuthor<Validators::ValidatorId> for FindAccountFromAuthorIndex<T,Inner, Validators>
+impl<T: Config, Inner: FindAuthor<u32>, Validators: ValidatorSet<T::AccountId>>
+    FindAuthor<Validators::ValidatorId> for FindAccountFromAuthorIndex<T, Inner, Validators>
 {
     fn find_author<'a, I>(digests: I) -> Option<Validators::ValidatorId>
-        where
-            I: 'a + IntoIterator<Item=(ConsensusEngineId, &'a [u8])> {
-
+    where
+        I: 'a + IntoIterator<Item = (ConsensusEngineId, &'a [u8])>,
+    {
         // here the inner `FindAuthor` determines the block author.
         // An example would be Aura's `FindAuthor` implementation.
         let i = Inner::find_author(digests)?;
@@ -42,7 +43,7 @@ FindAuthor<Validators::ValidatorId> for FindAccountFromAuthorIndex<T,Inner, Vali
         // we use a list of authorities to get the H256 equivalent of the author.
         // An example would be Aura's list of authorities.
         if let Some(authority) = T::authorities().get(i as usize) {
-            <BlockAuthor::<T>>::put(*authority);
+            <BlockAuthor<T>>::put(*authority);
         }
 
         // As Block authors need to be validators as well, This validator set will determine the

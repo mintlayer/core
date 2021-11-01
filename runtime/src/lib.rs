@@ -16,12 +16,12 @@ use sp_api::impl_runtime_apis;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{crypto::KeyTypeId, OpaqueMetadata, H256};
 use sp_runtime::traits::{
-    AccountIdLookup, BlakeTwo256, Block as BlockT, IdentifyAccount, NumberFor, OpaqueKeys, Verify
+    AccountIdLookup, BlakeTwo256, Block as BlockT, IdentifyAccount, NumberFor, OpaqueKeys, Verify,
 };
 use sp_runtime::{
     create_runtime_str, generic, impl_opaque_keys,
     transaction_validity::{TransactionSource, TransactionValidity},
-    ApplyExtrinsicResult, MultiSignature
+    ApplyExtrinsicResult, MultiSignature,
 };
 use sp_std::prelude::*;
 #[cfg(feature = "std")]
@@ -40,21 +40,21 @@ pub use frame_support::{
 };
 pub use pallet_balances::Call as BalancesCall;
 use pallet_contracts::weights::WeightInfo;
-pub use pallet_timestamp::Call as TimestampCall;
 pub use pallet_staking::StakerStatus;
+pub use pallet_timestamp::Call as TimestampCall;
 use pallet_transaction_payment::CurrencyAdapter;
 #[cfg(any(feature = "std", test))]
 pub use sp_runtime::BuildStorage;
-pub use sp_runtime::{Perbill, Permill, Percent};
+pub use sp_runtime::{Perbill, Percent, Permill};
 
 /// Import the template pallet.
 pub use pallet_template;
 
 pub use pallet_pp;
 pub use pallet_utxo;
-pub use staking::*;
-use sp_runtime::transaction_validity::{InvalidTransaction, TransactionValidityError};
 use pallet_utxo::MLT_UNIT;
+use sp_runtime::transaction_validity::{InvalidTransaction, TransactionValidityError};
+pub use staking::*;
 
 /// An index to a block.
 pub type BlockNumber = u32;
@@ -248,7 +248,7 @@ impl pallet_grandpa::Config for Runtime {
     type KeyOwnerProofSystem = (); //Historical
 
     type KeyOwnerProof =
-    <Self::KeyOwnerProofSystem as KeyOwnerProofSystem<(KeyTypeId, GrandpaId)>>::Proof;
+        <Self::KeyOwnerProofSystem as KeyOwnerProofSystem<(KeyTypeId, GrandpaId)>>::Proof;
 
     type KeyOwnerIdentification = <Self::KeyOwnerProofSystem as KeyOwnerProofSystem<(
         KeyTypeId,
@@ -312,11 +312,11 @@ impl pallet_template::Config for Runtime {
     type Event = Event;
 }
 
-parameter_types!{
+parameter_types! {
     pub const MinimumStake: u128 = MINIMUM_STAKE;
     pub const StakeWithdrawalFee: u128 =  1 * MLT_UNIT;
     pub const RewardReductionPeriod: BlockNumber = 1 * YEARS; // reward reduced every year
-	pub const RewardReductionFraction: Percent = Percent::from_percent(25); // reward reduced at 25%
+    pub const RewardReductionFraction: Percent = Percent::from_percent(25); // reward reduced at 25%
     pub const InitialReward: u128 = 100 * MLT_UNIT;
 }
 
@@ -419,7 +419,7 @@ impl pallet_session::Config for Runtime {
     type ValidatorIdOf = pallet_staking::StashOf<Self>;
     type ShouldEndSession = pallet_session::PeriodicSessions<Period, Offset>;
     type NextSessionRotation = ();
-    type SessionManager = pallet_session_historical::NoteHistoricalRoot<Self,Staking>;
+    type SessionManager = pallet_session_historical::NoteHistoricalRoot<Self, Staking>;
     type SessionHandler = <opaque::SessionKeys as OpaqueKeys>::KeyTypeIdProviders;
     type Keys = opaque::SessionKeys;
     type DisabledValidatorsThreshold = DisabledValidatorsThreshold;
@@ -485,7 +485,8 @@ impl pallet_authorship::Config for Runtime {
     type EventHandler = (); //pallet_staking::Pallet<Runtime>;
 }
 
-impl<C> frame_system::offchain::SendTransactionTypes<C> for Runtime where
+impl<C> frame_system::offchain::SendTransactionTypes<C> for Runtime
+where
     Call: From<C>,
 {
     type Extrinsic = UncheckedExtrinsic;

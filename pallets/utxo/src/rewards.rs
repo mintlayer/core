@@ -15,17 +15,18 @@
 //
 // Author(s): C. Yap
 
-use crate::{Config, Pallet, Event, BlockAuthor, TransactionOutput, UtxoStore, RewardTotal};
+use crate::{BlockAuthor, Config, Event, Pallet, RewardTotal, TransactionOutput, UtxoStore};
 
 use frame_support::traits::Get;
-use sp_runtime::traits::{One,CheckedSub, CheckedDiv, SaturatedConversion, BlakeTwo256, Hash, Zero};
-
+use sp_runtime::traits::{
+    BlakeTwo256, CheckedDiv, CheckedSub, Hash, One, SaturatedConversion, Zero,
+};
 
 /// Returns the newly reduced reward amount for a Block Author.
 /// How much a reward is reduced, is based on the config's`RewardReductionFraction`.
-fn get_reward_amount<T:Config>(block_number:T::BlockNumber) -> u128 {
+fn get_reward_amount<T: Config>(block_number: T::BlockNumber) -> u128 {
     let reduction_fraction = T::RewardReductionFraction::get();
-    let reduction_period: T::BlockNumber =  T::RewardReductionPeriod::get();
+    let reduction_period: T::BlockNumber = T::RewardReductionPeriod::get();
     let mut reward_amount = T::InitialReward::get();
 
     if let Some(mut counter) = block_number.checked_div(&reduction_period) {
@@ -33,13 +34,13 @@ fn get_reward_amount<T:Config>(block_number:T::BlockNumber) -> u128 {
         while counter > T::BlockNumber::zero() {
             counter = counter.checked_sub(&T::BlockNumber::one()).unwrap_or(T::BlockNumber::zero());
 
-            reward_amount = reward_amount.checked_sub(
-                reduction_fraction.mul_ceil(reward_amount)
-            ).unwrap_or(1);  // TODO: this is only testnet specific to reward at least 1
+            reward_amount = reward_amount
+                .checked_sub(reduction_fraction.mul_ceil(reward_amount))
+                .unwrap_or(1); // TODO: this is only testnet specific to reward at least 1
 
             if reward_amount.is_zero() {
                 // TODO: this is only testnet specific to reward at least 1
-                return 1
+                return 1;
             }
         }
     }
@@ -49,8 +50,7 @@ fn get_reward_amount<T:Config>(block_number:T::BlockNumber) -> u128 {
 
 /// Rewards the block author with a utxo of value based on the `BlockAuthorRewardAmount`
 /// and the transaction fees.
-pub(crate) fn reward_block_author<T:Config>(block_number: T::BlockNumber) {
-
+pub(crate) fn reward_block_author<T: Config>(block_number: T::BlockNumber) {
     let fees_total = <RewardTotal<T>>::take();
     if let Some(reward_amount) = get_reward_amount::<T>(block_number).checked_add(fees_total) {
         // give rewards only if a block author is found
@@ -70,12 +70,9 @@ pub(crate) fn reward_block_author<T:Config>(block_number: T::BlockNumber) {
         } else {
             log::warn!("no block author found for block number {:?}", block_number);
             <RewardTotal<T>>::put(fees_total + reward_amount);
-
         }
-
     } else {
         log::warn!("problem adding the block author reward and the fees.");
         <RewardTotal<T>>::put(fees_total);
     }
-
 }
