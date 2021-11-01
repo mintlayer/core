@@ -143,7 +143,7 @@ pub mod pallet {
         OutpointDoesNotExist,
 
         /// The hash outpoint key already exists in the storage where it expects to be.
-        OutpointAlreadyExist,
+        OutpointAlreadyExists,
     }
 
     #[pallet::pallet]
@@ -280,12 +280,12 @@ pub mod pallet {
         /// First attempt of staking.
         /// Must assign a controller, in order to bond and validate. see pallet-staking
         LockForStaking {
-            stash_account: AccountId, //TODO: change back to Public/H256 or something, after UI testing.
-            controller_account: AccountId, //TODO: change back to Public/H256 or something, after UI testing.
+            stash_account: AccountId,
+            controller_account: AccountId,
             session_key: Vec<u8>,
         },
         /// lock more funds
-        LockExtraForStaking(AccountId), //TODO: change back to Public/H256 or something, after UI testing.
+        LockExtraForStaking(AccountId),
     }
 
     impl<AccountId> Destination<AccountId> {
@@ -1153,7 +1153,7 @@ pub mod pallet {
     #[pallet::genesis_build]
     impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
         fn build(&self) {
-            self.genesis_utxos.iter().cloned().enumerate().for_each(|(index,u)| {
+            self.genesis_utxos.iter().cloned().enumerate().for_each(|(index, u)| {
                 // added the index and the `genesis` on the hashing, to indicate that these utxos are from the beginning of the chain.
                 UtxoStore::<T>::insert(BlakeTwo256::hash_of(&(&u, index as u64, "genesis")), u);
             });

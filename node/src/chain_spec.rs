@@ -7,7 +7,7 @@ use sc_network::config::MultiaddrWithPeerId;
 use sc_service::ChainType;
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::sr25519;
-use sp_core::{Pair, Public, H256};
+use sp_core::H256;
 use sp_finality_grandpa::AuthorityId as GrandpaId;
 use sp_runtime::traits::{IdentifyAccount, Verify};
 
@@ -16,13 +16,6 @@ use sp_runtime::traits::{IdentifyAccount, Verify};
 
 /// Specialized `ChainSpec`. This is a specialization of the general Substrate ChainSpec type.
 pub type ChainSpec = sc_service::GenericChainSpec<GenesisConfig>;
-
-/// Generate a crypto pair from seed.
-pub fn get_from_seed<TPublic: Public>(seed: &str) -> <TPublic::Pair as Pair>::Public {
-    TPublic::Pair::from_string(&format!("//{}", seed), None)
-        .expect("static values are valid; qed")
-        .public()
-}
 
 pub type AccountPublic = <Signature as Verify>::Signer;
 
@@ -33,7 +26,7 @@ pub struct MltKeysInfo {
     pub sr25519_public_controller: sr25519::Public,
     pub sr25519_public_stash: sr25519::Public,
     pub ed25519_public: sp_core::ed25519::Public,
-    pub mlt_coins: u128,
+    pub mlt_tokens: pallet_utxo::Value,
 }
 
 impl MltKeysInfo {
@@ -164,7 +157,6 @@ fn testnet_genesis(
         |(mut locked_utxos, mut stakers, mut session_keys), auth_keys| {
             // initial authorities meaning they're also validators.
             // locking some values as a stake from validators
-            //TODO: change back to Public/H256 or something, after UI testing.
             locked_utxos.push(
                 pallet_utxo::TransactionOutput::<AccountId>::new_lock_for_staking(
                     // this is the minimum stake amount
@@ -203,7 +195,7 @@ fn testnet_genesis(
         .into_iter()
         .map(|info| {
             pallet_utxo::TransactionOutput::<AccountId>::new_pubkey(
-                info.mlt_coins,
+                info.mlt_tokens,
                 H256::from(info.sr25519_public_controller),
             )
         })

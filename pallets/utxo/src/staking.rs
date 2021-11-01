@@ -117,7 +117,6 @@ pub(crate) fn lock_for_staking<T: Config>(
     hash_key: H256,
     output: &TransactionOutput<T::AccountId>,
 ) -> DispatchResultWithPostInfo {
-    //TODO: change back to Public/H256 or something, after UI testing.
     if let Destination::LockForStaking {
         stash_account,
         controller_account,
@@ -142,7 +141,6 @@ pub(crate) fn locking_extra_utxos<T: Config>(
     hash_key: H256,
     output: &TransactionOutput<T::AccountId>,
 ) -> DispatchResultWithPostInfo {
-    //TODO: change back to Public/H256 or something, after UI testing.
     if let Destination::LockExtraForStaking(controller_account) = &output.destination {
         T::StakingHelper::lock_extra_for_staking(controller_account, output.value)?;
         let controller_pubkey = convert_to_h256::<T>(controller_account)?;
@@ -165,7 +163,6 @@ mod utils {
         ctrl_pubkey: &H256,
     ) -> Result<(), &'static str> {
         match &utxo.destination {
-            //TODO: change back to Public/H256 or something, after UI testing.
             Destination::LockForStaking {
                 stash_account: _,
                 controller_account,
@@ -174,7 +171,6 @@ mod utils {
                 let controller_pubkey = convert_to_h256::<T>(controller_account)?;
                 ensure!(&controller_pubkey == ctrl_pubkey, "hash of stake not owned");
             }
-            //TODO: change back to Public/H256 or something, after UI testing.
             Destination::LockExtraForStaking(controller_account) => {
                 let controller_pubkey = convert_to_h256::<T>(controller_account)?;
                 ensure!(
@@ -261,7 +257,7 @@ pub mod validation {
         ensure!(output_value > 0, "output value must be nonzero");
         ensure!(
             !<LockedUtxos<T>>::contains_key(hash_key),
-            Error::<T>::OutpointAlreadyExist
+            Error::<T>::OutpointAlreadyExists
         );
         Ok(())
     }
