@@ -48,6 +48,11 @@ class Client(Staking):
         matching = lambda e: e[1].destination.get_pubkey() == keypair.public_key
         return filter(matching, self.utxos('UtxoStore'))
 
+    """ Get UTXOs for given key """
+    def locked_utxos_for(self, keypair):
+        matching = lambda e: e[1].destination.get_ss58_address() == keypair.ss58_address
+        return filter(matching, self.utxos('LockedUtxos'))
+
     """ Query the node for the list of public keys with staking """
     def staking_count(self):
         query = self.substrate.query_map(
@@ -81,7 +86,7 @@ class Client(Staking):
         call = self.substrate.compose_call(
             call_module = 'Utxo',
             call_function = 'unlock_request_for_withdrawal',
-            call_params = { 'controller_pubkey': keypair.public_key },
+            call_params = { 'controller_account': keypair.public_key },
         )
         #TODO ^ same code as above; put them in 1 func
         extrinsic = self.substrate.create_signed_extrinsic(call=call, keypair=keypair)
@@ -99,7 +104,7 @@ class Client(Staking):
         call = self.substrate.compose_call(
             call_module = 'Utxo',
             call_function = 'withdraw_stake',
-            call_params = { 'controller_pubkey': keypair.public_key, 'outpoints': outpoints },
+            call_params = { 'controller_account': keypair.public_key, 'outpoints': outpoints },
         )
         #TODO ^ same code as above; put them in 1 func
         extrinsic = self.substrate.create_signed_extrinsic(call=call, keypair=keypair)
@@ -131,6 +136,9 @@ class Destination():
         return 'Destination'
 
     def get_pubkey(self):
+        return None
+
+    def get_ss58_address(self):
         return None
 
 # Only Schnorr pubkey type supported now.
@@ -188,6 +196,8 @@ class DestLockForStaking(Destination):
     def json(self):
         return { 'LockForStaking': { 'stash_account': self.stash, 'controller_account': self.controller, 'session_key': self.sesh } }
 
+    def get_ss58_address(self):
+        return self.controller
 
 class DestLockExtraForStaking(Destination):
     def __init__(self, account):
@@ -199,6 +209,9 @@ class DestLockExtraForStaking(Destination):
 
     def json(self):
         return { 'LockExtraForStaking': self.account }
+
+    def get_ss58_address(self):
+        return self.account
 
 
 class Output():

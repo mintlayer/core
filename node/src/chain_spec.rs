@@ -34,11 +34,11 @@ pub struct MltKeysInfo {
 
 impl  MltKeysInfo {
     fn controller_account_id(&self) -> AccountId {
-        AccountPublic::from(self.sr25519_public_controller.clone()).into_account()
+        AccountPublic::from(self.sr25519_public_controller).into_account()
     }
 
     fn stash_account_id(&self) -> AccountId {
-        AccountPublic::from(self.sr25519_public_stash.clone()).into_account()
+        AccountPublic::from(self.sr25519_public_stash).into_account()
     }
 }
 
@@ -73,12 +73,12 @@ pub fn development_config(endowed_accounts:Vec<MltKeysInfo>) -> Result<ChainSpec
         move || {
             testnet_genesis(
                 wasm_binary,
-                // Initial PoA authorities. only Alice.
-                vec![sudo.clone()],
+                // Initial PoA authorities; 2
+                endowed_accounts.iter().cloned().take(2).collect(),
                 // Sudo account
                 sudo.controller_account_id(),
                 // Pre-funded accounts; only Alice has a pre-funded utxo
-                vec![sudo.clone()],
+                endowed_accounts.iter().cloned().take(2).collect(),
                 // Pre-fund all accounts in the pallet-balance
                 endowed_accounts.clone()
             )

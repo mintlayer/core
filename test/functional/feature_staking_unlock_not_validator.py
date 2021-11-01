@@ -4,7 +4,7 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """An example functional test
 
-Bob tries to unlock the locked utxos belonging to Alice.
+Charlie tries to "unlock"
 """
 
 from substrateinterface import Keypair
@@ -61,18 +61,19 @@ class ExampleTest(MintlayerTestFramework):
 
         ledger = list(client.get_staking_ledger())
         assert_equal(len(ledger[0][1]['unlocking']),0)
+        assert_equal(len(ledger[1][1]['unlocking']),0)
 
-        bob = Keypair.create_from_uri('//Bob')
+        charlie = Keypair.create_from_uri('//Charlie')
 
-        (_, _, events) = client.unlock_request_for_withdrawal(bob)
-
+        (_, _, events) = client.unlock_request_for_withdrawal(charlie)
 
         ledger = list(client.get_staking_ledger())
         assert_equal(len(ledger[0][1]['unlocking']),0)
+        assert_equal(len(ledger[1][1]['unlocking']),0)
 
         locked_utxos = list(client.utxos('LockedUtxos'))
-        # there should still be 1 utxo locked, no actual withdrawal happened.
-        assert_equal(len(locked_utxos),1)
+        # there should still be 2 utxos locked, no actual withdrawal happened.
+        assert_equal(len(locked_utxos),2)
 
 if __name__ == '__main__':
     ExampleTest().main()

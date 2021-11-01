@@ -4,7 +4,7 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """An example functional test
 
-Bob tries to stake extra 40_000 utxo, even though it's his first time;
+Charlie tries to stake extra 40_000 utxo, even though it's his first time;
 and he's not actually a validator.
 """
 
@@ -61,17 +61,20 @@ class ExampleTest(MintlayerTestFramework):
         client = self.nodes[0].rpc_client
 
         alice = Keypair.create_from_uri('//Alice')
-        bob = Keypair.create_from_uri('//Bob')
+        charlie = Keypair.create_from_uri('//Charlie')
 
         # fetch the genesis utxo from storage
         utxos = list(client.utxos_for(alice))
 
 
-        orig_count = list(client.staking_count())[0][1]
-        # there should only be 1 count of alice's locked utxo
-        assert_equal(orig_count[0], 1)
-        # the amount that alice locked is 40_000 * MLT_UNIT
-        assert_equal(orig_count[1], 40000 * COIN)
+        orig_count = list(client.staking_count())
+        # there should only be 1 count of each staker's locked utxo
+        assert_equal(orig_count[0][1][0], 1)
+        assert_equal(orig_count[1][1][0], 1)
+        # the amount that alice/bob locked is 40_000 * MLT_UNIT
+        assert_equal(orig_count[0][1][1], 40000 * COIN)
+        # the amount that alice/bob locked is 40_000 * MLT_UNIT
+        assert_equal(orig_count[1][1][1], 40000 * COIN)
 
         tx1 = utxo.Transaction(
             client,
@@ -82,20 +85,15 @@ class ExampleTest(MintlayerTestFramework):
                 utxo.Output(
                     value=40000 * COIN,
                     header=0,
-                    destination=utxo.DestLockExtraForStaking(bob.public_key)
+                    destination=utxo.DestLockExtraForStaking(charlie.public_key)
                 ),
             ]
-        ).sign(bob, [utxos[0][1]])
-        client.submit(bob, tx1)
+        ).sign(charlie, [utxos[0][1]])
+        client.submit(charlie, tx1)
 
         new_count = list(client.staking_count())
-        # there should only be 1 count of staking, which is Alice
-        assert_equal(len(new_count), 1 )
-
-        # there should only be 1 count of utxo
-        assert_equal(new_count[0][1][0], 1 )
-        # the original stake of alice stays the same.
-        assert_equal(new_count[0][1][1], 40000 * COIN )
+        # there should only be 2 count of staking, which are Alice and Bob
+        assert_equal(len(new_count), 2)
 
 if __name__ == '__main__':
     ExampleTest().main()

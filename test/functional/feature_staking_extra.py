@@ -65,8 +65,10 @@ class ExampleTest(MintlayerTestFramework):
         utxos = list(client.utxos_for(alice))
 
 
-        orig_count = list(client.staking_count())[0][1]
-        # there should only be 1 count of alice's locked utxo
+        staking_count = list(client.staking_count())
+        # Get Alice
+        orig_count = list(filter(lambda e: e[0].value == alice.public_key , staking_count))[0][1]
+        # there should be 1 count of alice's locked utxo
         assert_equal(orig_count[0],1)
         # the amount that alice locked is 40_000 * MLT_UNIT
         assert_equal(orig_count[1],40000 * COIN)
@@ -86,7 +88,9 @@ class ExampleTest(MintlayerTestFramework):
         ).sign(alice, [utxos[0][1]])
         client.submit(alice, tx1)
 
-        new_count = list(client.staking_count())[0][1]
+        staking_count = list(client.staking_count())
+        # Get Alice
+        new_count = list(filter(lambda e: e[0].value == alice.public_key , staking_count))[0][1]
         # there should already by 2 utxos locked
         assert_equal(new_count[0],2)
         # the original stake + new stake

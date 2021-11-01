@@ -669,10 +669,10 @@ pub mod pallet {
                     ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
                     new_utxos.push(hash.as_fixed_bytes().to_vec());
                 }
-                Destination::LockExtraForStaking(controller_account) => {
+                Destination::LockExtraForStaking(_) => {
                     let hash = tx.outpoint(output_index as u64);
                     new_utxos.push(hash.as_fixed_bytes().to_vec());
-                    staking::validate_lock_extra_for_staking_requirements::<T>(hash,output.value, controller_account)?;
+                    staking::validate_lock_extra_for_staking_requirements::<T>(hash,output.value)?;
                 }
                 Destination::LockForStaking { stash_account:_, controller_account, session_key:_ } => {
                    let hash = tx.outpoint(output_index as u64);

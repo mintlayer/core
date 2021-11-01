@@ -4,7 +4,7 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """An example functional test
 
-Send a transaction from Alice to Bob, then Bob stakes for the first time.. and an extra one.
+Send a transaction from Alice to Charlie, then Charlie stakes for the first time.. and an extra one.
 """
 
 from substrateinterface import Keypair
@@ -30,9 +30,9 @@ class ExampleTest(MintlayerTestFramework):
 
         This method must be overridden and num_nodes must be exlicitly set."""
         self.setup_clean_chain = True
-        self.num_nodes = 1
+        self.num_nodes = 2
         # Use self.extra_args to change command-line arguments for the nodes
-        self.extra_args = [[]]
+        self.extra_args = [['--alice'],['--bob']]
 
         # self.log.info("I've finished set_test_params")  # Oops! Can't run self.log before run_test()
 
@@ -60,14 +60,14 @@ class ExampleTest(MintlayerTestFramework):
         client = self.nodes[0].rpc_client
 
         alice = Keypair.create_from_uri('//Alice')
-        bob = Keypair.create_from_uri('//Bob')
-        bob_stash = Keypair.create_from_uri('//Bob//stash')
+        charlie = Keypair.create_from_uri('//Charlie')
+        charlie_stash = Keypair.create_from_uri('//Charlie//stash')
 
         # fetch the genesis utxo from storage
         utxos = list(client.utxos_for(alice))
 
-        # there's only 1 record of staking, which is alice.
-        assert_equal( len(list(client.staking_count())), 1 )
+        # there's only 2 record of staking, which are alice and bob.
+        assert_equal( len(list(client.staking_count())), 2 )
 
         tx1 = utxo.Transaction(
             client,
@@ -78,7 +78,7 @@ class ExampleTest(MintlayerTestFramework):
                 utxo.Output(
                     value=70000 * COIN,
                     header=0,
-                    destination=utxo.DestPubkey(bob.public_key)
+                    destination=utxo.DestPubkey(charlie.public_key)
                 ),
             ]
         ).sign(alice, [utxos[0][1]])
@@ -93,39 +93,42 @@ class ExampleTest(MintlayerTestFramework):
                 utxo.Output(
                     value=40000 * COIN,
                     header=0,
-                    destination=utxo.DestLockForStaking(bob_stash.public_key, bob.public_key,'0xa03bcfaac6ebdc26bb9c256c51b08f9c1c6d4569f48710a42939168d1d7e5b6086b20e145e97158f6a0b5bff2994439d3320543c8ff382d1ab3e5eafffaf1a18')
+                    destination=utxo.DestLockForStaking(charlie_stash.public_key, charlie.public_key,'0xa03bcfaac6ebdc26bb9c256c51b08f9c1c6d4569f48710a42939168d1d7e5b6086b20e145e97158f6a0b5bff2994439d3320543c8ff382d1ab3e5eafffaf1a18')
                 ),
                  utxo.Output(
                     value=10000 * COIN,
                     header=0,
-                    destination=utxo.DestLockExtraForStaking(alice.public_key)
+                    destination=utxo.DestLockExtraForStaking(charlie.public_key)
                 ),
                 utxo.Output(
                     value=19998 * COIN,
                     header=0,
-                    destination=utxo.DestPubkey(bob.public_key)
+                    destination=utxo.DestPubkey(charlie.public_key)
                 ),
             ]
-        ).sign(bob, tx1.outputs)
+        ).sign(charlie, tx1.outputs)
 
 
-        client.submit(bob, tx2)
+        client.submit(charlie, tx2)
 
-        staking_count = list(client.staking_count())
+        updated_count = list(client.staking_count())
 
-        # there should already be 2 accounts, adding Bob in the list.
-        assert_equal(len(staking_count), 2)
+        # there should already be 3 accounts, adding Charlie in the list.
+        assert_equal(len(updated_count), 3)
 
-        # bob should have 2 locked utxos
-        assert_equal(staking_count[1][1][0], 2)
-
-        # bob should have a total of 50000 * COINS locked
-        assert_equal(staking_count[1][1][1], 50000 * COIN)
-
-        # fetch the locked utxos from storage
-        locked_utxos = list(client.utxos('LockedUtxos'))
-        # there should already be 3 in the list; 1 from alice, 2 from bob
-        assert_equal(len(locked_utxos),3)
+        # Get Charlie
+        charlie_count = list(filter(lambda e: e[0].value == charlie.public_key , updated_count))[0][1]
+        print("CHARLIE COUNT: ", charlie_count)
+        # charlie should have 2 locked utxos
+        assert_equal(charlie_count[0], 2)
+#
+#         # charlie should have a total of 50000 * COINS locked
+#         assert_equal(charlie_count[1], 50000 * COIN)
+#
+#         # fetch the locked utxos from storage
+#         locked_utxos = list(client.utxos('LockedUtxos'))
+#         # there should already be 4 in the list; 1 from alice, 1 from bob, 2 from charlie
+#         assert_equal(len(locked_utxos),4)
 
 
 if __name__ == '__main__':

@@ -4,7 +4,7 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """An example functional test
 
-Send a transaction from Alice to Bob, then Bob stakes for the first time.
+Send a transaction from Alice to Charlie, then Charlie stakes for the first time.
 """
 
 from substrateinterface import Keypair
@@ -60,14 +60,14 @@ class ExampleTest(MintlayerTestFramework):
         client = self.nodes[0].rpc_client
 
         alice = Keypair.create_from_uri('//Alice')
-        bob = Keypair.create_from_uri('//Bob')
-        bob_stash = Keypair.create_from_uri('//Bob//stash')
+        charlie = Keypair.create_from_uri('//Charlie')
+        charlie_stash = Keypair.create_from_uri('//Charlie//stash')
 
         # fetch the genesis utxo from storage
         utxos = list(client.utxos_for(alice))
 
-        # there's only 1 record of staking, which is alice.
-        assert_equal( len(list(client.staking_count())), 1 )
+        # there's only 2 record of staking, which are alice and bob.
+        assert_equal( len(list(client.staking_count())), 2 )
 
         tx1 = utxo.Transaction(
             client,
@@ -78,7 +78,7 @@ class ExampleTest(MintlayerTestFramework):
                 utxo.Output(
                     value=50000 * COIN,
                     header=0,
-                    destination=utxo.DestPubkey(bob.public_key)
+                    destination=utxo.DestPubkey(charlie.public_key)
                 ),
             ]
         ).sign(alice, [utxos[0][1]])
@@ -93,19 +93,19 @@ class ExampleTest(MintlayerTestFramework):
                 utxo.Output(
                     value=40000 * COIN,
                     header=0,
-                    destination=utxo.DestLockForStaking(bob_stash.public_key, bob.public_key,'0xa03bcfaac6ebdc26bb9c256c51b08f9c1c6d4569f48710a42939168d1d7e5b6086b20e145e97158f6a0b5bff2994439d3320543c8ff382d1ab3e5eafffaf1a18')
+                    destination=utxo.DestLockForStaking(charlie_stash.public_key, charlie.public_key,'0xa03bcfaac6ebdc26bb9c256c51b08f9c1c6d4569f48710a42939168d1d7e5b6086b20e145e97158f6a0b5bff2994439d3320543c8ff382d1ab3e5eafffaf1a18')
                 ),
                 utxo.Output(
                     value=9999 * COIN,
                     header=0,
-                    destination=utxo.DestPubkey(bob.public_key)
+                    destination=utxo.DestPubkey(charlie.public_key)
                 ),
             ]
-        ).sign(bob, tx1.outputs)
-        client.submit(bob, tx2)
+        ).sign(charlie, tx1.outputs)
+        client.submit(charlie, tx2)
 
-        # there should already be 2 staking, adding Bob in the list.
-        assert_equal( len(list(client.staking_count())), 2 )
+        # there should already be 3 staking, adding Charlie in the list.
+        assert_equal( len(list(client.staking_count())), 3 )
 
 if __name__ == '__main__':
     ExampleTest().main()

@@ -72,7 +72,7 @@ pub(crate) fn withdraw<T: Config>(controller_account: T::AccountId, outpoints: V
 
     let res = T::StakingHelper::withdraw(&controller_account)?;
 
-    let (_, mut total) = <StakingCount<T>>::get(controller_pubkey).ok_or("cannot find the public key inside the stakingcount.")?;
+    let (_, mut total) = <StakingCount<T>>::take(controller_pubkey).ok_or("cannot find the public key inside the stakingcount.")?;
 
     let fee = T::StakeWithdrawalFee::get();
     total = total.checked_sub(fee).ok_or( "Total amount of Locked UTXOs is less than minimum?")?;
@@ -116,6 +116,8 @@ pub(crate) fn locking_extra_utxos<T:Config>(
     if let Destination::LockExtraForStaking(controller_account) = &output.destination {
         T::StakingHelper::lock_extra_for_staking(controller_account,output.value)?;
         let controller_pubkey = convert_to_h256::<T>(controller_account)?;
+        // Checks whether a given pubkey is a validator
+        ensure!(<StakingCount<T>>::contains_key(controller_pubkey) , Error::<T>::ControllerAccountNotFound);
         return utils::add_to_locked_utxos::<T>(hash_key, output, controller_pubkey);
     }
     fail!(Error::<T>::InvalidOperation)
@@ -194,11 +196,7 @@ pub mod validation{
     pub(crate) fn validate_lock_extra_for_staking_requirements<T:Config>(
         hash_key:H256,
         output_value:Value,
-        controller_account:&T::AccountId
     ) -> Result<(), &'static str> {
-        let controller_pubkey = convert_to_h256::<T>(controller_account)?;
-        // Checks whether a given pubkey is a validator
-        ensure!(<StakingCount<T>>::contains_key(controller_pubkey) , Error::<T>::ControllerAccountNotFound);
 
         ensure!(output_value > 0, "output value must be nonzero");
         ensure!(!<LockedUtxos<T>>::contains_key(hash_key),  Error::<T>::OutpointAlreadyExist);

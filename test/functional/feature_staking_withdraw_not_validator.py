@@ -4,7 +4,7 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """An example functional test
 
-Bob tries to withdraw a stake which is not his.
+Charlie tries to withdraw a stake which is not his.
 """
 
 from substrateinterface import Keypair
@@ -61,20 +61,22 @@ class ExampleTest(MintlayerTestFramework):
 
         ledger = list(client.get_staking_ledger())
         assert_equal(len(ledger[0][1]['unlocking']),0)
+        assert_equal(len(ledger[1][1]['unlocking']),0)
 
-        bob = Keypair.create_from_uri('//Bob')
-        print("bob's public key: ", bob.public_key)
-        # this is alice's locked utxo
-        outpoints = ['0x85cf089ac493b7969df7fc1dfd3ed1b880506d7dcfc0e41c71b3676dc2c48b9d']
+        alice = Keypair.create_from_uri('//Alice')
+        charlie = Keypair.create_from_uri('//Charlie')
+        # Alice's locked utxo
+        outpoints = list(map(lambda e: e[0].value, list(client.locked_utxos_for(alice))))
 
-        (_, _, events) = client.withdraw_stake(bob,outpoints)
+        (_, _, events) = client.withdraw_stake(charlie,outpoints)
 
         ledger = list(client.get_staking_ledger())
         assert_equal(len(ledger[0][1]['unlocking']),0)
+        assert_equal(len(ledger[1][1]['unlocking']),0)
 
         locked_utxos = list(client.utxos('LockedUtxos'))
-        # there should still be 1 utxo locked, no actual withdrawal happened.
-        assert_equal(len(locked_utxos),1)
+        # there should still be 2 utxo locked, no actual withdrawal happened.
+        assert_equal(len(locked_utxos),2)
 
 
 if __name__ == '__main__':
