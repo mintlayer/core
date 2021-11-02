@@ -928,11 +928,11 @@ fn test_tokens_issuance_with_corrupted_uri() {
 }
 
 #[test]
-fn test_tokens_transfer() {
+fn test_token_transfer() {
     let (mut test_ext, alice_pub_key, karl_pub_key) = new_test_ext_and_keys();
     test_ext.execute_with(|| {
         let token_id = TokenId::new_asset(H256::random());
-        // Alice issue 1000 MLS-01, and send them to Karl and the rest back to herself
+        // Alice issue 1_000_000_000 MLS-01, and send them to Karl
         let (utxo0, input0) = tx_input_gen_no_signature();
         let tx = Transaction {
             inputs: vec![input0],
@@ -956,18 +956,8 @@ fn test_tokens_transfer() {
         .sign_unchecked(&[utxo0.clone()], 0, &alice_pub_key);
 
         assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx.clone()));
-        let new_utxo_hash = tx.outpoint(0);
-        let new_utxo = tx.outputs[0].clone();
         let token_utxo_hash = tx.outpoint(1);
         let token_utxo = tx.outputs[1].clone();
-
-        // then send rest of the tokens to karl (proving that the first tx was successful)
-        let _tx = Transaction {
-            inputs: vec![TransactionInput::new_empty(new_utxo_hash)],
-            outputs: vec![TransactionOutput::new_pubkey(90, H256::from(karl_pub_key))],
-            time_lock: Default::default(),
-        }
-        .sign_unchecked(&[new_utxo.clone()], 0, &alice_pub_key);
 
         // Let's fail on wrong token id
         let tx = Transaction {

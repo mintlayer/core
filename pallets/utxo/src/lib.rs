@@ -584,6 +584,10 @@ pub mod pallet {
                     ensure!(amount_to_issue > &0u128, "output value must be nonzero");
                     ensure!(number_of_decimals <= &18, "too long decimals");
                     // If token has just created we can't meet another amount here.
+                    ensure!(
+                        !total_value_of_input_tokens.contains_key(token_id),
+                        "this id can't be used for a token"
+                    );
                     total_value_of_input_tokens.insert(token_id.clone(), *amount_to_issue);
                     // But probably in this input we have a fee
                     mlt_amount_in_inputs = mlt_amount_in_inputs
@@ -672,6 +676,10 @@ pub mod pallet {
                     ensure!(number_of_decimals <= &18, "too long decimals");
 
                     // If token has just created we can't meet another amount here.
+                    ensure!(
+                        !total_value_of_output_tokens.contains_key(token_id),
+                        "this id can't be used for a new token"
+                    );
                     total_value_of_output_tokens.insert(token_id.clone(), *amount_to_issue);
                     // But probably in this input we have a fee
                     mlt_amount_in_outputs = mlt_amount_in_outputs
