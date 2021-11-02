@@ -1,7 +1,7 @@
 [package]
 name = "base58_nostd"
 version = "0.1.0"
-edition = "2021"
+edition = "2018"
 authors = ["Anton Sinitsyn <anton.sinitsyn@mintlayer.org>"]
 description = "Encodes and decodes the Bech32 format"
 
