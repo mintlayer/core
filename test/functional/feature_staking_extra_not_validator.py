@@ -60,13 +60,6 @@ class ExampleTest(MintlayerTestFramework):
     def run_test(self):
         client = self.nodes[0].rpc_client
 
-        alice = Keypair.create_from_uri('//Alice')
-        charlie = Keypair.create_from_uri('//Charlie')
-
-        # fetch the genesis utxo from storage
-        utxos = list(client.utxos_for(alice))
-
-
         orig_count = list(client.staking_count())
         # there should only be 1 count of each staker's locked utxo
         assert_equal(orig_count[0][1][0], 1)
@@ -75,6 +68,14 @@ class ExampleTest(MintlayerTestFramework):
         assert_equal(orig_count[0][1][1], 40000 * COIN)
         # the amount that alice/bob locked is 40_000 * MLT_UNIT
         assert_equal(orig_count[1][1][1], 40000 * COIN)
+
+        alice = Keypair.create_from_uri('//Alice')
+        alice_stash = Keypair.create_from_uri('//Alice//stash')
+        charlie = Keypair.create_from_uri('//Charlie')
+        charlie_stash = Keypair.create_from_uri('//Charlie//stash')
+
+        # fetch the genesis utxo from storage
+        utxos = list(client.utxos_for(alice_stash))
 
         tx1 = utxo.Transaction(
             client,
@@ -85,11 +86,11 @@ class ExampleTest(MintlayerTestFramework):
                 utxo.Output(
                     value=40000 * COIN,
                     header=0,
-                    destination=utxo.DestLockExtraForStaking(charlie.public_key)
+                    destination=utxo.DestLockExtraForStaking(charlie_stash.public_key, charlie.public_key)
                 ),
             ]
-        ).sign(charlie, [utxos[0][1]])
-        client.submit(charlie, tx1)
+        ).sign(charlie_stash, [utxos[0][1]])
+        client.submit(charlie_stash, tx1)
 
         new_count = list(client.staking_count())
         # there should only be 2 count of staking, which are Alice and Bob

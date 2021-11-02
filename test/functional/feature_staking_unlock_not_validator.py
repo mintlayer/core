@@ -65,7 +65,7 @@ class ExampleTest(MintlayerTestFramework):
 
         charlie = Keypair.create_from_uri('//Charlie')
 
-        (_, _, events) = client.unlock_request_for_withdrawal(charlie)
+        client.unlock_request_for_withdrawal(charlie)
 
         ledger = list(client.get_staking_ledger())
         assert_equal(len(ledger[0][1]['unlocking']),0)

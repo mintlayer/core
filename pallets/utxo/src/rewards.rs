@@ -15,12 +15,36 @@
 //
 // Author(s): C. Yap
 
-use crate::{BlockAuthor, Config, Event, Pallet, RewardTotal, TransactionOutput, UtxoStore};
+use crate::{
+    convert_to_h256, BlockAuthor, Config, Event, Pallet, RewardTotal, TransactionOutput, UtxoStore,
+};
 
 use frame_support::traits::Get;
 use sp_runtime::traits::{
     BlakeTwo256, CheckedDiv, CheckedSub, Hash, One, SaturatedConversion, Zero,
 };
+
+/// handle event when a block author is found.
+impl<T> pallet_authorship::EventHandler<T::AccountId, T::BlockNumber> for Pallet<T>
+where
+    T: Config + pallet_authorship::Config,
+{
+    fn note_author(author: T::AccountId) {
+        match convert_to_h256::<T>(&author) {
+            Ok(author_h256) => {
+                // store the block author. Reward during the `fn finalize()` phase.
+                <BlockAuthor<T>>::put(author_h256);
+            }
+            Err(e) => {
+                log::warn!("failed to find author: {:?}", e);
+            }
+        }
+    }
+
+    fn note_uncle(_author: T::AccountId, _age: T::BlockNumber) {
+        log::info!("TODO: no support for this. Or is there...?");
+    }
+}
 
 /// Returns the newly reduced reward amount for a Block Author.
 /// How much a reward is reduced, is based on the config's`RewardReductionFraction`.

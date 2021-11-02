@@ -82,11 +82,20 @@ where
     }
 
     fn lock_extra_for_staking(
+        stash_account: &StakeAccountId<T>,
         controller_account: &StakeAccountId<T>,
         value: u128,
     ) -> DispatchResultWithPostInfo {
         // get the stash account first
         if let Some(stake_ledger) = <StakingPallet<T>>::ledger(controller_account.clone()) {
+            if stash_account != &stake_ledger.stash {
+                log::error!(
+                    "stash account {:?} has no permission to stake.",
+                    stash_account
+                );
+                return Err(pallet_utxo::Error::<T>::NoPermission)?;
+            }
+
             StakingPallet::<T>::bond_extra(
                 RawOrigin::Signed(stake_ledger.stash).into(),
                 value.into(),
@@ -95,12 +104,16 @@ where
         }
 
         log::error!("check sync with pallet-staking.");
-        return Err(pallet_utxo::Error::<T>::ControllerAccountAlreadyRegistered)?;
+        return Err(pallet_utxo::Error::<T>::InvalidOperation)?;
     }
 
     fn unlock_request_for_withdrawal(
-        controller_account: &StakeAccountId<T>,
+        stash_account: &StakeAccountId<T>,
     ) -> DispatchResultWithPostInfo {
+        // get the controller account, given the stash_account.
+        let controller_account = <StakingPallet<T>>::bonded(stash_account.clone())
+            .ok_or(pallet_utxo::Error::<T>::StashAccountNotFound)?;
+
         // stop validating / block producing
         StakingPallet::<T>::chill(RawOrigin::Signed(controller_account.clone()).into())?;
 
@@ -110,14 +123,18 @@ where
 
         // unbond
         StakingPallet::<T>::unbond(
-            RawOrigin::Signed(controller_account.clone()).into(),
+            RawOrigin::Signed(controller_account).into(),
             stake_ledger.total,
         )?;
 
         Ok(().into())
     }
 
-    fn withdraw(controller_account: &StakeAccountId<T>) -> DispatchResultWithPostInfo {
+    fn withdraw(stash_account: &StakeAccountId<T>) -> DispatchResultWithPostInfo {
+        // get the controller account, given the stash_account.
+        let controller_account = <StakingPallet<T>>::bonded(stash_account.clone())
+            .ok_or(pallet_utxo::Error::<T>::StashAccountNotFound)?;
+
         let stake_ledger = <StakingPallet<T>>::ledger(controller_account.clone())
             .ok_or(pallet_utxo::Error::<T>::ControllerAccountNotFound)?;
         if stake_ledger.unlocking.is_empty() {
@@ -134,7 +151,7 @@ where
         )?;
 
         // if the staking still exists, withdrawal was unsuccessful.
-        if <StakingPallet<T>>::ledger(controller_account.clone()).is_some() {
+        if <StakingPallet<T>>::ledger(controller_account).is_some() {
             log::error!("no withdrawal was done.");
             fail!(pallet_utxo::Error::<T>::InvalidOperation)
         }

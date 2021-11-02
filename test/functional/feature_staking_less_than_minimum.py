@@ -78,7 +78,7 @@ class ExampleTest(MintlayerTestFramework):
                 utxo.Output(
                     value=50000 * COIN,
                     header=0,
-                    destination=utxo.DestPubkey(charlie.public_key)
+                    destination=utxo.DestPubkey(charlie_stash.public_key)
                 ),
             ]
         ).sign(alice, [utxos[0][1]])
@@ -98,11 +98,11 @@ class ExampleTest(MintlayerTestFramework):
                 utxo.Output(
                     value=45999 * COIN,
                     header=0,
-                    destination=utxo.DestPubkey(charlie.public_key)
+                    destination=utxo.DestPubkey(charlie_stash.public_key)
                 ),
             ]
-        ).sign(charlie, tx1.outputs)
-        client.submit(charlie, tx2)
+        ).sign(charlie_stash, tx1.outputs)
+        client.submit(charlie_stash, tx2)
 
         # there should only be 2 still, because Charlie failed on the staking.
         assert_equal(len(list(client.staking_count())), 2 )

@@ -4177,6 +4177,7 @@ dependencies = [
  "frame-system",
  "hex-literal 0.2.1",
  "log",
+ "pallet-authorship",
  "pallet-timestamp",
  "pallet-utxo-tokens",
  "parity-scale-codec",

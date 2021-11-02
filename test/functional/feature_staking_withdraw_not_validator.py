@@ -63,12 +63,12 @@ class ExampleTest(MintlayerTestFramework):
         assert_equal(len(ledger[0][1]['unlocking']),0)
         assert_equal(len(ledger[1][1]['unlocking']),0)
 
-        alice = Keypair.create_from_uri('//Alice')
+        alice_stash = Keypair.create_from_uri('//Alice//stash')
         charlie = Keypair.create_from_uri('//Charlie')
         # Alice's locked utxo
-        outpoints = list(map(lambda e: e[0].value, list(client.locked_utxos_for(alice))))
+        outpoints = list(map(lambda e: e[0].value, list(client.locked_utxos_for(alice_stash))))
 
-        (_, _, events) = client.withdraw_stake(charlie,outpoints)
+        client.withdraw_stake(charlie,outpoints)
 
         ledger = list(client.get_staking_ledger())
         assert_equal(len(ledger[0][1]['unlocking']),0)

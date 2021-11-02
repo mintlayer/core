@@ -78,7 +78,7 @@ class ExampleTest(MintlayerTestFramework):
                 utxo.Output(
                     value=70000 * COIN,
                     header=0,
-                    destination=utxo.DestPubkey(charlie.public_key)
+                    destination=utxo.DestPubkey(charlie_stash.public_key)
                 ),
             ]
         ).sign(alice, [utxos[0][1]])
@@ -98,26 +98,22 @@ class ExampleTest(MintlayerTestFramework):
                  utxo.Output(
                     value=10000 * COIN,
                     header=0,
-                    destination=utxo.DestLockExtraForStaking(charlie.public_key)
+                    destination=utxo.DestLockExtraForStaking(charlie_stash.public_key, charlie.public_key)
                 ),
                 utxo.Output(
                     value=19998 * COIN,
                     header=0,
-                    destination=utxo.DestPubkey(charlie.public_key)
+                    destination=utxo.DestPubkey(charlie_stash.public_key)
                 ),
             ]
-        ).sign(charlie, tx1.outputs)
-
-
-        client.submit(charlie, tx2)
-
-        updated_count = list(client.staking_count())
+        ).sign(charlie_stash, tx1.outputs)
+        client.submit(charlie_stash, tx2)
 
         # there should already be 3 accounts, adding Charlie in the list.
-        assert_equal(len(updated_count), 3)
+        assert_equal(len(list(client.staking_count())), 3)
 
         # Get Charlie
-        charlie_count = list(filter(lambda e: e[0].value == charlie.public_key , updated_count))[0][1]
+        charlie_count = list(client.get_staking_count(charlie_stash))[0][1]
 
         # charlie should have 2 locked utxos
         assert_equal(charlie_count[0], 2)
@@ -129,7 +125,6 @@ class ExampleTest(MintlayerTestFramework):
         locked_utxos = list(client.utxos('LockedUtxos'))
         # there should already be 4 in the list; 1 from alice, 1 from bob, 2 from charlie
         assert_equal(len(locked_utxos),4)
-
 
 if __name__ == '__main__':
     ExampleTest().main()

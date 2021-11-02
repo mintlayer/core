@@ -190,15 +190,24 @@ fn testnet_genesis(
         },
     );
 
-    let genesis_utxos: Vec<pallet_utxo::TransactionOutput<AccountId>> = endowed_utxos
-        .into_iter()
-        .map(|info| {
-            pallet_utxo::TransactionOutput::<AccountId>::new_pubkey(
-                info.mlt_tokens,
+    let genesis_utxos: Vec<pallet_utxo::TransactionOutput<AccountId>> =
+        endowed_utxos.into_iter().fold(vec![], |mut genesis_utxos, info| {
+            // share tokens between the controller and the stash accounts
+            let shared_tokens = info.mlt_tokens / 2;
+
+            // add tokens for the controller account
+            genesis_utxos.push(pallet_utxo::TransactionOutput::<AccountId>::new_pubkey(
+                shared_tokens,
                 H256::from(info.sr25519_public_controller),
-            )
-        })
-        .collect();
+            ));
+
+            // add token for the stash_account
+            genesis_utxos.push(pallet_utxo::TransactionOutput::<AccountId>::new_pubkey(
+                shared_tokens,
+                H256::from(info.sr25519_public_stash),
+            ));
+            genesis_utxos
+        });
 
     let balances = endowed_accounts.iter().fold(vec![], |mut acc, info| {
         acc.push((info.controller_account_id(), ENDOWMENT));

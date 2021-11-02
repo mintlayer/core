@@ -17,7 +17,6 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
-pub use authorship::*;
 pub use header::*;
 pub use pallet::*;
 
@@ -33,7 +32,6 @@ mod staking_tests;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 
-mod authorship;
 mod header;
 mod rewards;
 mod script;
@@ -130,8 +128,12 @@ pub mod pallet {
         /// When occurs during unstaking, it means there's no coordination with pallet-staking
         ControllerAccountNotFound,
 
+        /// Occurs during `unlock_request_for_withdrawal` and `withdraw_stake`,
+        /// when the given stash account does not exist.
+        StashAccountNotFound,
+
         /// Use Destination::LockExtraForStaking for additional funds to stake.
-        ControllerAccountAlreadyRegistered,
+        StashAccountAlreadyRegistered,
 
         /// An action not opted to be performed.
         InvalidOperation,
@@ -285,7 +287,12 @@ pub mod pallet {
             session_key: Vec<u8>,
         },
         /// lock more funds
-        LockExtraForStaking(AccountId),
+        /// The controller_account should be the EXACT one for the stash_account,
+        /// as done in the `LockForStaking`
+        LockExtraForStaking {
+            stash_account: AccountId,
+            controller_account: AccountId,
+        },
     }
 
     impl<AccountId> Destination<AccountId> {
@@ -333,7 +340,7 @@ pub mod pallet {
         /// # Arguments
         /// * `value` - This is assuming that the value is received in a format that's already `x * 1_000, * 1_000_000`
         /// * `stash_acount` - This is considered as the "bank", which holds the funds. The full meaning is found in `pallet-staking`.
-        /// * `controller_acount` = can be considered as the "manager". The full meaning is found in `pallet-staking`.
+        /// * `controller_account` = can be considered as the "manager". The full meaning is found in `pallet-staking`.
         /// * `session_key` - for every new validator candidate, you want to link it to a session key.
         /// Generation of `session_key` is done through an rpc call `author_rotateKeys`.
         /// See https://docs.substrate.io/v3/concepts/session-keys/
@@ -355,11 +362,18 @@ pub mod pallet {
         }
 
         /// Create a staking extra of an existing validator.
-        pub fn new_lock_extra_for_staking(value: Value, controller_account: AccountId) -> Self {
+        pub fn new_lock_extra_for_staking(
+            value: Value,
+            stash_account: AccountId,
+            controller_account: AccountId,
+        ) -> Self {
             Self {
                 value,
                 header: 0,
-                destination: Destination::LockExtraForStaking(controller_account),
+                destination: Destination::LockExtraForStaking {
+                    stash_account,
+                    controller_account,
+                },
             }
         }
 
@@ -508,11 +522,11 @@ pub mod pallet {
     pub(super) type LockedUtxos<T: Config> =
         StorageMap<_, Identity, H256, TransactionOutputFor<T>, OptionQuery>;
 
-    /// this is to count how many stakings done for that controller account.
+    /// this is to count how many stakings done for that stash account.
     #[pallet::storage]
     #[pallet::getter(fn staking_count)]
     pub(super) type StakingCount<T: Config> =
-        StorageMap<_, Identity, H256, (u64, Value), OptionQuery>;
+        StorageMap<_, Identity, T::AccountId, (u64, Value), OptionQuery>;
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -526,12 +540,12 @@ pub mod pallet {
         BlockAuthorRewarded(TransactionOutput<T::AccountId>),
 
         /// Unstaking is enabled after the end of bonding duration, as set in pallet-staking.
-        /// \[controller_account_H256_address\]
-        StakeUnlocked(H256),
+        /// \[stash_account\]
+        StakeUnlocked(T::AccountId),
 
         /// Unlocked stake has been withdrawn.
-        /// \[total_stake, controller_account_H256_address\]
-        StakeWithdrawn(Value, H256),
+        /// \[total_stake, stash_account\]
+        StakeWithdrawn(Value, T::AccountId),
     }
 
     #[pallet::hooks]
@@ -733,18 +747,18 @@ pub mod pallet {
                 Destination::Pubkey(_) | Destination::ScriptHash(_) => {
                     ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
                 }
-                Destination::LockExtraForStaking(_) => {
+                Destination::LockExtraForStaking { .. } => {
                     staking::validate_lock_extra_for_staking_requirements::<T>(hash, output.value)?;
                 }
                 Destination::LockForStaking {
-                    stash_account: _,
-                    controller_account,
+                    stash_account,
+                    controller_account: _,
                     session_key: _,
                 } => {
                     staking::validate_lock_for_staking_requirements::<T>(
                         hash,
                         output.value,
-                        controller_account,
+                        stash_account,
                     )?;
                 }
             }
@@ -821,7 +835,8 @@ pub mod pallet {
                         crate::script::verify(&tx, &input_utxos, index as u64, witness, lock)
                             .map_err(|_| "script verification failed")?;
                     }
-                    Destination::LockForStaking { .. } | Destination::LockExtraForStaking(_) => {
+                    Destination::LockForStaking { .. }
+                    | Destination::LockExtraForStaking { .. } => {
                         return Err("cannot spend a staking utxo.");
                     }
                 }
@@ -888,7 +903,7 @@ pub mod pallet {
                 Destination::LockForStaking { .. } => {
                     staking::lock_for_staking::<T>(hash, output)?;
                 }
-                Destination::LockExtraForStaking(_) => {
+                Destination::LockExtraForStaking { .. } => {
                     staking::locking_extra_utxos::<T>(hash, output)?;
                 }
             }
@@ -1105,10 +1120,10 @@ pub mod pallet {
         #[pallet::weight(<T as Config>::WeightInfo::unlock_request_for_withdrawal(1 as u32))]
         pub fn unlock_request_for_withdrawal(
             origin: OriginFor<T>,
-            controller_account: T::AccountId,
+            stash_account: T::AccountId,
         ) -> DispatchResultWithPostInfo {
             ensure_signed(origin)?;
-            staking::unlock_request_for_withdrawal::<T>(controller_account)?;
+            staking::unlock_request_for_withdrawal::<T>(stash_account)?;
             Ok(().into())
         }
 
@@ -1120,11 +1135,11 @@ pub mod pallet {
         #[pallet::weight(<T as Config>::WeightInfo::withdraw_stake(outpoints.len() as u32))]
         pub fn withdraw_stake(
             origin: OriginFor<T>,
-            controller_account: T::AccountId,
+            stash_account: T::AccountId,
             outpoints: Vec<H256>,
         ) -> DispatchResultWithPostInfo {
             ensure_signed(origin)?;
-            staking::withdraw::<T>(controller_account, outpoints)?;
+            staking::withdraw::<T>(stash_account, outpoints)?;
             Ok(().into())
         }
     }
@@ -1158,14 +1173,12 @@ pub mod pallet {
 
             self.locked_utxos.iter().cloned().enumerate().for_each(|(index, u)| {
                 if let Destination::LockForStaking {
-                    stash_account: _,
-                    controller_account,
+                    stash_account,
+                    controller_account: _,
                     session_key: _,
                 } = &u.destination
                 {
-                    if let Ok(controller_pubkey) = convert_to_h256::<T>(controller_account) {
-                        <StakingCount<T>>::insert(controller_pubkey, (1, u.value));
-                    }
+                    <StakingCount<T>>::insert(stash_account.clone(), (1, u.value));
                 }
 
                 // added the index and the `genesis` on the hashing, to indicate that these utxos are from the beginning of the chain.

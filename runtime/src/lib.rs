@@ -479,10 +479,10 @@ parameter_types! {
 // This config is to determine the block author.
 // Helpful when rewarding block authors.
 impl pallet_authorship::Config for Runtime {
-    type FindAuthor = pallet_utxo::FindAccountFromAuthorIndex<Self, Aura, Session>;
+    type FindAuthor = pallet_session::FindAccountFromAuthorIndex<Self, Aura>;
     type UncleGenerations = UncleGenerations;
     type FilterUncle = ();
-    type EventHandler = (); //pallet_staking::Pallet<Runtime>;
+    type EventHandler = pallet_utxo::Pallet<Runtime>;
 }
 
 impl<C> frame_system::offchain::SendTransactionTypes<C> for Runtime

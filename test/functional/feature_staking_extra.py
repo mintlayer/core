@@ -60,14 +60,13 @@ class ExampleTest(MintlayerTestFramework):
         client = self.nodes[0].rpc_client
 
         alice = Keypair.create_from_uri('//Alice')
+        alice_stash = Keypair.create_from_uri('//Alice//stash')
 
         # fetch the genesis utxo from storage
-        utxos = list(client.utxos_for(alice))
+        utxos = list(client.utxos_for(alice_stash))
 
-
-        staking_count = list(client.staking_count())
-        # Get Alice
-        orig_count = list(filter(lambda e: e[0].value == alice.public_key , staking_count))[0][1]
+        # Get Alice stash
+        orig_count = list(client.get_staking_count(alice_stash))[0][1]
         # there should be 1 count of alice's locked utxo
         assert_equal(orig_count[0],1)
         # the amount that alice locked is 40_000 * MLT_UNIT
@@ -82,17 +81,24 @@ class ExampleTest(MintlayerTestFramework):
                 utxo.Output(
                     value=40000 * COIN,
                     header=0,
-                    destination=utxo.DestLockExtraForStaking(alice.public_key)
+                    destination=utxo.DestLockExtraForStaking(alice_stash.public_key, alice.public_key)
                 ),
             ]
-        ).sign(alice, [utxos[0][1]])
-        client.submit(alice, tx1)
+        ).sign(alice_stash, [utxos[0][1]])
+        (_,_,events) = client.submit(alice_stash, tx1)
 
-        staking_count = list(client.staking_count())
-        # Get Alice
-        new_count = list(filter(lambda e: e[0].value == alice.public_key , staking_count))[0][1]
+        assert_equal(events[0].value['module_id'],'Staking')
+        assert_equal(events[0].value['event_id'], 'Bonded')
+
+        assert_equal(events[1].value['module_id'],'Utxo')
+        assert_equal(events[1].value['event_id'], 'TransactionSuccess')
+
+        # Get Alice stash
+        new_count = list(client.get_staking_count(alice_stash))[0][1]
+
         # there should already by 2 utxos locked
         assert_equal(new_count[0],2)
+
         # the original stake + new stake
         assert_equal(new_count[1],80000 * COIN)
 

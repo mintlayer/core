@@ -36,12 +36,12 @@ fn simple_staking() {
         let tx = Transaction {
             inputs: vec![TransactionInput::new_empty(karl_genesis)],
             outputs: vec![
-                // KARL (index 1) wants to be a validator. He will use GREG (index 2) as the stash account.
+                // KARL (index 1) wants to be a validator. He will use GREG (index 2) as the controller account.
                 // minimum value to stake is 10,
                 TransactionOutput::new_lock_for_staking(
                     10,
-                    H256::from(greg_pub_key),
                     H256::from(karl_pub_key),
+                    H256::from(greg_pub_key),
                     vec![2, 1],
                 ),
                 TransactionOutput::new_pubkey(90, H256::from(karl_pub_key)),
@@ -76,12 +76,12 @@ fn less_than_minimum_stake() {
         let mut tx = Transaction {
             inputs: vec![TransactionInput::new_empty(karl_genesis)],
             outputs: vec![
-                // KARL (index 1) wants to be a validator. He will use GREG (index 2) as the stash account.
+                // KARL (index 1) wants to be a validator. He will use GREG (index 2) as the controller account.
                 // minimum value to stake is 10, but KARL only staked 5.
                 TransactionOutput::new_lock_for_staking(
                     5,
-                    H256::from(greg_pub_key),
                     H256::from(karl_pub_key),
+                    H256::from(greg_pub_key),
                     vec![2, 1],
                 ),
                 TransactionOutput::new_pubkey(90, H256::from(karl_pub_key)),
@@ -99,32 +99,32 @@ fn less_than_minimum_stake() {
 }
 
 #[test]
-fn staker_staking_again() {
+fn controller_staking_again() {
     let (mut test_ext, keys_and_hashes) = multiple_keys_test_ext();
     test_ext.execute_with(|| {
-        let (alice_pub_key, alice_genesis) = keys_and_hashes[0];
+        let (tom_pub_key, tom_genesis) = keys_and_hashes[0];
         let (greg_pub_key, _) = keys_and_hashes[2];
-        let utxo = UtxoStore::<Test>::get(alice_genesis).expect("alice's utxo does not exist");
+        let utxo = UtxoStore::<Test>::get(tom_genesis).expect("alice's utxo does not exist");
         let tx = Transaction {
-            inputs: vec![TransactionInput::new_empty(alice_genesis)],
+            inputs: vec![TransactionInput::new_empty(tom_genesis)],
             outputs: vec![
-                // ALICE (index 0) wants to stake again. He will use GREG (index 2) as the stash account.
+                // ALICE (index 0) wants to stake again. He will use GREG (index 2) as the controller account.
                 TransactionOutput::new_lock_for_staking(
                     10,
+                    H256::from(tom_pub_key),
                     H256::from(greg_pub_key),
-                    H256::from(alice_pub_key),
                     vec![2, 0],
                 ),
-                TransactionOutput::new_pubkey(90, H256::from(alice_pub_key)),
+                TransactionOutput::new_pubkey(90, H256::from(tom_pub_key)),
             ],
             time_lock: Default::default(),
         }
-        .sign(&[utxo], 0, &alice_pub_key)
-        .expect(" alice's pub key not found");
+        .sign(&[utxo], 0, &tom_pub_key)
+        .expect(" tom's pub key not found");
 
         assert_err!(
             Utxo::spend(Origin::signed(H256::zero()), tx),
-            "ControllerAccountAlreadyRegistered"
+            "StashAccountAlreadyRegistered"
         );
     })
 }
@@ -133,30 +133,30 @@ fn staker_staking_again() {
 fn stash_account_is_staking() {
     let (mut test_ext, keys_and_hashes) = multiple_keys_test_ext();
     test_ext.execute_with(|| {
-        let (tom_pub_key, tom_genesis) = keys_and_hashes[3];
+        let (alice_pub_key, alice_genesis) = keys_and_hashes[0];
         let (greg_pub_key, _) = keys_and_hashes[2];
 
-        let utxo = UtxoStore::<Test>::get(tom_genesis).expect("tom's utxo does not exist");
+        let utxo = UtxoStore::<Test>::get(alice_genesis).expect("alice's utxo does not exist");
         let tx = Transaction {
-            inputs: vec![TransactionInput::new_empty(tom_genesis)],
+            inputs: vec![TransactionInput::new_empty(alice_genesis)],
             outputs: vec![
-                // TOM (index 3) wants to stake. But he's a stash account already!
+                // ALice (index 3) wants to stake. But he's a stash account already!
                 TransactionOutput::new_lock_for_staking(
                     10,
+                    H256::from(alice_pub_key),
                     H256::from(greg_pub_key),
-                    H256::from(tom_pub_key),
                     vec![2, 3],
                 ),
-                TransactionOutput::new_pubkey(90, H256::from(tom_pub_key)),
+                TransactionOutput::new_pubkey(90, H256::from(alice_pub_key)),
             ],
             time_lock: Default::default(),
         }
-        .sign(&[utxo.clone()], 0, &tom_pub_key)
-        .expect("tom's public key not found");
+        .sign(&[utxo.clone()], 0, &alice_pub_key)
+        .expect("alice's public key not found");
 
         assert_err!(
             Utxo::spend(Origin::signed(H256::zero()), tx),
-            "CANNOT STAKE. CONTROLLER ACCOUNT IS ACTUALLY A STASH ACCOUNT"
+            "StashAccountAlreadyRegistered"
         );
     })
 }
@@ -166,12 +166,17 @@ fn simple_staking_extra() {
     let (mut test_ext, keys_and_hashes) = multiple_keys_test_ext();
     test_ext.execute_with(|| {
         let (alice_pub_key, alice_genesis) = keys_and_hashes[0];
+        let (tom_pub_key, _) = keys_and_hashes[3];
         let utxo = UtxoStore::<Test>::get(alice_genesis).expect("alice's utxo does not exist");
         let tx = Transaction {
             inputs: vec![TransactionInput::new_empty(alice_genesis)],
             outputs: vec![
                 // ALICE (index 0) wants to add extra stake.
-                TransactionOutput::new_lock_extra_for_staking(20, H256::from(alice_pub_key)),
+                TransactionOutput::new_lock_extra_for_staking(
+                    20,
+                    H256::from(alice_pub_key),
+                    H256::from(tom_pub_key),
+                ),
                 TransactionOutput::new_pubkey(70, H256::from(alice_pub_key)),
             ],
             time_lock: Default::default(),
@@ -197,6 +202,7 @@ fn non_validator_staking_extra() {
     let (mut test_ext, keys_and_hashes) = multiple_keys_test_ext();
     test_ext.execute_with(|| {
         let (greg_pub_key, greg_genesis) = keys_and_hashes[2];
+        let (karl_pub_key, _) = keys_and_hashes[1];
 
         let utxo = UtxoStore::<Test>::get(greg_genesis).expect("tom's utxo does not exist");
 
@@ -204,7 +210,11 @@ fn non_validator_staking_extra() {
             inputs: vec![TransactionInput::new_empty(greg_genesis)],
             outputs: vec![
                 // GREG (index 2) wants to stake extra funds. But he's not a validator...
-                TransactionOutput::new_lock_extra_for_staking(20, H256::from(greg_pub_key)),
+                TransactionOutput::new_lock_extra_for_staking(
+                    20,
+                    H256::from(greg_pub_key),
+                    H256::from(karl_pub_key),
+                ),
                 TransactionOutput::new_pubkey(100, H256::from(greg_pub_key)),
             ],
             time_lock: Default::default(),
@@ -214,7 +224,7 @@ fn non_validator_staking_extra() {
 
         assert_err!(
             Utxo::spend(Origin::signed(H256::zero()), tx),
-            Error::<Test>::ControllerAccountNotFound
+            Error::<Test>::StashAccountNotFound
         );
     })
 }
@@ -259,7 +269,7 @@ fn non_validator_pausing() {
                 Origin::signed(H256::zero()),
                 H256::from(karl_pub_key)
             ),
-            "CANNOT PAUSE. CONTROLLER ACCOUNT DOES NOT EXIST"
+            Error::<Test>::StashAccountNotFound
         );
     })
 }
@@ -280,7 +290,7 @@ fn non_validator_withdrawing() {
                 H256::from(karl_pub_key),
                 vec![alice_locked_utxo]
             ),
-            "ControllerAccountNotFound"
+            "StashAccountNotFound"
         );
     })
 }

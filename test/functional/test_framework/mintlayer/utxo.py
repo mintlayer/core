@@ -66,6 +66,12 @@ class Client(Staking):
 
         return ((h, tuple(map(int,str(obj)[1:-1].split(', ')))) for (h, obj) in query)
 
+    def get_staking_count(self, stash_keypair):
+        staking_count = list(self.staking_count())
+        matching = lambda e: e[0].value == stash_keypair.ss58_address
+
+        return filter(matching , staking_count)
+
     """ Submit a transaction onto the blockchain """
     def submit(self, keypair, tx):
         call = self.substrate.compose_call(
@@ -88,7 +94,7 @@ class Client(Staking):
         call = self.substrate.compose_call(
             call_module = 'Utxo',
             call_function = 'unlock_request_for_withdrawal',
-            call_params = { 'controller_account': keypair.public_key },
+            call_params = { 'stash_account': keypair.public_key },
         )
         #TODO ^ same code as above; put them in 1 func
         extrinsic = self.substrate.create_signed_extrinsic(call=call, keypair=keypair)
@@ -106,7 +112,7 @@ class Client(Staking):
         call = self.substrate.compose_call(
             call_module = 'Utxo',
             call_function = 'withdraw_stake',
-            call_params = { 'controller_account': keypair.public_key, 'outpoints': outpoints },
+            call_params = { 'stash_account': keypair.public_key, 'outpoints': outpoints },
         )
         #TODO ^ same code as above; put them in 1 func
         extrinsic = self.substrate.create_signed_extrinsic(call=call, keypair=keypair)
@@ -208,21 +214,22 @@ class DestLockForStaking(Destination):
         return { 'LockForStaking': { 'stash_account': self.stash, 'controller_account': self.controller, 'session_key': self.sesh } }
 
     def get_ss58_address(self):
-        return self.controller
+        return self.stash
 
 class DestLockExtraForStaking(Destination):
-    def __init__(self, account):
-        self.account = account
+    def __init__(self, stash_account, controller_account):
+        self.stash = stash_account
+        self.controller = controller_account
 
     @staticmethod
     def load(obj):
-        return DestLockExtraForStaking(obj)
+        return DestLockExtraForStaking(obj['stash_account'], obj['controller_account'])
 
     def json(self):
-        return { 'LockExtraForStaking': self.account }
+        return { 'LockExtraForStaking': { 'stash_account': self.stash, 'controller_account': self.controller } }
 
     def get_ss58_address(self):
-        return self.account
+        return self.stash
 
 
 class Output():
