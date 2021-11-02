@@ -680,7 +680,7 @@ fn test_nft_unique() {
         .sign_unchecked(&[utxo0.clone()], 0, &alice_pub_key);
         let new_utxo_hash = tx.outpoint(1);
         let (_, init_utxo) = genesis_utxo();
-        // Spend
+        // Submit
         assert!(UtxoStore::<Test>::contains_key(H256::from(init_utxo)));
         assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx.clone()));
         assert!(!UtxoStore::<Test>::contains_key(H256::from(init_utxo)));
@@ -704,7 +704,7 @@ fn test_nft_unique() {
             time_lock: Default::default(),
         }
         .sign_unchecked(&[new_utxo], 0, &alice_pub_key);
-        // Spend
+        // Submit
         assert!(UtxoStore::<Test>::contains_key(H256::from(new_utxo_hash)));
         frame_support::assert_err_ignore_postinfo!(
             Utxo::spend(Origin::signed(H256::zero()), tx),
