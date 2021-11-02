@@ -65,13 +65,13 @@ impl TokenId {
 pub enum OutputData {
     // TokenTransfer data to another user. If it is a token, then the token data must also be transferred to the recipient.
     #[codec(index = 1)]
-    TokenTransferV1 { token_id: TokenId, amount: u128 },
+    TokenTransferV1 { token_id: TokenId, amount: Value },
     // A new token creation
     #[codec(index = 2)]
     TokenIssuanceV1 {
         token_id: TokenId,
         token_ticker: Vec<u8>,
-        amount_to_issue: u128,
+        amount_to_issue: Value,
         // Should be not more than 18 numbers
         number_of_decimals: u8,
         metadata_uri: Vec<u8>,
@@ -80,7 +80,7 @@ pub enum OutputData {
     #[codec(index = 3)]
     TokenBurnV1 {
         token_id: TokenId,
-        amount_to_burn: u128,
+        amount_to_burn: Value,
     },
     // A new NFT creation
     #[codec(index = 4)]
