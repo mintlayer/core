@@ -12,6 +12,10 @@ git = 'https://github.com/paritytech/substrate.git'
 version = '4.0.0-dev'
 branch = "master"
 
+[dependencies.outpoint]
+default-features = false
+path = "../../libs/outpoint"
+
 [dependencies.sp-std]
 default-features = false
 git = 'https://github.com/paritytech/substrate.git'
@@ -40,5 +44,6 @@ branch = "master"
 default = ['std']
 std = [
     'frame-support/std',
-	'sp-std/std',
+    'outpoint/std',
+    'sp-std/std',
 ]

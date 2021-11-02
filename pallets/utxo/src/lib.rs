@@ -143,20 +143,6 @@ pub mod pallet {
         fn send_to_address(u: u32) -> Weight;
     }
 
-    /// Outpoint refers to an output of a transaction by Transaction ID and index.
-    #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-    #[derive(Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, RuntimeDebug, Hash, Default)]
-    pub struct Outpoint {
-        pub(crate) txid: H256,
-        #[codec(compact)] pub(crate) index: u32,
-    }
-
-    impl Outpoint {
-        fn new(txid: H256, index: u32) -> Self {
-            Outpoint { txid, index }
-        }
-    }
-
     /// Transaction input
     ///
     /// The input contains two pieces of information used to unlock the funds being spent. The
@@ -574,7 +560,7 @@ pub mod pallet {
                     );
                     resolved.push(input_utxo);
                 } else {
-                    missing.push(input.outpoint.clone().as_fixed_bytes().to_vec());
+                    missing.push(input.outpoint.encode());
                 }
             }
 
@@ -630,9 +616,9 @@ pub mod pallet {
             }
             ensure!(res.is_ok(), "header error. Please check the logs.");
             ensure!(output.value > 0, "output value must be nonzero");
-            let hash = tx.outpoint(output_index as u32);
-            ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
-            new_utxos.push(hash.as_fixed_bytes().to_vec());
+            let outpt = tx.outpoint(output_index as u32);
+            ensure!(!<UtxoStore<T>>::contains_key(outpt), "output already exists");
+            new_utxos.push(outpt.encode());
 
             match output.destination {
                 Destination::CreatePP(_, _) => {

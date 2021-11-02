@@ -20,6 +20,7 @@ use frame_support::{
     dispatch::Vec,
     pallet_prelude::{DispatchError, DispatchResultWithPostInfo},
 };
+use outpoint::Outpoint;
 use sp_core::{H256, H512};
 
 pub trait UtxoApi {
@@ -30,7 +31,7 @@ pub trait UtxoApi {
         caller: &Self::AccountId,
         value: u128,
         address: H256,
-        utxo: Self::Outpoint,
+        utxo: Outpoint,
         sig: H512,
     ) -> DispatchResultWithPostInfo;
 
@@ -38,7 +39,7 @@ pub trait UtxoApi {
         caller: &Self::AccountId,
         destination: &Self::AccountId,
         value: u128,
-        outpoints: &Vec<Self::Outpoint>,
+        outpoints: &Vec<Outpoint>,
     ) -> Result<(), DispatchError>;
 
     fn send_conscrit_c2c(
@@ -46,6 +47,6 @@ pub trait UtxoApi {
         destination: &Self::AccountId,
         value: u128,
         data: &Vec<u8>,
-        outpoints: &Vec<Self::Outpoint>,
+        outpoints: &Vec<Outpoint>,
     ) -> Result<(), DispatchError>;
 }
