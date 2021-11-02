@@ -1128,6 +1128,7 @@ fn test_nft_transferring() {
         let token_id = TokenId::new_asset(H256::random());
         // Alice issue 1000 MLS-01, and send them to Karl and the rest back to herself
         let (utxo0, input0) = tx_input_gen_no_signature();
+        let data_hash = NftDataHash::Raw(build_random_vec(32));
         let tx = Transaction {
             inputs: vec![input0],
             outputs: vec![
@@ -1137,7 +1138,7 @@ fn test_nft_transferring() {
                     H256::from(karl_pub_key),
                     OutputData::NftMintV1 {
                         token_id: token_id.clone(),
-                        data_hash: NftDataHash::Hash32([7; 32]),
+                        data_hash: data_hash.clone(),
                         metadata_uri: "facebook.com".as_bytes().to_vec(),
                     },
                 ),
@@ -1219,7 +1220,23 @@ fn test_nft_transferring() {
             time_lock: Default::default(),
         }
         .sign_unchecked(&[token_utxo], 0, &karl_pub_key);
-        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx));
+        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx.clone()));
+        let nft_utxo_hash = tx.outpoint(0);
+        assert!(!UtxoStore::<Test>::contains_key(H256::from(
+            token_utxo_hash
+        )));
+        assert!(UtxoStore::<Test>::contains_key(nft_utxo_hash));
+        assert_eq!(
+            data_hash,
+            crate::get_output_by_token_id::<Test>(token_id.clone())
+                .unwrap()
+                .data
+                .map(|x| match x {
+                    OutputData::NftMintV1 { data_hash, .. } => data_hash,
+                    _ => NftDataHash::Raw(Vec::new()),
+                })
+                .unwrap_or(NftDataHash::Raw(Vec::new()))
+        );
     });
 }
 
