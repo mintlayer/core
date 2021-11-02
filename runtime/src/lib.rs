@@ -145,7 +145,7 @@ pub const CENTS: Balance = 1_000 * MILLICENTS;
 pub const DOLLARS: Balance = 100 * CENTS;
 
 /// The initial supply of mlt coins
-pub const MLT_ORIG_SUPPLY: Balance = 400_000_000_000 * MLT_UNIT;
+pub const TEST_NET_MLT_ORIG_SUPPLY: Balance = 400_000_000_000 * MLT_UNIT;
 pub const MINIMUM_STAKE: Balance = 40_000 * MLT_UNIT;
 
 const fn deposit(items: u32, bytes: u32) -> Balance {

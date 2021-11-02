@@ -328,7 +328,6 @@ pub mod pallet {
             }
         }
 
-        /// TODO: change back to Public/H256 or something, after UI Testing.
         /// Create a new stake for the first time.
         /// This is assumed, that an entity staking its funds also means playing the role of a `Validator`.
         /// # Arguments
@@ -355,7 +354,6 @@ pub mod pallet {
             }
         }
 
-        /// TODO: change back to Public/H256 or something, after UI Testing.
         /// Create a staking extra of an existing validator.
         pub fn new_lock_extra_for_staking(value: Value, controller_account: AccountId) -> Self {
             Self {
@@ -824,7 +822,7 @@ pub mod pallet {
                             .map_err(|_| "script verification failed")?;
                     }
                     Destination::LockForStaking { .. } | Destination::LockExtraForStaking(_) => {
-                        log::info!("TODO validate STAKE spending");
+                        return Err("cannot spend a staking utxo.");
                     }
                 }
             }
