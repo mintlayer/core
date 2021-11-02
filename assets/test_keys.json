@@ -14,7 +14,7 @@
 		},
 		{
 			"name": "Charlie",
-			"sr25519_public_controller": "0x042a16e8cd2702d1808d8fe1adedbb8e0ca6f33a56c5681d9bc9f48b478a6651",
+			"sr25519_public_controller": "0x8cb53fc2aa9b8bcc976537dd2b05a09a40f2929cfcef11014e608cc667dba60a",
 			"sr25519_public_stash": "0x042a16e8cd2702d1808d8fe1adedbb8e0ca6f33a56c5681d9bc9f48b478a6651",
 			"ed25519_public": "0x5f821a3eb5e4079582b7b936a32640f1546b6bc8ff10c7b602919959b0f54820"
 		},
