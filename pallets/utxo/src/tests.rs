@@ -954,7 +954,6 @@ fn test_token_transfer() {
             time_lock: Default::default(),
         }
         .sign_unchecked(&[utxo0.clone()], 0, &alice_pub_key);
-
         assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx.clone()));
         let token_utxo_hash = tx.outpoint(1);
         let token_utxo = tx.outputs[1].clone();
@@ -1016,7 +1015,7 @@ fn test_token_transfer() {
             "output value must not exceed input value"
         );
 
-        // should be success
+        // Let's fail because there is occurred a tokens burn
         let tx = Transaction {
             inputs: vec![TransactionInput::new_empty(token_utxo_hash)],
             outputs: vec![TransactionOutput::new_p2pk_with_data(
@@ -1024,13 +1023,101 @@ fn test_token_transfer() {
                 H256::from(alice_pub_key),
                 OutputData::TokenTransferV1 {
                     token_id: token_id.clone(),
-                    amount: 1_000_000_000,
+                    amount: 300_000_000,
                 },
             )],
             time_lock: Default::default(),
         }
-        .sign_unchecked(&[token_utxo], 0, &karl_pub_key);
-        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx));
+        .sign_unchecked(&[token_utxo.clone()], 0, &karl_pub_key);
+        frame_support::assert_err_ignore_postinfo!(
+            Utxo::spend(Origin::signed(H256::zero()), tx),
+            "output value must not exceed input value"
+        );
+
+        // Let's send 300_000_000 and rest back
+        let tx = Transaction {
+            inputs: vec![TransactionInput::new_empty(token_utxo_hash)],
+            outputs: vec![
+                TransactionOutput::new_p2pk_with_data(
+                    0,
+                    H256::from(alice_pub_key),
+                    OutputData::TokenTransferV1 {
+                        token_id: token_id.clone(),
+                        amount: 300_000_000,
+                    },
+                ),
+                TransactionOutput::new_p2pk_with_data(
+                    0,
+                    H256::from(karl_pub_key),
+                    OutputData::TokenTransferV1 {
+                        token_id: token_id.clone(),
+                        amount: 700_000_000,
+                    },
+                ),
+            ],
+            time_lock: Default::default(),
+        }
+        .sign_unchecked(&[token_utxo.clone()], 0, &karl_pub_key);
+        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx.clone()));
+        let alice_tokens_utxo_hash = tx.outpoint(0);
+        let karl_tokens_utxo_hash = tx.outpoint(1);
+        let karl_tokens_utxo = tx.outputs[1].clone();
+        assert!(!UtxoStore::<Test>::contains_key(H256::from(
+            token_utxo_hash
+        )));
+        assert!(UtxoStore::<Test>::contains_key(alice_tokens_utxo_hash));
+        assert!(UtxoStore::<Test>::contains_key(karl_tokens_utxo_hash));
+
+        // should be success
+        let tx = Transaction {
+            inputs: vec![TransactionInput::new_empty(karl_tokens_utxo_hash)],
+            outputs: vec![
+                TransactionOutput::new_p2pk_with_data(
+                    0,
+                    H256::from(alice_pub_key),
+                    OutputData::TokenTransferV1 {
+                        token_id: token_id.clone(),
+                        amount: 400_000_000,
+                    },
+                ),
+                TransactionOutput::new_p2pk_with_data(
+                    0,
+                    H256::from(karl_pub_key),
+                    OutputData::TokenTransferV1 {
+                        token_id: token_id.clone(),
+                        amount: 300_000_000,
+                    },
+                ),
+            ],
+            time_lock: Default::default(),
+        }
+        .sign_unchecked(&[karl_tokens_utxo], 0, &karl_pub_key);
+        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx.clone()));
+        assert_eq!(
+            300_000_000,
+            UtxoStore::<Test>::get(alice_tokens_utxo_hash)
+                .unwrap()
+                .data
+                .map(|x| match x {
+                    OutputData::TokenTransferV1 { amount, .. } => amount,
+                    _ => 0,
+                })
+                .unwrap_or(0)
+        );
+
+        let new_alice_tokens_utxo_hash = tx.outpoint(0);
+        assert!(UtxoStore::<Test>::contains_key(new_alice_tokens_utxo_hash));
+        assert_eq!(
+            400_000_000,
+            UtxoStore::<Test>::get(new_alice_tokens_utxo_hash)
+                .unwrap()
+                .data
+                .map(|x| match x {
+                    OutputData::TokenTransferV1 { amount, .. } => amount,
+                    _ => 0,
+                })
+                .unwrap_or(0)
+        );
     });
 }
 

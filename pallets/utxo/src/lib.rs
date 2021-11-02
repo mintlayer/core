@@ -805,10 +805,12 @@ pub mod pallet {
             let mut num_creations = 0;
             for output_token in &total_value_of_output_tokens {
                 match total_value_of_input_tokens.get(&output_token.0) {
-                    Some(input_value) => ensure!(
-                        input_value >= &output_token.1,
-                        "output value must not exceed input value"
-                    ),
+                    Some(input_value) => {
+                        ensure!(
+                            input_value == output_token.1,
+                            "output value must not exceed input value"
+                        )
+                    }
                     None => {
                         match &tx.outputs.iter().find(|x| match x.data {
                             Some(ref output_data) => {
