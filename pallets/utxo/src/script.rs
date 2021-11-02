@@ -162,11 +162,17 @@ pub fn verify<AccountId: Encode>(
 }
 
 #[cfg(test)]
-mod test {
+pub(crate) mod test {
     use super::*;
     use chainscript::Context;
     use core::time::Duration;
     use sp_core::sr25519;
+    use proptest::prelude::*;
+
+    // Generate block time in seconds
+    pub fn gen_block_time_real() -> impl Strategy<Value = RawBlockTime> {
+        (RawBlockTime::THRESHOLD..3 * RawBlockTime::THRESHOLD).prop_map(RawBlockTime::new)
+    }
 
     #[test]
     fn test_parse_pubkey() {
