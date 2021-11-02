@@ -1,0 +1,25 @@
+[package]
+name = "outpoint"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+default = ['std']
+std = [
+    'sp-core/std',
+]
+
+[dependencies]
+serde = '1.0.119'
+
+[dependencies.sp-core]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+version = '4.0.0-dev'
+branch = "master"
+
+[dependencies.codec]
+default-features = false
+features = ['derive']
+package = 'parity-scale-codec'
+version = '2.0.0'
