@@ -21,30 +21,32 @@ impl Mlt {
 
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 #[derive(Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, RuntimeDebug)]
-enum TokenIdInner {
-    MLT,
-    Asset(H160),
-}
-
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-#[derive(Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, RuntimeDebug)]
 pub struct TokenId {
-    inner: TokenIdInner,
+    inner: H160,
 }
 
 impl TokenId {
     pub fn new_asset(first_input_hash: H256) -> TokenId {
         TokenId {
             // We are loosing the first bytes of H256 over here and using 20 the last bytes
-            inner: TokenIdInner::Asset(H160::from(first_input_hash)),
+            inner: H160::from(first_input_hash),
         }
     }
 
     pub fn to_string(&self) -> Vec<u8> {
-        match self.inner {
-            TokenIdInner::MLT => sp_std::vec![],
-            TokenIdInner::Asset(hash) => hash.as_bytes().to_base58().to_vec(),
-        }
+        self.inner.as_bytes().to_mls_b58check().to_vec()
+    }
+
+    pub fn from_string(data: &str) -> Result<TokenId, &'static str> {
+        let data = data.from_mls_b58check().map_err(|x| match x {
+            FromBase58Error::InvalidBase58Character { .. } => "Invalid Base58 character",
+            FromBase58Error::InvalidBase58Length => "Invalid Base58 length",
+            FromBase58Error::InvalidChecksum => "Invalid checksum",
+            FromBase58Error::InvalidPrefix => "Invalid token id",
+        })?;
+        Ok(TokenId {
+            inner: TokenId::hash160_from_bytes(data.as_slice())?,
+        })
     }
 
     fn hash160_from_bytes(bytes: &[u8]) -> Result<H160, &'static str> {
@@ -55,21 +57,6 @@ impl TokenId {
         let mut buffer = [0u8; 20];
         buffer.copy_from_slice(bytes);
         Ok(H160::from(buffer))
-    }
-
-    pub fn from_string(data: &str) -> Result<TokenId, &'static str> {
-        let data = data.from_base58().map_err(|x| match x {
-            FromBase58Error::InvalidBase58Character { .. } => "Invalid Base58 character",
-            FromBase58Error::InvalidBase58Length => "Invalid Base58 length",
-            FromBase58Error::InvalidChecksum => "Invalid checksum",
-            FromBase58Error::InvalidPrefix => "Invalid token id",
-        })?;
-
-        let hash = TokenId::hash160_from_bytes(data.as_slice())?;
-
-        Ok(TokenId {
-            inner: TokenIdInner::Asset(hash),
-        })
     }
 }
 
