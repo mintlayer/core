@@ -278,7 +278,7 @@ fn attack_by_overspending() {
         let tx = Transaction {
             inputs: vec![input0],
             outputs: vec![
-                TransactionOutput::new_pubkey(100, H256::from(alice_pub_key)),
+                TransactionOutput::new_pubkey(ALICE_GENESIS_BALANCE, H256::from(alice_pub_key)),
                 // Creates 2 new utxo out of thin air
                 TransactionOutput::new_pubkey(2, H256::from(alice_pub_key)),
             ],
@@ -347,7 +347,7 @@ fn test_reward() {
         let reward = RewardTotal::<Test>::get();
 
         assert_eq!(utxos.value, 90);
-        assert_eq!(reward, 10);
+        assert_eq!(reward, ALICE_GENESIS_BALANCE - 90);
     })
 }
 
@@ -466,7 +466,7 @@ fn test_send_to_address() {
         assert_err!(
             Utxo::send_to_address(
                 Origin::signed(H256::from(alice_pub_key)),
-                10_000_000,
+                ALICE_GENESIS_BALANCE * 10,
                 addr.as_bytes().to_vec(),
             ),
             "Caller doesn't have enough UTXOs",
@@ -591,19 +591,23 @@ fn test_token_issuance() {
         assert!(!UtxoStore::<Test>::contains_key(H256::from(init_utxo)));
         // Checking a new UTXO
         assert!(UtxoStore::<Test>::contains_key(new_utxo_hash));
-        assert_eq!(
-            1_000_000_000,
-            UtxoStore::<Test>::get(new_utxo_hash)
-                .unwrap()
-                .data
-                .map(|x| match x {
-                    OutputData::TokenIssuanceV1 {
-                        amount_to_issue, ..
-                    } => amount_to_issue,
-                    _ => 0,
-                })
-                .unwrap_or(0)
-        );
+
+        match UtxoStore::<Test>::get(new_utxo_hash).expect("The new output not found").data {
+            Some(OutputData::TokenIssuanceV1 {
+                token_id,
+                token_ticker,
+                amount_to_issue,
+                number_of_decimals,
+                metadata_uri,
+            }) => {
+                assert_eq!(TokenId::new_asset(first_input_hash), token_id);
+                assert_eq!(1_000_000_000, amount_to_issue);
+                assert_eq!("BensT".as_bytes().to_vec(), token_ticker);
+                assert_eq!(2, number_of_decimals);
+                assert_eq!("facebook.com".as_bytes().to_vec(), metadata_uri);
+            }
+            _ => panic!("Transaction data is corrupted"),
+        }
     });
 }
 
@@ -777,53 +781,46 @@ fn test_token_double_creation() {
     });
 }
 
-#[test]
-fn test_tokens_with_invalid_data() {
-    macro_rules! test_tx {
-        ($data: ident, $checking: tt, $err: expr) => {
-            execute_with_alice(|alice_pub_key| {
-                let (utxo0, input0) = tx_input_gen_no_signature();
-                let output_new = TransactionOutput {
-                    value: 1,
-                    destination: Destination::Pubkey(alice_pub_key),
-                    data: Some($data.clone()),
-                };
-                let tx = Transaction {
-                    inputs: vec![input0],
-                    outputs: vec![output_new],
-                    time_lock: Default::default(),
-                }
-                .sign_unchecked(&[utxo0], 0, &alice_pub_key);
-                let new_utxo_hash = tx.outpoint(0);
-                let (_, init_utxo) = genesis_utxo();
-                // Spend
+// This macro using for the fast creation and sending a tx
+macro_rules! test_tx {
+    ($data: ident, $checking: tt, $err: expr) => {
+        execute_with_alice(|alice_pub_key| {
+            let (utxo0, input0) = tx_input_gen_no_signature();
+            let output_new = TransactionOutput {
+                value: 1,
+                destination: Destination::Pubkey(alice_pub_key),
+                data: Some($data.clone()),
+            };
+            let tx = Transaction {
+                inputs: vec![input0],
+                outputs: vec![output_new],
+                time_lock: Default::default(),
+            }
+            .sign_unchecked(&[utxo0], 0, &alice_pub_key);
+            let new_utxo_hash = tx.outpoint(0);
+            let (_, init_utxo) = genesis_utxo();
+            // Send
+            assert!(UtxoStore::<Test>::contains_key(H256::from(init_utxo)));
+            // We can check what error we are expecting
+            if stringify!($checking) == "Err" {
+                frame_support::assert_err_ignore_postinfo!(
+                    Utxo::spend(Origin::signed(H256::zero()), tx),
+                    $err
+                );
                 assert!(UtxoStore::<Test>::contains_key(H256::from(init_utxo)));
-                if stringify!($checking) == "Err" {
-                    frame_support::assert_err_ignore_postinfo!(
-                        Utxo::spend(Origin::signed(H256::zero()), tx),
-                        $err
-                    );
-                    assert!(UtxoStore::<Test>::contains_key(H256::from(init_utxo)));
-                    assert!(!UtxoStore::<Test>::contains_key(new_utxo_hash));
-                } else if stringify!($checking) == "Ok" {
-                    assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx));
-                    assert!(!UtxoStore::<Test>::contains_key(H256::from(init_utxo)));
-                    assert!(UtxoStore::<Test>::contains_key(new_utxo_hash));
-                }
-            });
-        };
-    }
-
-    // TokenID = MLT
-    let data = OutputData::TokenIssuanceV1 {
-        token_id: TokenId::mlt(),
-        token_ticker: vec![],
-        amount_to_issue: 0,
-        number_of_decimals: 0,
-        metadata_uri: vec![],
+                assert!(!UtxoStore::<Test>::contains_key(new_utxo_hash));
+            } else if stringify!($checking) == "Ok" {
+                // We can check is that success
+                assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx));
+                assert!(!UtxoStore::<Test>::contains_key(H256::from(init_utxo)));
+                assert!(UtxoStore::<Test>::contains_key(new_utxo_hash));
+            }
+        });
     };
-    test_tx!(data, Err, "unable to use mlt as a token id");
+}
 
+#[test]
+fn test_tokens_issuance_empty_ticker() {
     // Ticker empty
     let data = OutputData::TokenIssuanceV1 {
         token_id: TokenId::new_asset(H256::random()),
@@ -833,7 +830,10 @@ fn test_tokens_with_invalid_data() {
         metadata_uri: vec![],
     };
     test_tx!(data, Err, "token ticker can't be empty");
+}
 
+#[test]
+fn test_tokens_issuance_too_big_ticker() {
     // Ticker too long
     let data = OutputData::TokenIssuanceV1 {
         token_id: TokenId::new_asset(H256::random()),
@@ -843,7 +843,10 @@ fn test_tokens_with_invalid_data() {
         metadata_uri: vec![],
     };
     test_tx!(data, Err, "token ticker is too long");
+}
 
+#[test]
+fn test_tokens_issuance_amount_zero() {
     // Amount to issue is zero
     let data = OutputData::TokenIssuanceV1 {
         token_id: TokenId::new_asset(H256::random()),
@@ -853,7 +856,10 @@ fn test_tokens_with_invalid_data() {
         metadata_uri: vec![],
     };
     test_tx!(data, Err, "output value must be nonzero");
+}
 
+#[test]
+fn test_tokens_issuance_too_big_decimals() {
     // Number of decimals more than 18 numbers
     let data = OutputData::TokenIssuanceV1 {
         token_id: TokenId::new_asset(H256::random()),
@@ -863,7 +869,10 @@ fn test_tokens_with_invalid_data() {
         metadata_uri: vec![],
     };
     test_tx!(data, Err, "too long decimals");
+}
 
+#[test]
+fn test_tokens_issuance_empty_metadata() {
     // metadata_uri empty
     let data = OutputData::TokenIssuanceV1 {
         token_id: TokenId::new_asset(H256::random()),
@@ -873,7 +882,10 @@ fn test_tokens_with_invalid_data() {
         metadata_uri: vec![],
     };
     test_tx!(data, Ok, "");
+}
 
+#[test]
+fn test_tokens_issuance_too_long_metadata() {
     // metadata_uri too long
     let data = OutputData::TokenIssuanceV1 {
         token_id: TokenId::new_asset(H256::random()),
@@ -883,7 +895,10 @@ fn test_tokens_with_invalid_data() {
         metadata_uri: Vec::from([0u8; 10_000]),
     };
     test_tx!(data, Err, "token metadata uri is too long");
+}
 
+#[test]
+fn test_tokens_issuance_with_junk_data() {
     // The data field of the maximum allowed length filled with random garbage
     let mut rng = rand::thread_rng();
     let garbage = build_random_vec(100);
@@ -895,6 +910,12 @@ fn test_tokens_with_invalid_data() {
         metadata_uri: garbage.clone(),
     };
     test_tx!(data, Err, "token ticker has none ascii characters");
+}
+
+#[test]
+fn test_tokens_issuance_with_corrupted_uri() {
+    let mut rng = rand::thread_rng();
+    let garbage = build_random_vec(100);
     // garbage uri
     let data = OutputData::TokenIssuanceV1 {
         token_id: TokenId::new_asset(H256::random()),
@@ -907,7 +928,7 @@ fn test_tokens_with_invalid_data() {
 }
 
 #[test]
-fn test_tokens_transferring() {
+fn test_tokens_transfer() {
     let (mut test_ext, alice_pub_key, karl_pub_key) = new_test_ext_and_keys();
     test_ext.execute_with(|| {
         let token_id = TokenId::new_asset(H256::random());
@@ -1047,20 +1068,9 @@ fn test_nft_transferring() {
             time_lock: Default::default(),
         }
         .sign_unchecked(&[utxo0.clone()], 0, &alice_pub_key);
-
         assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx.clone()));
-        let new_utxo_hash = tx.outpoint(0);
-        let new_utxo = tx.outputs[0].clone();
         let token_utxo_hash = tx.outpoint(1);
         let token_utxo = tx.outputs[1].clone();
-
-        // then send rest of the tokens to karl (proving that the first tx was successful)
-        let _tx = Transaction {
-            inputs: vec![TransactionInput::new_empty(new_utxo_hash)],
-            outputs: vec![TransactionOutput::new_pubkey(90, H256::from(karl_pub_key))],
-            time_lock: Default::default(),
-        }
-        .sign_unchecked(&[new_utxo.clone()], 0, &alice_pub_key);
 
         // Let's fail on wrong token id
         let tx = Transaction {
@@ -1080,7 +1090,6 @@ fn test_nft_transferring() {
             Utxo::spend(Origin::signed(H256::zero()), tx),
             "input for the token not found"
         );
-
         // Let's fail on exceed token amount
         let tx = Transaction {
             inputs: vec![TransactionInput::new_empty(token_utxo_hash)],

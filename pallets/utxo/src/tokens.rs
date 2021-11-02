@@ -33,12 +33,6 @@ pub struct TokenId {
 }
 
 impl TokenId {
-    pub fn mlt() -> TokenId {
-        TokenId {
-            inner: TokenIdInner::MLT,
-        }
-    }
-
     pub fn new_asset(first_input_hash: H256) -> TokenId {
         TokenId {
             // We are loosing the first bytes of H256 over here and using 20 the last bytes

@@ -20,7 +20,10 @@
 //
 // Based on https://github.com/trezor/trezor-crypto/blob/master/base58.c
 // commit hash: c6e7d37
+// license: MIT
 // works only up to 128 bytes
+
+#![cfg_attr(not(feature = "std"), no_std)]
 
 use frame_support::sp_io::hashing::sha2_256;
 use sp_std::vec;
@@ -294,8 +297,10 @@ mod tests {
 
     #[test]
     fn to_base58check() {
-        assert_eq!(b"".to_mls_b58check(), "1Wh4bh".as_bytes());
-        assert_eq!(b"hello".to_mls_b58check(), "12L5B5yqsf7vwb".as_bytes());
+        assert_eq!(
+            b"SOME_TOKEN_ID".to_mls_b58check(),
+            "25TfmUELb1jGfVSAbKsV4fAVTKAn".as_bytes()
+        );
     }
 
     #[test]
@@ -322,16 +327,13 @@ mod tests {
 
     #[test]
     fn base58check_loop() {
-        // Encode some bytes into b58_check
-        let enc = "SOME_TOKEN_ID".as_bytes().to_mls_b58check();
-        let enc = std::str::from_utf8(enc.as_slice()).unwrap();
-        dbg!(enc);
+        let text =
+            "To be, or not to be, that is the Question: Whether ’tis Nobler in the mind to suffer.";
+        let enc = text.as_bytes().to_mls_b58check();
+        let enc = sp_std::str::from_utf8(enc.as_slice()).unwrap();
 
         // decode back
         let dec = enc.from_mls_b58check().unwrap();
-        assert_eq!(
-            std::str::from_utf8(dec.as_slice()).unwrap(),
-            "SOME_TOKEN_ID"
-        );
+        assert_eq!(sp_std::str::from_utf8(dec.as_slice()).unwrap(), text);
     }
 }
