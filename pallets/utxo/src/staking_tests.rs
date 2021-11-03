@@ -16,8 +16,8 @@
 // Author(s): C. Yap
 
 use crate::{
-    mock::*, Error, LockedUtxos, StakingCount, Transaction, TransactionInput, TransactionOutput,
-    UtxoStore,
+    mock::*, Destination, Error, LockedUtxos, StakingCount, Transaction, TransactionInput,
+    TransactionOutput, UtxoStore,
 };
 use codec::Encode;
 use frame_support::{assert_err, assert_ok, sp_io::crypto};
@@ -94,6 +94,40 @@ fn less_than_minimum_stake() {
         assert_err!(
             Utxo::spend(Origin::signed(H256::zero()), tx),
             "output value must be equal or more than the set minimum stake"
+        );
+    })
+}
+
+#[test]
+fn non_mlt_staking() {
+    let (mut test_ext, keys_and_hashes) = multiple_keys_test_ext();
+    test_ext.execute_with(|| {
+        let (karl_pub_key, karl_genesis) = keys_and_hashes[1];
+        let (greg_pub_key, _) = keys_and_hashes[2];
+        let mut tx = Transaction {
+            inputs: vec![TransactionInput::new_empty(karl_genesis)],
+            outputs: vec![
+                // KARL (index 1) wants to be a validator. He will use GREG (index 2) as the controller account.
+                // minimum value to stake is 10, but KARL only staked 5.
+                TransactionOutput {
+                    value: 5,
+                    header: 1, // not an MLT token
+                    destination: Destination::LockForStaking {
+                        stash_account: H256::from(karl_pub_key),
+                        controller_account: H256::from(greg_pub_key),
+                        session_key: vec![2, 1],
+                    },
+                },
+                TransactionOutput::new_pubkey(90, H256::from(karl_pub_key)),
+            ],
+            time_lock: Default::default(),
+        };
+        let karl_sig = crypto::sr25519_sign(SR25519, &karl_pub_key, &tx.encode()).unwrap();
+        tx.inputs[0].witness = karl_sig.0.to_vec();
+
+        assert_err!(
+            Utxo::spend(Origin::signed(H256::zero()), tx),
+            "only MLT tokens are supported for staking"
         );
     })
 }

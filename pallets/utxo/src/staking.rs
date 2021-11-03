@@ -220,40 +220,51 @@ mod utils {
 
 pub mod validation {
     use super::*;
+    use crate::{OutputHeaderHelper, TXOutputHeader, TokenType};
 
     /// Checks whether a transaction is valid to do `lock_for_staking`.
     pub(crate) fn validate_lock_for_staking_requirements<T: Config>(
         hash_key: H256,
         output_value: Value,
+        output_header: TXOutputHeader,
         stash_account: &T::AccountId,
     ) -> Result<(), &'static str> {
-        ensure!(
-            !<StakingCount<T>>::contains_key(stash_account),
-            Error::<T>::StashAccountAlreadyRegistered
-        );
+        if let Some(TokenType::MLT) = output_header.as_tx_output_header().token_type() {
+            ensure!(
+                !<StakingCount<T>>::contains_key(stash_account),
+                Error::<T>::StashAccountAlreadyRegistered
+            );
 
-        ensure!(
-            output_value >= T::MinimumStake::get(),
-            "output value must be equal or more than the set minimum stake"
-        );
-        ensure!(
-            !<LockedUtxos<T>>::contains_key(hash_key),
-            "output already exists in the LockedUtxos storage"
-        );
-        Ok(())
+            ensure!(
+                output_value >= T::MinimumStake::get(),
+                "output value must be equal or more than the set minimum stake"
+            );
+            ensure!(
+                !<LockedUtxos<T>>::contains_key(hash_key),
+                "output already exists in the LockedUtxos storage"
+            );
+            return Ok(());
+        }
+
+        Err("only MLT tokens are supported for staking")
     }
 
     /// Checks whether a transaction is valid to do extra locking of utxos for staking
     pub(crate) fn validate_lock_extra_for_staking_requirements<T: Config>(
         hash_key: H256,
         output_value: Value,
+        output_header: TXOutputHeader,
     ) -> Result<(), &'static str> {
-        ensure!(output_value > 0, "output value must be nonzero");
-        ensure!(
-            !<LockedUtxos<T>>::contains_key(hash_key),
-            Error::<T>::OutpointAlreadyExists
-        );
-        Ok(())
+        if let Some(TokenType::MLT) = output_header.as_tx_output_header().token_type() {
+            ensure!(output_value > 0, "output value must be nonzero");
+            ensure!(
+                !<LockedUtxos<T>>::contains_key(hash_key),
+                Error::<T>::OutpointAlreadyExists
+            );
+            return Ok(());
+        }
+
+        Err("only MLT tokens are supported for staking")
     }
 
     /// It includes:

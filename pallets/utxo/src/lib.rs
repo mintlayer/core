@@ -748,7 +748,11 @@ pub mod pallet {
                     ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
                 }
                 Destination::LockExtraForStaking { .. } => {
-                    staking::validate_lock_extra_for_staking_requirements::<T>(hash, output.value)?;
+                    staking::validate_lock_extra_for_staking_requirements::<T>(
+                        hash,
+                        output.value,
+                        output.header,
+                    )?;
                 }
                 Destination::LockForStaking {
                     stash_account,
@@ -758,6 +762,7 @@ pub mod pallet {
                     staking::validate_lock_for_staking_requirements::<T>(
                         hash,
                         output.value,
+                        output.header,
                         stash_account,
                     )?;
                 }

@@ -82,7 +82,9 @@ impl MltKeysFromFile {
 }
 
 /// fetching all the needed keys for the accounts.
-pub fn fetch_keys(for_func_tests: bool) -> Result<Vec<MltKeysInfo>, String> {
+/// # Arguments
+/// * `auth_keys_url` - Provide the url location of the keys to use as genesis validators
+pub fn fetch_keys(auth_keys_url: &'static str) -> Result<Vec<MltKeysInfo>, String> {
     let mut key_list: Vec<MltKeysInfo> = vec![];
 
     let agent: Agent = ureq::AgentBuilder::new()
@@ -90,15 +92,7 @@ pub fn fetch_keys(for_func_tests: bool) -> Result<Vec<MltKeysInfo>, String> {
         .timeout_write(Duration::from_millis(HTTP_TIMEOUT))
         .build();
 
-    if let Ok(contents) = agent
-        .get(if for_func_tests {
-            FUNC_TEST_KEYS_URL
-        } else {
-            TEST_KEYS_URL
-        })
-        .call()
-        .map_err(|e| e.to_string())?
-        .into_string()
+    if let Ok(contents) = agent.get(auth_keys_url).call().map_err(|e| e.to_string())?.into_string()
     {
         let users: serde_json::Value =
             serde_json::from_str(&contents).map_err(|e| e.to_string())?;
@@ -147,8 +141,13 @@ impl SubstrateCli for Cli {
 
     fn load_spec(&self, id: &str) -> Result<Box<dyn sc_service::ChainSpec>, String> {
         Ok(match id {
-            "dev" => Box::new(chain_spec::development_config(fetch_keys(true)?)?),
-            "" | "local" => Box::new(chain_spec::local_testnet_config(fetch_keys(false)?)?),
+            "release" => Box::new(chain_spec::release_config(fetch_keys(TEST_KEYS_URL)?)?),
+            "dev" => Box::new(chain_spec::development_config(fetch_keys(
+                FUNC_TEST_KEYS_URL,
+            )?)?),
+            "" | "local" => Box::new(chain_spec::local_testnet_config(fetch_keys(
+                FUNC_TEST_KEYS_URL,
+            )?)?),
             path => Box::new(chain_spec::ChainSpec::from_json_file(
                 std::path::PathBuf::from(path),
             )?),

@@ -53,6 +53,45 @@ fn get_bootnodes() -> Vec<MultiaddrWithPeerId> {
     ]
 }
 
+pub fn release_config(endowed_accounts: Vec<MltKeysInfo>) -> Result<ChainSpec, String> {
+    let wasm_binary = WASM_BINARY.ok_or_else(|| "Development wasm not available".to_string())?;
+    let bootnodes = get_bootnodes();
+
+    // only Alice has sudo powers
+    let sudo = endowed_accounts.first().cloned().ok_or("endowed accounts is empty")?;
+
+    Ok(ChainSpec::from_genesis(
+        // Name
+        "Release",
+        // ID
+        "rel",
+        ChainType::Development, //TODO: should it be custom? I'm not sure about this part.
+        move || {
+            testnet_genesis(
+                wasm_binary,
+                // Initial PoA authorities;
+                endowed_accounts.clone(),
+                // Sudo account
+                sudo.controller_account_id(),
+                // Pre-funded accounts;
+                endowed_accounts.clone(),
+                // Pre-fund all accounts in the pallet-balance
+                endowed_accounts.clone(),
+            )
+        },
+        // Bootnodes
+        bootnodes,
+        // Telemetry
+        None,
+        // Protocol ID
+        None,
+        // Properties
+        None,
+        // Extensions
+        None,
+    ))
+}
+
 pub fn development_config(endowed_accounts: Vec<MltKeysInfo>) -> Result<ChainSpec, String> {
     let wasm_binary = WASM_BINARY.ok_or_else(|| "Development wasm not available".to_string())?;
     let bootnodes = get_bootnodes();
