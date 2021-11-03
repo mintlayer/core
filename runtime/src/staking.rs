@@ -90,7 +90,7 @@ where
         if let Some(stake_ledger) = <StakingPallet<T>>::ledger(controller_account.clone()) {
             if stash_account != &stake_ledger.stash {
                 log::error!(
-                    "stash account {:?} has no permission to stake.",
+                    "stash account {:?} has no permission to stake. Make sure to match correctly with the controller account.",
                     stash_account
                 );
                 return Err(pallet_utxo::Error::<T>::NoPermission)?;

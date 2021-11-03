@@ -59,6 +59,7 @@ BASE_SCRIPTS= [
     'feature_smart_contract_test.py',
     'feature_staking_extra.py',
     'feature_staking_extra_not_validator.py',
+    'feature_staking_extra_wrong_controller.py',
     'feature_staking_first_time.py',
     'feature_staking_less_than_minimum.py',
     'feature_staking_twice.py',

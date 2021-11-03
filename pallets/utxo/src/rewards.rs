@@ -17,12 +17,13 @@
 
 use crate::{
     convert_to_h256, BlockAuthor, Config, Event, Pallet, RewardTotal, TransactionOutput, UtxoStore,
+    Value,
 };
 
 use frame_support::traits::Get;
-use sp_runtime::traits::{
-    BlakeTwo256, CheckedDiv, CheckedSub, Hash, One, SaturatedConversion, Zero,
-};
+use sp_runtime::traits::{BlakeTwo256, CheckedDiv, Hash, SaturatedConversion};
+use sp_runtime::Percent;
+use sp_std::convert::TryInto;
 
 /// handle event when a block author is found.
 impl<T> pallet_authorship::EventHandler<T::AccountId, T::BlockNumber> for Pallet<T>
@@ -48,28 +49,27 @@ where
 
 /// Returns the newly reduced reward amount for a Block Author.
 /// How much a reward is reduced, is based on the config's`RewardReductionFraction`.
-fn get_reward_amount<T: Config>(block_number: T::BlockNumber) -> u128 {
-    let reduction_fraction = T::RewardReductionFraction::get();
+fn get_reward_amount<T: Config>(block_number: T::BlockNumber) -> Value {
     let reduction_period: T::BlockNumber = T::RewardReductionPeriod::get();
-    let mut reward_amount = T::InitialReward::get();
 
-    if let Some(mut counter) = block_number.checked_div(&reduction_period) {
-        // how many times the initial reward should be slashed.
-        while counter > T::BlockNumber::zero() {
-            counter = counter.checked_sub(&T::BlockNumber::one()).unwrap_or(T::BlockNumber::zero());
+    if let Some(counter) = block_number.checked_div(&reduction_period) {
+        // cannot do checking here, since the counter at this point is still of datatype T::BlockNumber
+        if let Ok(counter) = counter.try_into() {
+            let counter: u8 = counter;
+            let reduction_fraction = T::RewardReductionFraction::get().deconstruct();
+            // should not exceed counter of 4, since 25 is our percentage.
+            // at 100%, there's no deduction needed, since it'll just equate to 0 reward.
+            if counter < 100u8 / reduction_fraction {
+                let reduction_fraction = Percent::from_percent(reduction_fraction * counter);
 
-            reward_amount = reward_amount
-                .checked_sub(reduction_fraction.mul_ceil(reward_amount))
-                .unwrap_or(1); // TODO: this is only testnet specific to reward at least 1
+                let reward_amount = T::InitialReward::get();
 
-            if reward_amount.is_zero() {
-                // TODO: this is only testnet specific to reward at least 1
-                return 1;
+                return reward_amount - reduction_fraction.mul_ceil(reward_amount);
             }
         }
     }
 
-    reward_amount
+    1 // TODO: this is only testnet specific to reward at least 1
 }
 
 /// Rewards the block author with a utxo of value based on the `BlockAuthorRewardAmount`

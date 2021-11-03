@@ -1128,8 +1128,7 @@ pub mod pallet {
             stash_account: T::AccountId,
         ) -> DispatchResultWithPostInfo {
             ensure_signed(origin)?;
-            staking::unlock_request_for_withdrawal::<T>(stash_account)?;
-            Ok(().into())
+            staking::unlock_request_for_withdrawal::<T>(stash_account)
         }
 
         /// withdraw unlocked stake. Make sure the period for withdrawal has passed.
@@ -1144,8 +1143,7 @@ pub mod pallet {
             outpoints: Vec<H256>,
         ) -> DispatchResultWithPostInfo {
             ensure_signed(origin)?;
-            staking::withdraw::<T>(stash_account, outpoints)?;
-            Ok(().into())
+            staking::withdraw::<T>(stash_account, outpoints)
         }
     }
 
@@ -1252,6 +1250,21 @@ where
                 time_lock: Default::default(),
             },
         )
+    }
+
+    fn unlock_request_for_withdrawal(
+        _caller: &T::AccountId,
+        stash_account: T::AccountId,
+    ) -> DispatchResultWithPostInfo {
+        staking::unlock_request_for_withdrawal::<T>(stash_account)
+    }
+
+    fn withdraw_stake(
+        _caller: &T::AccountId,
+        stash_account: T::AccountId,
+        outpoints: Vec<H256>,
+    ) -> DispatchResultWithPostInfo {
+        staking::withdraw::<T>(stash_account, outpoints)
     }
 
     fn send_conscrit_p2pk(

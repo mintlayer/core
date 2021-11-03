@@ -33,6 +33,17 @@ pub trait UtxoApi {
         sig: H512,
     ) -> DispatchResultWithPostInfo;
 
+    fn unlock_request_for_withdrawal(
+        caller: &Self::AccountId,
+        stash_account: Self::AccountId,
+    ) -> DispatchResultWithPostInfo;
+
+    fn withdraw_stake(
+        caller: &Self::AccountId,
+        stash_account: Self::AccountId,
+        outpoints: Vec<H256>,
+    ) -> DispatchResultWithPostInfo;
+
     fn send_conscrit_p2pk(
         caller: &Self::AccountId,
         destination: &Self::AccountId,
