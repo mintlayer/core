@@ -64,18 +64,18 @@ class ExampleTest(MintlayerTestFramework):
         ledger = list(client.get_staking_ledger())
         assert_equal(len(ledger[0][1]['unlocking']),0)
 
-        alice = Keypair.create_from_uri('//Alice')
+        alice_stash = Keypair.create_from_uri('//Alice//stash')
 
         # fetch the genesis utxo from storage
-        utxos = list(client.utxos_for(alice))
+        utxos = list(client.utxos_for(alice_stash))
 
         # Alice's locked utxo
-        locked_utxos = list(map(lambda e: e[0].value, list(client.locked_utxos_for(alice))))
+        locked_utxos = list(map(lambda e: e[0].value, list(client.locked_utxos_for(alice_stash))))
 
         # there's 2 records of staking, Alice's and Bob's.
         assert_equal( len(list(client.staking_count())), 2 )
 
-        (_, _, events) = client.unlock_request_for_withdrawal(alice)
+        (_, _, events) = client.unlock_request_for_withdrawal(alice_stash)
 
         assert_equal(events[0].value['module_id'],'Staking')
         assert_equal(events[0].value['event_id'], 'Chilled')
@@ -91,7 +91,7 @@ class ExampleTest(MintlayerTestFramework):
 
         time.sleep(500)
 
-        (_, _, w_events) = client.withdraw_stake(alice,locked_utxos)
+        (_, _, w_events) = client.withdraw_stake(alice_stash,locked_utxos)
 
 
         assert_equal(w_events[0].value['module_id'],'Staking')

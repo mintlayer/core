@@ -68,7 +68,6 @@ class ExampleTest(MintlayerTestFramework):
         # fetch the genesis utxo from storage
         utxos = list(client.utxos_for(alice))
 
-        assert(false)
         # there's only 2 record of staking, which are alice and bob.
         assert_equal( len(list(client.staking_count())), 2 )
 
