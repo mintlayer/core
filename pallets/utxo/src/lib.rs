@@ -503,6 +503,7 @@ pub mod pallet {
     #[pallet::getter(fn tokens_higher_id)]
     pub(super) type TokensHigherID<T> = StorageValue<_, TokenID, ValueQuery>;
 
+    //TODO: For rename, to differentiate from rewarding a block author.
     #[pallet::storage]
     #[pallet::getter(fn reward_total)]
     pub(super) type RewardTotal<T> = StorageValue<_, Value, ValueQuery>;

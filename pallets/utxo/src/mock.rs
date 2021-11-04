@@ -320,8 +320,7 @@ pub fn alice_test_ext() -> TestExternalities {
 
     pallet_utxo::GenesisConfig::<Test> {
         genesis_utxos: vec![TransactionOutput::new_pubkey(100, H256::from(alice_pub_key))],
-        locked_utxos: vec![],
-        // initial_reward_amount: 100,
+        locked_utxos: vec![]
     }
     .assimilate_storage(&mut t)
     .unwrap();
@@ -343,8 +342,7 @@ pub fn alice_test_ext_and_keys() -> (TestExternalities, Public, Public) {
     let mut t = frame_system::GenesisConfig::default().build_storage::<Test>().unwrap();
     pallet_utxo::GenesisConfig::<Test> {
         genesis_utxos: vec![TransactionOutput::new_pubkey(100, H256::from(alice_pub_key))],
-        locked_utxos: vec![],
-        //initial_reward_amount: 100
+        locked_utxos: vec![]
     }
     .assimilate_storage(&mut t)
     .unwrap();
@@ -392,8 +390,7 @@ pub fn multiple_keys_test_ext() -> (TestExternalities, Vec<(Public, H256)>) {
         locked_utxos: vec![
             //  alice is the stash and tom is a controller account.
             TransactionOutput::new_lock_for_staking(10, alice_hash, tom_hash, vec![3, 1]),
-        ],
-        // initial_reward_amount: 1,
+        ]
     }
     .assimilate_storage(&mut t)
     .unwrap();
