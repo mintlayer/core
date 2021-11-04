@@ -4142,6 +4142,7 @@ dependencies = [
  "pallet-utxo-tokens",
  "parity-scale-codec",
  "pp-api",
+ "proptest",
  "serde",
  "sp-consensus-aura",
  "sp-core",
