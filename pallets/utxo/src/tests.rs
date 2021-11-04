@@ -690,4 +690,53 @@ proptest! {
             prop_assert_eq!(e, "Time lock restrictions not satisfied");
         }
     }
+
+    #[test]
+    fn prop_time_lock_realtime_neighbourhood(before in gen_block_time_real()) {
+        let now = RawBlockTime::new(before.as_u64() + 1);
+        let after = RawBlockTime::new(now.as_u64() + 1);
+
+        let (res_before, res_now, res_after) = execute_with_alice(|alice| {
+            let (utxo0, input0) = tx_input_gen_no_signature();
+            let tx = Transaction {
+                inputs: vec![input0],
+                outputs: vec![TransactionOutput::new_pubkey(50, H256::from(alice))],
+                time_lock: now,
+            }
+            .sign_unchecked(&[utxo0], 0, &alice);
+
+            Timestamp::set_timestamp(before.as_u64() * 1000);
+            let res_before = crate::pallet::validate_transaction::<Test>(&tx);
+
+            Timestamp::set_timestamp(now.as_u64() * 1000);
+            let res_now = crate::pallet::validate_transaction::<Test>(&tx);
+
+            Timestamp::set_timestamp(after.as_u64() * 1000);
+            let res_after = crate::pallet::validate_transaction::<Test>(&tx);
+
+            (res_before, res_now, res_after)
+        });
+
+        prop_assert_eq!(res_before, Err("Time lock restrictions not satisfied"));
+        prop_assert!(res_now.is_ok());
+        prop_assert!(res_after.is_ok());
+    }
+
+    #[test]
+    fn prop_time_lock_realtime_overflow(
+        time in ((u64::MAX / 1000 + 1)..=u64::MAX).prop_map(RawBlockTime::new)
+    ) {
+        execute_with_alice(|alice| {
+            let (utxo0, input0) = tx_input_gen_no_signature();
+            let tx = Transaction {
+                inputs: vec![input0],
+                outputs: vec![TransactionOutput::new_pubkey(50, H256::from(alice))],
+                time_lock: time,
+            }
+            .sign_unchecked(&[utxo0], 0, &alice);
+
+            // Check validate_transaction does not crash due to time lock being close to u64::MAX
+            let _ = crate::pallet::validate_transaction::<Test>(&tx);
+        });
+    }
 }
