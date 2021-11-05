@@ -318,6 +318,7 @@ parameter_types! {
     pub const RewardReductionPeriod: BlockNumber = 1 * YEARS; // reward reduced every year
     pub const RewardReductionFraction: Percent = Percent::from_percent(25); // reward reduced at 25%
     pub const InitialReward: u128 = 100 * MLT_UNIT;
+    pub const DefaultMinimumReward: u128 = 1;
 }
 
 impl pallet_utxo::Config for Runtime {
@@ -344,6 +345,7 @@ impl pallet_utxo::Config for Runtime {
     type MinimumStake = MinimumStake;
     type StakeWithdrawalFee = StakeWithdrawalFee;
     type InitialReward = InitialReward;
+    type DefaultMinimumReward = DefaultMinimumReward;
 }
 
 impl pallet_pp::Config for Runtime {
@@ -602,17 +604,29 @@ impl_runtime_apis! {
             block_hash: <Block as BlockT>::Hash,
         ) -> TransactionValidity {
             log::debug!("transaction to validate: {:?}",tx);
-            if let Some(pallet_utxo::Call::spend(ref tx)) =
-            IsSubType::<pallet_utxo::Call::<Runtime>>::is_sub_type(&tx.function) {
-                match pallet_utxo::validate_transaction::<Runtime>(&tx) {
+             match IsSubType::<pallet_utxo::Call::<Runtime>>::is_sub_type(&tx.function) {
+                Some(pallet_utxo::Call::spend(ref tx))  => {
+                    match pallet_utxo::validate_transaction::<Runtime>(&tx) {
                     Ok(valid_tx) => { return Ok(valid_tx); }
                     Err(e) => {
-                        log::error!("pallet_utxo validation error: {:?}", e);
+                        log::error!("pallet_utxo spend validation error: {:?}", e);
                         return Err(TransactionValidityError::Invalid(InvalidTransaction::Custom(1)));
                     }
                 }
+                }
+
+                Some(pallet_utxo::Call::withdraw_stake(ref stash_account, ref outpoints)) => {
+                    match pallet_utxo::staking::validate_withdrawal::<Runtime>(&stash_account, &outpoints) {
+                        Ok(valid_tx) => { return Ok(valid_tx); }
+                        Err(e) => {
+                            log::error!("pallet_utxo withdraw_stake validation error: {:?}", e);
+                            return Err(TransactionValidityError::Invalid(InvalidTransaction::Custom(2)));
+                        }
+                    }
+                }
+
+                None | Some(_) => {}
             }
-            //TODO: add `validate_withdrawal`, when withdrawing locked utxos.
 
             Executive::validate_transaction(source, tx, block_hash)
         }

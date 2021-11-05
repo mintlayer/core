@@ -33,8 +33,15 @@ pub use validation::*;
 
 /// A helper trait to handle staking NOT found in pallet-utxo.
 pub trait StakingHelper<AccountId> {
-    /// to convert a public key into an AccountId
-    fn get_account_id(pubkey: &H256) -> AccountId;
+    fn get_controller_account(stash_account: &AccountId) -> Result<AccountId, &'static str>;
+
+    fn is_controller_account_exist(controller_account: &AccountId) -> bool;
+
+    fn can_decode_session_key(session_key: &Vec<u8>) -> bool;
+
+    fn are_funds_locked(controller_account: &AccountId) -> bool;
+
+    fn check_accounts_matched(controller_account: &AccountId, stash_account: &AccountId) -> bool;
 
     /// start the staking.
     /// # Arguments
@@ -64,11 +71,53 @@ pub trait StakingHelper<AccountId> {
     fn withdraw(stash_account: &AccountId) -> DispatchResultWithPostInfo;
 }
 
+/// Calls the outside staking logic to lock some funds
+/// Adds the transaction output to the `LockedUtxos` storage and `StakingCount` storage.
+pub(crate) fn lock_for_staking<T: Config>(
+    hash_key: H256,
+    output: &TransactionOutput<T::AccountId>,
+) -> DispatchResultWithPostInfo {
+    if let Destination::LockForStaking {
+        stash_account,
+        controller_account,
+        session_key,
+    } = &output.destination
+    {
+        T::StakingHelper::lock_for_staking(
+            stash_account,
+            controller_account,
+            session_key,
+            output.value,
+        )?;
+        return utils::add_to_locked_utxos::<T>(hash_key, output, stash_account);
+    }
+    fail!(Error::<T>::InvalidOperation)
+}
+
+/// For existing stakers who wants to add more utxos to lock.
+/// Also calls the outside staking logic to lock these extra funds.
+pub(crate) fn lock_extra_for_staking<T: Config>(
+    hash_key: H256,
+    output: &TransactionOutput<T::AccountId>,
+) -> DispatchResultWithPostInfo {
+    if let Destination::LockExtraForStaking {
+        stash_account,
+        controller_account,
+    } = &output.destination
+    {
+        T::StakingHelper::lock_extra_for_staking(stash_account, controller_account, output.value)?;
+        return utils::add_to_locked_utxos::<T>(hash_key, output, stash_account);
+    }
+    fail!(Error::<T>::InvalidOperation)
+}
+
 /// unlocking the staked funds outside of the `pallet-utxo`.
 /// also means you don't want to be a validator anymore.
 pub(crate) fn unlock_request_for_withdrawal<T: Config>(
     stash_account: T::AccountId,
 ) -> DispatchResultWithPostInfo {
+    validate_unlock_request_for_withdrawal::<T>(&stash_account)?;
+
     let res = T::StakingHelper::unlock_request_for_withdrawal(&stash_account)?;
     <Pallet<T>>::deposit_event(Event::<T>::StakeUnlocked(stash_account));
     Ok(res)
@@ -109,50 +158,187 @@ pub(crate) fn withdraw<T: Config>(
     Ok(res)
 }
 
-/// Calls the outside staking logic to lock some funds
-/// Adds the transaction output to the `LockedUtxos` storage and `StakingCount` storage.
-pub(crate) fn lock_for_staking<T: Config>(
-    hash_key: H256,
-    output: &TransactionOutput<T::AccountId>,
-) -> DispatchResultWithPostInfo {
-    if let Destination::LockForStaking {
-        stash_account,
-        controller_account,
-        session_key,
-    } = &output.destination
-    {
-        T::StakingHelper::lock_for_staking(
-            stash_account,
-            controller_account,
-            session_key,
-            output.value,
-        )?;
-        return utils::add_to_locked_utxos::<T>(hash_key, output, stash_account);
+pub mod validation {
+    use super::*;
+    use crate::{OutputHeaderHelper, TokenType, TransactionOutputFor};
+
+    /// to validate `LockForStaking` and `LockExtraForStaking`
+    pub fn validate_staking_ops<T: Config>(
+        tx: &TransactionOutputFor<T>,
+        hash_key: H256,
+    ) -> DispatchResultWithPostInfo {
+        ensure!(
+            !<LockedUtxos<T>>::contains_key(hash_key),
+            "output already exists in the LockedUtxos storage"
+        );
+
+        ensure!(
+            matches!(
+                tx.header.as_tx_output_header().token_type(),
+                Some(TokenType::MLT)
+            ),
+            "only MLT tokens are supported for staking"
+        );
+
+        // call individual validation functions
+        match &tx.destination {
+            Destination::LockForStaking {
+                stash_account,
+                controller_account,
+                session_key,
+            } => {
+                ensure!(
+                    tx.value >= T::MinimumStake::get(),
+                    "output value must be equal or more than the minimum stake"
+                );
+                validate_lock_for_staking_requirements::<T>(
+                    stash_account,
+                    controller_account,
+                    session_key,
+                )
+            }
+            Destination::LockExtraForStaking {
+                stash_account,
+                controller_account,
+            } => {
+                ensure!(tx.value > 0, "output value must be nonzero");
+                validate_lock_extra_for_staking_requirements::<T>(stash_account, controller_account)
+            }
+            _non_staking_destinations => {
+                fail!(Error::<T>::InvalidOperation)
+            }
+        }
     }
-    fail!(Error::<T>::InvalidOperation)
-}
 
-/// For existing stakers who wants to add more utxos to lock.
-/// Also calls the outside staking logic to lock these extra funds.
-pub(crate) fn locking_extra_utxos<T: Config>(
-    hash_key: H256,
-    output: &TransactionOutput<T::AccountId>,
-) -> DispatchResultWithPostInfo {
-    if let Destination::LockExtraForStaking {
-        stash_account,
-        controller_account,
-    } = &output.destination
-    {
-        T::StakingHelper::lock_extra_for_staking(stash_account, controller_account, output.value)?;
+    /// Checks whether a transaction is valid to do `lock_for_staking`.
+    fn validate_lock_for_staking_requirements<T: Config>(
+        stash_account: &T::AccountId,
+        controller_account: &T::AccountId,
+        session_key: &Vec<u8>,
+    ) -> DispatchResultWithPostInfo {
+        // ---------- check for clearance INSIDE the utxo system. ----------
+        ensure!(
+            !<StakingCount<T>>::contains_key(stash_account.clone()),
+            Error::<T>::StashAccountAlreadyRegistered
+        );
 
-        // Checks whether a given stash account is a validator
+        // ---------- check for clearance OUTSIDE the utxo system. ----------
+        ensure!(
+            T::StakingHelper::can_decode_session_key(session_key),
+            "please input a valid session key."
+        );
+
+        ensure!(
+            !T::StakingHelper::is_controller_account_exist(stash_account),
+            "specified stash account is a controller account"
+        );
+
+        ensure!(
+            !T::StakingHelper::is_controller_account_exist(controller_account),
+            "specified controller account is already used."
+        );
+
+        Ok(().into())
+    }
+
+    /// Checks whether a transaction is valid to do extra locking of utxos for staking
+    fn validate_lock_extra_for_staking_requirements<T: Config>(
+        stash_account: &T::AccountId,
+        controller_account: &T::AccountId,
+    ) -> DispatchResultWithPostInfo {
+        ensure!(
+            <StakingCount<T>>::contains_key(stash_account),
+            Error::<T>::StashAccountNotFound
+        );
+
+        // if the funds are already unlocked, it means you should withdraw them first,
+        // then perform a `LockForStaking`.
+        ensure!(
+            T::StakingHelper::are_funds_locked(controller_account),
+            "Cannot perform locking of stake when pending unlocked funds are not withdrawn."
+        );
+
+        // the pair should match. 1 stash account has 1 controller account, and vice versa.
+        ensure!(
+            T::StakingHelper::check_accounts_matched(controller_account, stash_account),
+            "the provided account pairs do not match."
+        );
+
+        Ok(().into())
+    }
+
+    /// Checks whether unlock request is allowed.
+    pub(crate) fn validate_unlock_request_for_withdrawal<T: Config>(
+        stash_account: &T::AccountId,
+    ) -> DispatchResultWithPostInfo {
         ensure!(
             <StakingCount<T>>::contains_key(stash_account.clone()),
             Error::<T>::StashAccountNotFound
         );
-        return utils::add_to_locked_utxos::<T>(hash_key, output, stash_account);
+
+        let controller_account = T::StakingHelper::get_controller_account(stash_account)?;
+
+        // unlock operation is allowed ONLY for locked funds.
+        ensure!(
+            T::StakingHelper::are_funds_locked(&controller_account),
+            Error::<T>::FundsAtUnlockedState
+        );
+
+        Ok(().into())
     }
-    fail!(Error::<T>::InvalidOperation)
+
+    /// It includes:
+    /// 1. Check if the pub key is a controller.
+    /// 2. Checking the number of outpoints owned by the given pub key
+    /// 3. Checking each outpoints if they are indeed owned by the pub key
+    /// Returns a Result with an empty Ok, or an Err in string.
+    /// # Arguments
+    /// * `stash_account` - An existing stash account
+    /// * `outpoints` - List of keys of unlocked utxos said to be "owned" by the controller_pubkey
+    pub fn validate_withdrawal<T: Config>(
+        stash_account: &T::AccountId,
+        outpoints: &Vec<H256>,
+    ) -> Result<ValidTransaction, &'static str> {
+        ensure!(
+            <StakingCount<T>>::contains_key(stash_account),
+            Error::<T>::StashAccountNotFound
+        );
+
+        let (num_of_utxos, _) = <StakingCount<T>>::get(stash_account.clone())
+            .ok_or("cannot find the stash account inside the StakingCount storage")?;
+        ensure!(
+            num_of_utxos == outpoints.len() as u64,
+            "please provide all staked outpoints."
+        );
+
+        for hash in outpoints {
+            ensure!(
+                <LockedUtxos<T>>::contains_key(hash),
+                Error::<T>::OutpointDoesNotExist
+            );
+
+            let utxo = <LockedUtxos<T>>::get(hash).ok_or(Error::<T>::OutpointDoesNotExist)?;
+            utils::is_owned_locked_utxo::<T>(&utxo, stash_account)?;
+        }
+
+        let controller_account = T::StakingHelper::get_controller_account(stash_account)?;
+        // if the funds are already unlocked, it means you should withdraw them first,
+        // then perform a `LockForStaking`.
+        ensure!(
+            !T::StakingHelper::are_funds_locked(&controller_account),
+            "Funds are still locked. Perform `unlock_request_for_withdrawal` first."
+        );
+
+        let new_hash = BlakeTwo256::hash_of(&outpoints).as_fixed_bytes().to_vec();
+
+        Ok(ValidTransaction {
+            priority: 1,
+            requires: vec![],
+            provides: vec![new_hash],
+            longevity: TransactionLongevity::MAX,
+            propagate: true,
+        })
+    }
 }
 
 mod utils {
@@ -215,100 +401,5 @@ mod utils {
         <LockedUtxos<T>>::insert(hash_key, output);
 
         Ok(().into())
-    }
-}
-
-pub mod validation {
-    use super::*;
-    use crate::{OutputHeaderHelper, TXOutputHeader, TokenType};
-
-    /// Checks whether a transaction is valid to do `lock_for_staking`.
-    pub(crate) fn validate_lock_for_staking_requirements<T: Config>(
-        hash_key: H256,
-        output_value: Value,
-        output_header: TXOutputHeader,
-        stash_account: &T::AccountId,
-    ) -> Result<(), &'static str> {
-        if let Some(TokenType::MLT) = output_header.as_tx_output_header().token_type() {
-            ensure!(
-                !<StakingCount<T>>::contains_key(stash_account),
-                Error::<T>::StashAccountAlreadyRegistered
-            );
-
-            ensure!(
-                output_value >= T::MinimumStake::get(),
-                "output value must be equal or more than the set minimum stake"
-            );
-            ensure!(
-                !<LockedUtxos<T>>::contains_key(hash_key),
-                "output already exists in the LockedUtxos storage"
-            );
-            return Ok(());
-        }
-
-        Err("only MLT tokens are supported for staking")
-    }
-
-    /// Checks whether a transaction is valid to do extra locking of utxos for staking
-    pub(crate) fn validate_lock_extra_for_staking_requirements<T: Config>(
-        hash_key: H256,
-        output_value: Value,
-        output_header: TXOutputHeader,
-    ) -> Result<(), &'static str> {
-        if let Some(TokenType::MLT) = output_header.as_tx_output_header().token_type() {
-            ensure!(output_value > 0, "output value must be nonzero");
-            ensure!(
-                !<LockedUtxos<T>>::contains_key(hash_key),
-                Error::<T>::OutpointAlreadyExists
-            );
-            return Ok(());
-        }
-
-        Err("only MLT tokens are supported for staking")
-    }
-
-    /// It includes:
-    /// 1. Check if the pub key is a controller.
-    /// 2. Checking the number of outpoints owned by the given pub key
-    /// 3. Checking each outpoints if they are indeed owned by the pub key
-    /// Returns a Result with an empty Ok, or an Err in string.
-    /// # Arguments
-    /// * `stash_account` - An existing stash account
-    /// * `outpoints` - List of keys of unlocked utxos said to be "owned" by the controller_pubkey
-    pub fn validate_withdrawal<T: Config>(
-        stash_account: &T::AccountId,
-        outpoints: &Vec<H256>,
-    ) -> Result<ValidTransaction, &'static str> {
-        ensure!(
-            <StakingCount<T>>::contains_key(stash_account),
-            Error::<T>::StashAccountNotFound
-        );
-
-        let (num_of_utxos, _) = <StakingCount<T>>::get(stash_account.clone())
-            .ok_or("cannot find the stash account inside the StakingCount storage")?;
-        ensure!(
-            num_of_utxos == outpoints.len() as u64,
-            "please provide all staked outpoints."
-        );
-
-        for hash in outpoints {
-            ensure!(
-                <LockedUtxos<T>>::contains_key(hash),
-                Error::<T>::OutpointDoesNotExist
-            );
-
-            let utxo = <LockedUtxos<T>>::get(hash).ok_or(Error::<T>::OutpointDoesNotExist)?;
-            utils::is_owned_locked_utxo::<T>(&utxo, stash_account)?;
-        }
-
-        let new_hash = BlakeTwo256::hash_of(&outpoints).as_fixed_bytes().to_vec();
-
-        Ok(ValidTransaction {
-            priority: 1,
-            requires: vec![],
-            provides: vec![new_hash],
-            longevity: TransactionLongevity::MAX,
-            propagate: true,
-        })
     }
 }

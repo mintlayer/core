@@ -50,8 +50,8 @@ pub struct MockStaking<T: pallet_utxo::Config> {
     pub withdrawal_span: T::BlockNumber,
     pub current_block: T::BlockNumber,
     pub lock_map: BTreeMap<T::AccountId, Option<T::BlockNumber>>,
-    pub stash_map: BTreeMap<T::AccountId, T::AccountId>,
-    pub lock_stash_map: BTreeMap<T::AccountId, T::AccountId>,
+    pub ctrl_map: BTreeMap<T::AccountId, T::AccountId>,
+    pub lock_ctrl_map: BTreeMap<T::AccountId, T::AccountId>,
     pub marker: PhantomData<T>,
 }
 
@@ -107,8 +107,8 @@ impl MockStaking<Test> {
             withdrawal_span: 5,
             current_block: 0,
             lock_map: BTreeMap::new(),
-            stash_map: BTreeMap::new(),
-            lock_stash_map: BTreeMap::new(),
+            ctrl_map: BTreeMap::new(),
+            lock_ctrl_map: BTreeMap::new(),
             marker: Default::default(),
         }
     }
@@ -122,8 +122,54 @@ pub fn next_block() {
 }
 
 impl<T: pallet_utxo::Config> StakingHelper<AccountId> for MockStaking<T> {
-    fn get_account_id(pub_key: &H256) -> AccountId {
-        pub_key.clone()
+    fn get_controller_account(stash_account: &AccountId) -> Result<AccountId, &'static str> {
+        MOCK_STAKING.with(|stake_info| {
+            let stake_info = stake_info.borrow();
+
+            stake_info
+                .lock_ctrl_map
+                .get(stash_account)
+                .map(|x| *x)
+                .ok_or("StashAccountNotFound")
+        })
+    }
+
+    fn is_controller_account_exist(controller_account: &AccountId) -> bool {
+        MOCK_STAKING.with(|stake_info| {
+            let stake_info = stake_info.borrow();
+            stake_info.ctrl_map.contains_key(controller_account)
+        })
+    }
+
+    fn can_decode_session_key(session_key: &Vec<u8>) -> bool {
+        true
+    }
+
+    fn are_funds_locked(controller_account: &AccountId) -> bool {
+        MOCK_STAKING.with(|stake_info| {
+            let stake_info = stake_info.borrow();
+
+            if let Some(stash) = stake_info.ctrl_map.get(controller_account) {
+                if let Some(Some(_)) = stake_info.lock_map.get(stash) {
+                } else {
+                    return true;
+                }
+            }
+            false
+        })
+    }
+
+    fn check_accounts_matched(controller_account: &AccountId, stash_account: &AccountId) -> bool {
+        MOCK_STAKING.with(|stake_info| {
+            let stake_info = stake_info.borrow();
+
+            if let Some(stash_acc) = stake_info.ctrl_map.get(controller_account) {
+                if stash_account == stash_acc {
+                    return true;
+                }
+            }
+            false
+        })
     }
 
     fn lock_for_staking(
@@ -139,19 +185,19 @@ impl<T: pallet_utxo::Config> StakingHelper<AccountId> for MockStaking<T> {
                 Err("CANNOT STAKE. STASH ACCOUNT IS ALREADY REGISTERED.")?
             }
 
-            if stake_info.stash_map.contains_key(stash_account) {
+            if stake_info.ctrl_map.contains_key(stash_account) {
                 Err("CANNOT STAKE. STASH ACCOUNT IS ACTUALLY A CONTROLLER ACCOUNT")?
             }
 
-            if stake_info.lock_stash_map.contains_key(controller_account) {
+            if stake_info.lock_ctrl_map.contains_key(controller_account) {
                 Err(pallet_utxo::Error::<T>::StashAccountAlreadyRegistered)?
             }
 
-            stake_info.lock_map.insert(controller_account.clone(), None);
+            stake_info.lock_map.insert(stash_account.clone(), None);
             stake_info
-                .lock_stash_map
-                .insert(controller_account.clone(), stash_account.clone());
-            stake_info.stash_map.insert(stash_account.clone(), controller_account.clone());
+                .lock_ctrl_map
+                .insert(stash_account.clone(), controller_account.clone());
+            stake_info.ctrl_map.insert(controller_account.clone(), stash_account.clone());
 
             Ok(().into())
         })
@@ -169,7 +215,7 @@ impl<T: pallet_utxo::Config> StakingHelper<AccountId> for MockStaking<T> {
                 Err(pallet_utxo::Error::<T>::StashAccountNotFound)?
             }
 
-            if stake_info.stash_map.contains_key(stash_account) {
+            if stake_info.ctrl_map.contains_key(stash_account) {
                 Err("CANNOT STAKE. STASH ACCOUNT IS ACTUALLY A CONTROLLER ACCOUNT")?
             }
 
@@ -181,7 +227,7 @@ impl<T: pallet_utxo::Config> StakingHelper<AccountId> for MockStaking<T> {
         MOCK_STAKING.with(|stake_info| {
             let mut stake_info = stake_info.borrow_mut();
 
-            if stake_info.stash_map.contains_key(stash_account) {
+            if stake_info.ctrl_map.contains_key(stash_account) {
                 Err("CANNOT PAUSE. STASH ACCOUNT IS ACTUALLY A CONTROLLER ACCOUNT")?
             }
 
@@ -205,18 +251,16 @@ impl<T: pallet_utxo::Config> StakingHelper<AccountId> for MockStaking<T> {
         MOCK_STAKING.with(|stake_info| {
             let mut stake_info = stake_info.borrow_mut();
 
-            if !stake_info.stash_map.contains_key(stash_account) {
-                if let Some(Some(withdrawal_block)) = stake_info.lock_map.get(stash_account) {
-                    if *withdrawal_block <= stake_info.current_block {
-                        let stash_account =
-                            stake_info.lock_stash_map.remove(stash_account).unwrap();
-                        stake_info.stash_map.remove(&stash_account);
-                        stake_info.lock_map.remove(&stash_account);
+            if let Some(Some(withdrawal_block)) = stake_info.lock_map.get(stash_account) {
+                if *withdrawal_block <= stake_info.current_block {
+                    let ctrl_account = stake_info.lock_ctrl_map.remove(stash_account).unwrap();
+                    stake_info.ctrl_map.remove(&ctrl_account);
+                    stake_info.lock_map.remove(&stash_account);
 
-                        return Ok(().into());
-                    }
+                    return Ok(().into());
                 }
             }
+
             Err(pallet_utxo::Error::<T>::InvalidOperation)?
         })
     }
@@ -281,6 +325,7 @@ parameter_types! {
     pub const MaxAuthorities: u32 = 1000;
     pub const MinimumStake: u128 = 10;
     pub const InitialReward: u128 = 100;
+    pub const DefaultMinimumReward: u128 = 1;
     pub const StakeWithdrawalFee: u128 = 1;
     pub const RewardReductionPeriod: BlockNumber = 5;
     pub const RewardReductionFraction: Percent = Percent::from_percent(25);
@@ -306,6 +351,7 @@ impl pallet_utxo::Config for Test {
     type MinimumStake = MinimumStake;
     type StakeWithdrawalFee = StakeWithdrawalFee;
     type InitialReward = InitialReward;
+    type DefaultMinimumReward = DefaultMinimumReward;
 }
 
 fn create_pub_key(keystore: &KeyStore, phrase: &str) -> Public {
@@ -320,7 +366,7 @@ pub fn alice_test_ext() -> TestExternalities {
 
     pallet_utxo::GenesisConfig::<Test> {
         genesis_utxos: vec![TransactionOutput::new_pubkey(100, H256::from(alice_pub_key))],
-        locked_utxos: vec![]
+        locked_utxos: vec![],
     }
     .assimilate_storage(&mut t)
     .unwrap();
@@ -342,7 +388,7 @@ pub fn alice_test_ext_and_keys() -> (TestExternalities, Public, Public) {
     let mut t = frame_system::GenesisConfig::default().build_storage::<Test>().unwrap();
     pallet_utxo::GenesisConfig::<Test> {
         genesis_utxos: vec![TransactionOutput::new_pubkey(100, H256::from(alice_pub_key))],
-        locked_utxos: vec![]
+        locked_utxos: vec![],
     }
     .assimilate_storage(&mut t)
     .unwrap();
@@ -390,7 +436,7 @@ pub fn multiple_keys_test_ext() -> (TestExternalities, Vec<(Public, H256)>) {
         locked_utxos: vec![
             //  alice is the stash and tom is a controller account.
             TransactionOutput::new_lock_for_staking(10, alice_hash, tom_hash, vec![3, 1]),
-        ]
+        ],
     }
     .assimilate_storage(&mut t)
     .unwrap();
@@ -401,8 +447,8 @@ pub fn multiple_keys_test_ext() -> (TestExternalities, Vec<(Public, H256)>) {
     MOCK_STAKING.with(|stake_info| {
         let mut stake_info = stake_info.borrow_mut();
         stake_info.lock_map.insert(alice_hash, None);
-        stake_info.lock_stash_map.insert(alice_hash, tom_hash);
-        stake_info.stash_map.insert(tom_hash, alice_hash);
+        stake_info.lock_ctrl_map.insert(alice_hash, tom_hash);
+        stake_info.ctrl_map.insert(tom_hash, alice_hash);
     });
 
     AUTHORITIES.with(|auths| {

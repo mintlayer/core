@@ -21,10 +21,10 @@ use crate::{
 };
 
 use frame_support::traits::Get;
-use sp_runtime::traits::{BlakeTwo256, CheckedDiv, Hash, SaturatedConversion};
+use sp_core::H256;
+use sp_runtime::traits::{BlakeTwo256, CheckedDiv, Hash, SaturatedConversion, Zero};
 use sp_runtime::Percent;
 use sp_std::convert::TryInto;
-use sp_core::H256;
 
 /// handle event when a block author is found.
 impl<T> pallet_authorship::EventHandler<T::AccountId, T::BlockNumber> for Pallet<T>
@@ -48,54 +48,67 @@ where
     }
 }
 
-
 /// checks at what period the given block number belongs to.
-fn get_block_period<T:Config>(block_number: T::BlockNumber) -> u8 {
+/// If it exceeds to the maximum value of u8 datatype,
+/// reduction_fraction is already way over 100%.
+fn increase_reduction_fraction<T: Config>(block_number: T::BlockNumber) -> Option<u8> {
     let reduction_period: T::BlockNumber = T::RewardReductionPeriod::get();
 
-    // get at what period the current block number is at.
-    block_number.checked_div(&reduction_period)
-        .map_or(u8::MAX, |f|{
-            // convert data type from T::BlockNumber to u8
-            f.try_into().unwrap_or(u8::MAX)
-        })
-}
+    // When reduction_period is not set, there's no such thing as "block period".
+    // There's no need to compute for the "current" block period.
+    // Reward will not decrease at all.
+    if reduction_period.is_zero() {
+        return Some(0);
+    }
 
+    // get at what period the current block number is at.
+    match block_number
+        .checked_div(&reduction_period)
+        .expect("successfully retrieved current block period.")
+        .try_into()
+    {
+        Ok(result) => Some(result),
+        Err(_) => {
+            // block_period exceeds the maximum threshold.
+            None
+        }
+    }
+}
 
 /// Returns the newly reduced reward amount for a Block Author.
 /// How much a reward is reduced, will be based on the config's`RewardReductionFraction`.
 fn get_block_author_reward<T: Config>(block_number: T::BlockNumber) -> Value {
-    let reward_amount = T::InitialReward::get();
-    let reduction_period: T::BlockNumber = T::RewardReductionPeriod::get();
     let reduction_fraction = T::RewardReductionFraction::get().deconstruct();
+    let last_block_rewarded_period = (100u8 / reduction_fraction) - 1;
 
-    // no computation needed; current block number is still within the reduction period.
-    if block_number < reduction_period {
-        return reward_amount;
+    match increase_reduction_fraction::<T>(block_number) {
+        None => {
+            // cannot increase the current reduction fraction anymore; it has exceeded 100%.
+        }
+        Some(current_block_period) => {
+            // if current block period has not reached to a point where reduction is at 100%
+            if current_block_period <= last_block_rewarded_period {
+                // compute for the updated reduction % , given the current block period.
+                let updated_reduction_fraction =
+                    Percent::from_percent(reduction_fraction * current_block_period);
+
+                let reward_amount = T::InitialReward::get();
+                return reward_amount - updated_reduction_fraction.mul_ceil(reward_amount);
+            }
+        }
     }
 
-    // The maximum period before approaching to 100% reduction
-    let max_period = (100u8 / reduction_fraction) - 1;
-
-    // current period of the given block number
-    let current_period = get_block_period::<T>(block_number);
-
-    // when current_period has reached or exceeded the maximum period of reduction,
-    // return the least amount to reward.
-    if current_period > max_period {
-        // TODO: as a note, this is only testnet specific to reward at least 1
-        return 1;
-    }
-
-    // compute for the updated reduction % , given the current period.
-    let updated_reduction_fraction = Percent::from_percent(reduction_fraction * current_period );
-
-    reward_amount - updated_reduction_fraction.mul_ceil(reward_amount)
+    T::DefaultMinimumReward::get()
 }
 
-fn insert_to_utxo_store<T:Config>(block_number:T::BlockNumber, block_author:H256, reward:Value) {
+fn insert_to_utxo_store<T: Config>(
+    block_number: T::BlockNumber,
+    block_author: H256,
+    reward: Value,
+) {
     let utxo = TransactionOutput::new_pubkey(reward, block_author.clone());
 
+    //TODO: https://github.com/mintlayer/core/pull/83#discussion_r742773343
     let hash = {
         let b_num = block_number.saturated_into::<u64>();
         BlakeTwo256::hash_of(&(&utxo, b_num, "author_reward"))
@@ -111,26 +124,19 @@ fn insert_to_utxo_store<T:Config>(block_number:T::BlockNumber, block_author:H256
 /// Rewards the block author with a utxo of value based on the `BlockAuthorRewardAmount`
 /// and the transaction fees.
 pub(crate) fn reward_block_author<T: Config>(block_number: T::BlockNumber) {
-
     // As written on the definition of Take:
     // Take a value from storage, removing it afterwards.
     // This is taking a value of the RewardTotal storage, freeing it up.
     let transaction_fees = <RewardTotal<T>>::take();
 
-    if let Some(reward_amount) = get_block_author_reward::<T>(block_number).checked_add(transaction_fees) {
+    if let Some(reward_amount) =
+        get_block_author_reward::<T>(block_number).checked_add(transaction_fees)
+    {
         // As written on the definition of Take:
         // Take a value from storage, removing it afterwards.
         // This is taking a value of the BlockAuthor storage, freeing it up.
-        match <BlockAuthor<T>>::take() {
-            None => {
-                log::warn!("no block author found for block number {:?}", block_number);
-                // carry over the fees to the next block rewarding.
-                <RewardTotal<T>>::put(reward_amount);
-            }
-            Some(block_author) => {
-                insert_to_utxo_store::<T>(block_number,block_author, reward_amount)
-            }
-        }
+        let block_author = <BlockAuthor<T>>::take().expect("Block author found.");
+        insert_to_utxo_store::<T>(block_number, block_author, reward_amount)
     } else {
         //TODO: what's the actual behaviour (or if this happens at all)
         log::warn!("problem adding the block author reward and the fees.");
@@ -140,33 +146,35 @@ pub(crate) fn reward_block_author<T: Config>(block_number: T::BlockNumber) {
 }
 
 #[cfg(test)]
-mod tests {
+mod test {
     use super::*;
     use crate::mock::*;
 
     #[test]
-    fn get_block_period_test() {
+    fn increase_reduction_fraction_test() {
         alice_test_ext().execute_with(|| {
             // with ReductionPeriod = 5:
             // at Block 3, period is at 0, since 3 < 5
-            assert_eq!(get_block_period::<Test>(3),0);
+            assert_eq!(increase_reduction_fraction::<Test>(3), Some(0));
 
             // at Block 3, period is at 0, since 4 < 5
-            assert_eq!(get_block_period::<Test>(4),0);
+            assert_eq!(increase_reduction_fraction::<Test>(4), Some(0));
 
             // at Block 5, period is at 1, since 5/ReductionPeriod = 1.
-            assert_eq!(get_block_period::<Test>(5),1);
+            assert_eq!(increase_reduction_fraction::<Test>(5), Some(1));
 
             // at Block 3, period is at 2
-            assert_eq!(get_block_period::<Test>(10),2);
+            assert_eq!(increase_reduction_fraction::<Test>(10), Some(2));
 
             // at Block 20, period is at 4
-            assert_eq!(get_block_period::<Test>(20),4);
+            assert_eq!(increase_reduction_fraction::<Test>(20), Some(4));
 
             // at Block 53, period is at 10, since 53/ReductionPeriod = 10 (nevermind the remainder)
-            assert_eq!(get_block_period::<Test>(53),10);
-        });
+            assert_eq!(increase_reduction_fraction::<Test>(53), Some(10));
 
+            // at Block 42000, multiplication factor of the reduction fraction is way off. (nevermind the remainder)
+            assert_eq!(increase_reduction_fraction::<Test>(4200), None);
+        });
     }
 
     #[test]
@@ -202,6 +210,9 @@ mod tests {
 
             // exceeds the reduction fraction of 100%, so reward is constantly at 1 based on testnet.
             assert_eq!(get_block_author_reward::<Test>(68), 1);
+
+            // exceeds the reduction fraction of 100%, so reward is constantly at 1 based on testnet.
+            assert_eq!(get_block_author_reward::<Test>(5000), 1);
         });
     }
 }

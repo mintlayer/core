@@ -93,7 +93,7 @@ fn less_than_minimum_stake() {
 
         assert_err!(
             Utxo::spend(Origin::signed(H256::zero()), tx),
-            "output value must be equal or more than the set minimum stake"
+            "output value must be equal or more than the minimum stake"
         );
     })
 }
@@ -258,7 +258,7 @@ fn non_validator_staking_extra() {
 
         assert_err!(
             Utxo::spend(Origin::signed(H256::zero()), tx),
-            Error::<Test>::StashAccountNotFound
+            "StashAccountNotFound"
         );
     })
 }

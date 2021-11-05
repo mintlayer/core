@@ -18,7 +18,7 @@
 use crate::Perbill;
 
 use codec::Decode;
-use frame_support::dispatch::{DispatchResultWithPostInfo, Vec};
+use frame_support::dispatch::{DispatchResult, DispatchResultWithPostInfo, Vec};
 use frame_support::fail;
 use frame_system::{Config as SysConfig, RawOrigin};
 use pallet_staking::{BalanceOf, Pallet as StakingPallet};
@@ -30,22 +30,29 @@ type StakeAccountId<T> = <T as SysConfig>::AccountId;
 type LookupSourceOf<T> = <<T as SysConfig>::Lookup as StaticLookup>::Source;
 
 pub struct StakeOps<T>(sp_core::sp_std::marker::PhantomData<T>);
-impl<T: pallet_staking::Config + pallet_utxo::Config + pallet_session::Config>
-    StakingHelper<T::AccountId> for StakeOps<T>
+
+impl<T: pallet_staking::Config + pallet_utxo::Config + pallet_session::Config> StakeOps<T>
 where
     StakeAccountId<T>: From<[u8; 32]>,
     BalanceOf<T>: From<u128>,
 {
-    fn get_account_id(pub_key: &H256) -> StakeAccountId<T> {
-        pub_key.0.into()
+    fn get_stash_account(
+        controller_account: StakeAccountId<T>,
+    ) -> Result<StakeAccountId<T>, pallet_utxo::Error<T>> {
+        match <StakingPallet<T>>::ledger(controller_account.clone()) {
+            None => {
+                log::debug!("check sync with pallet-staking.");
+                return Err(pallet_utxo::Error::<T>::ControllerAccountNotFound)?;
+            }
+            Some(stake_ledger) => Ok(stake_ledger.stash),
+        }
     }
 
-    fn lock_for_staking(
-        stash_account: &StakeAccountId<T>,
-        controller_account: &StakeAccountId<T>,
-        session_key: &Vec<u8>,
-        value: u128,
-    ) -> DispatchResultWithPostInfo {
+    fn bond(
+        controller_account: StakeAccountId<T>,
+        stash_account: StakeAccountId<T>,
+        value: pallet_utxo::Value,
+    ) -> DispatchResult {
         let controller_lookup: LookupSourceOf<T> = T::Lookup::unlookup(controller_account.clone());
         let reward_destination = pallet_staking::RewardDestination::Staked;
 
@@ -55,18 +62,34 @@ where
             controller_lookup,
             value.into(),
             reward_destination,
-        )?;
+        )
+    }
 
-        let rotate_keys = sp_core::Bytes::from(session_key.to_vec());
+    fn unbond(controller_account: StakeAccountId<T>) -> DispatchResult {
+        let stake_ledger = <StakingPallet<T>>::ledger(controller_account.clone())
+            .ok_or(pallet_utxo::Error::<T>::ControllerAccountNotFound)?;
+
+        StakingPallet::<T>::unbond(
+            RawOrigin::Signed(controller_account).into(),
+            stake_ledger.total,
+        )
+    }
+
+    fn set_session_keys(
+        controller_account: StakeAccountId<T>,
+        session_key: &Vec<u8>,
+    ) -> DispatchResult {
         // session keys
-        let sesh_key = <T as pallet_session::Config>::Keys::decode(&mut &rotate_keys[..])
+        let sesh_key = <T as pallet_session::Config>::Keys::decode(&mut &session_key[..])
             .expect("SessionKeys decoded successfully");
         pallet_session::Pallet::<T>::set_keys(
-            RawOrigin::Signed(controller_account.clone()).into(),
+            RawOrigin::Signed(controller_account).into(),
             sesh_key,
             vec![],
-        )?;
+        )
+    }
 
+    fn apply_for_validator_role(controller_account: StakeAccountId<T>) -> DispatchResult {
         let validator_prefs = pallet_staking::ValidatorPrefs {
             commission: Perbill::from_percent(0),
             ..Default::default()
@@ -74,9 +97,79 @@ where
 
         // applying for the role of "validator".
         StakingPallet::<T>::validate(
-            RawOrigin::Signed(controller_account.clone()).into(),
+            RawOrigin::Signed(controller_account).into(),
             validator_prefs,
-        )?;
+        )
+    }
+}
+
+impl<T: pallet_staking::Config + pallet_utxo::Config + pallet_session::Config>
+    StakingHelper<T::AccountId> for StakeOps<T>
+where
+    StakeAccountId<T>: From<[u8; 32]>,
+    BalanceOf<T>: From<u128>,
+{
+    fn get_controller_account(
+        stash_account: &StakeAccountId<T>,
+    ) -> Result<StakeAccountId<T>, &'static str> {
+        <StakingPallet<T>>::bonded(stash_account.clone())
+            .ok_or(pallet_utxo::Error::<T>::StashAccountNotFound.into())
+    }
+
+    fn is_controller_account_exist(controller_account: &StakeAccountId<T>) -> bool {
+        Self::get_stash_account(controller_account.clone()).is_ok()
+    }
+
+    fn can_decode_session_key(session_key: &Vec<u8>) -> bool {
+        <T as pallet_session::Config>::Keys::decode(&mut &session_key[..]).is_ok()
+    }
+
+    fn are_funds_locked(controller_account: &StakeAccountId<T>) -> bool {
+        // Information of unlocked funds are found in the `pallet-staking` ledger.
+        // The ledger is stored as a map, with the controller_account as the key.
+        match <StakingPallet<T>>::ledger(controller_account.clone()) {
+            None => {
+                log::error!("Controller account {:?} not found", controller_account);
+            }
+            Some(stake_ledger) => {
+                if stake_ledger.unlocking.is_empty() {
+                    return true;
+                } else if stake_ledger.unlocking.len() > 1 {
+                    log::error!(
+                        "Pallet-staking ledger's unlocking field should only contain ONE element."
+                    );
+                }
+            }
+        }
+        false
+    }
+
+    fn check_accounts_matched(
+        controller_account: &StakeAccountId<T>,
+        stash_account: &StakeAccountId<T>,
+    ) -> bool {
+        if let Ok(ledger_stash_acc) = Self::get_stash_account(controller_account.clone()) {
+            if stash_account == &ledger_stash_acc {
+                return true;
+            }
+        }
+        log::error!(
+            "Make sure to match correctly the stash account {:?} with the controller account.",
+            stash_account
+        );
+
+        false
+    }
+
+    fn lock_for_staking(
+        stash_account: &StakeAccountId<T>,
+        controller_account: &StakeAccountId<T>,
+        session_key: &Vec<u8>,
+        value: u128,
+    ) -> DispatchResultWithPostInfo {
+        Self::bond(controller_account.clone(), stash_account.clone(), value)?;
+        Self::set_session_keys(controller_account.clone(), session_key)?;
+        Self::apply_for_validator_role(controller_account.clone())?;
 
         Ok(().into())
     }
@@ -86,25 +179,12 @@ where
         controller_account: &StakeAccountId<T>,
         value: u128,
     ) -> DispatchResultWithPostInfo {
-        // get the stash account first
-        if let Some(stake_ledger) = <StakingPallet<T>>::ledger(controller_account.clone()) {
-            if stash_account != &stake_ledger.stash {
-                log::error!(
-                    "stash account {:?} has no permission to stake. Make sure to match correctly with the controller account.",
-                    stash_account
-                );
-                return Err(pallet_utxo::Error::<T>::NoPermission)?;
-            }
+        StakingPallet::<T>::bond_extra(
+            RawOrigin::Signed(stash_account.clone()).into(),
+            value.into(),
+        )?;
 
-            StakingPallet::<T>::bond_extra(
-                RawOrigin::Signed(stake_ledger.stash).into(),
-                value.into(),
-            )?;
-            return Ok(().into());
-        }
-
-        log::error!("check sync with pallet-staking.");
-        return Err(pallet_utxo::Error::<T>::InvalidOperation)?;
+        Ok(().into())
     }
 
     fn unlock_request_for_withdrawal(
@@ -117,15 +197,8 @@ where
         // stop validating / block producing
         StakingPallet::<T>::chill(RawOrigin::Signed(controller_account.clone()).into())?;
 
-        // get the total balance to free up
-        let stake_ledger = <StakingPallet<T>>::ledger(controller_account.clone())
-            .ok_or(pallet_utxo::Error::<T>::ControllerAccountNotFound)?;
-
         // unbond
-        StakingPallet::<T>::unbond(
-            RawOrigin::Signed(controller_account).into(),
-            stake_ledger.total,
-        )?;
+        Self::unbond(controller_account)?;
 
         Ok(().into())
     }
@@ -134,16 +207,6 @@ where
         // get the controller account, given the stash_account.
         let controller_account = <StakingPallet<T>>::bonded(stash_account.clone())
             .ok_or(pallet_utxo::Error::<T>::StashAccountNotFound)?;
-
-        let stake_ledger = <StakingPallet<T>>::ledger(controller_account.clone())
-            .ok_or(pallet_utxo::Error::<T>::ControllerAccountNotFound)?;
-        if stake_ledger.unlocking.is_empty() {
-            log::error!("No unlocked funds found to withdraw.");
-            fail!(pallet_utxo::Error::<T>::InvalidOperation);
-        } else if stake_ledger.unlocking.len() > 1 {
-            log::error!("Pallet-staking ledger's unlocking field should only contain ONE element.");
-            fail!(pallet_utxo::Error::<T>::InvalidOperation)
-        }
 
         let res = StakingPallet::<T>::withdraw_unbonded(
             RawOrigin::Signed(controller_account.clone()).into(),

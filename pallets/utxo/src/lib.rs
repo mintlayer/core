@@ -146,6 +146,10 @@ pub mod pallet {
 
         /// The hash outpoint key already exists in the storage where it expects to be.
         OutpointAlreadyExists,
+
+        /// Funds are waiting for the bonding duration to end,
+        /// before withdrawal is allowed.
+        FundsAtUnlockedState,
     }
 
     #[pallet::pallet]
@@ -169,6 +173,10 @@ pub mod pallet {
         /// the rate of diminishing reward
         #[pallet::constant]
         type InitialReward: Get<Value>;
+
+        /// the rate of diminishing reward
+        #[pallet::constant]
+        type DefaultMinimumReward: Get<Value>;
 
         /// the rate of diminishing reward
         #[pallet::constant]
@@ -748,24 +756,8 @@ pub mod pallet {
                 Destination::Pubkey(_) | Destination::ScriptHash(_) => {
                     ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
                 }
-                Destination::LockExtraForStaking { .. } => {
-                    staking::validate_lock_extra_for_staking_requirements::<T>(
-                        hash,
-                        output.value,
-                        output.header,
-                    )?;
-                }
-                Destination::LockForStaking {
-                    stash_account,
-                    controller_account: _,
-                    session_key: _,
-                } => {
-                    staking::validate_lock_for_staking_requirements::<T>(
-                        hash,
-                        output.value,
-                        output.header,
-                        stash_account,
-                    )?;
+                Destination::LockForStaking { .. } | Destination::LockExtraForStaking { .. } => {
+                    staking::validate_staking_ops::<T>(output, hash)?;
                 }
             }
         }
@@ -910,7 +902,7 @@ pub mod pallet {
                     staking::lock_for_staking::<T>(hash, output)?;
                 }
                 Destination::LockExtraForStaking { .. } => {
-                    staking::locking_extra_utxos::<T>(hash, output)?;
+                    staking::lock_extra_for_staking::<T>(hash, output)?;
                 }
             }
         }
