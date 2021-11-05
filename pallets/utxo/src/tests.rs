@@ -16,8 +16,8 @@
 // Author(s): C. Yap
 
 use crate::{
-    mock::*, tokens::Value, BlockTime, Destination, RawBlockTime, RewardTotal, Transaction, TransactionInput,
-    TransactionOutput, UtxoStore,
+    mock::*, tokens::Value, BlockTime, Destination, RawBlockTime, RewardTotal, Transaction,
+    TransactionInput, TransactionOutput, UtxoStore,
 };
 use chainscript::{opcodes::all as opc, Builder};
 use codec::Encode;
@@ -27,9 +27,9 @@ use frame_support::{
     sp_runtime::traits::{BlakeTwo256, Hash},
 };
 
+use crate::script::test::gen_block_time_real;
 use crate::tokens::OutputData;
 use proptest::prelude::*;
-use crate::script::test::gen_block_time_real;
 use sp_core::{sp_std::vec, sr25519::Public, testing::SR25519, H256, H512};
 
 fn tx_input_gen_no_signature() -> (TransactionOutput<H256>, TransactionInput) {
@@ -604,7 +604,6 @@ proptest! {
             std::cmp::min_by_key(time0, time1, RawBlockTime::as_u64),
             std::cmp::max_by_key(time0, time1, RawBlockTime::as_u64),
         );
-
         let (res0, res1) = execute_with_alice(|alice| {
             let (utxo0, input0) = tx_input_gen_no_signature();
             let tx = Transaction {
