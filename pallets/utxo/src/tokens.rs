@@ -1,12 +1,15 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+use crate::TransactionInput;
 use base58_nostd::{FromBase58, FromBase58Error, ToBase58};
 use codec::{Decode, Encode};
 use frame_support::ensure;
 use frame_support::{dispatch::Vec, RuntimeDebug};
 #[cfg(feature = "std")]
 use serde::{Deserialize, Serialize};
-use sp_core::{H160, H256};
+use sp_core::Hasher;
+use sp_core::H160;
+use sp_runtime::traits::BlakeTwo256;
 
 const LENGTH_BYTES_TO_REPRESENT_ID: usize = 20;
 
@@ -26,7 +29,9 @@ pub struct TokenId {
 }
 
 impl TokenId {
-    pub fn new_asset(first_input_hash: H256) -> TokenId {
+    // Token id depends on signed or unsigned the same input
+    pub fn new(first_input: &TransactionInput) -> TokenId {
+        let first_input_hash = BlakeTwo256::hash(first_input.encode().as_slice());
         TokenId {
             // We are loosing the first bytes of H256 over here and using 20 the last bytes
             inner: H160::from(first_input_hash),
@@ -69,45 +74,47 @@ pub enum OutputData {
     // A new token creation
     #[codec(index = 2)]
     TokenIssuanceV1 {
-        token_id: TokenId,
+        // token_id: TokenId,
         token_ticker: Vec<u8>,
         amount_to_issue: Value,
         // Should be not more than 18 numbers
         number_of_decimals: u8,
         metadata_uri: Vec<u8>,
     },
-    // Burning a token or NFT
-    #[codec(index = 3)]
-    TokenBurnV1 {
-        token_id: TokenId,
-        amount_to_burn: Value,
-    },
-    // A new NFT creation
-    #[codec(index = 4)]
-    NftMintV1 {
-        token_id: TokenId,
-        data_hash: NftDataHash,
-        metadata_uri: Vec<u8>,
-    },
+    // todo: This part isn't fully tested, left for the next PR
+
+    // // Burning a token or NFT
+    // #[codec(index = 3)]
+    // TokenBurnV1 {
+    //     token_id: TokenId,
+    //     amount_to_burn: Value,
+    // },
+    // // A new NFT creation
+    // #[codec(index = 4)]
+    // NftMintV1 {
+    //     token_id: TokenId,
+    //     data_hash: NftDataHash,
+    //     metadata_uri: Vec<u8>,
+    // },
 }
 
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-#[derive(Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, RuntimeDebug)]
-pub enum NftDataHash {
-    #[codec(index = 1)]
-    Hash32([u8; 32]),
-    #[codec(index = 2)]
-    Raw(Vec<u8>),
-    // Or any type that you want to implement
-}
+// todo: This part isn't fully tested, left for the next PR
+// #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+// #[derive(Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, RuntimeDebug)]
+// pub enum NftDataHash {
+//     #[codec(index = 1)]
+//     Hash32([u8; 32]),
+//     #[codec(index = 2)]
+//     Raw(Vec<u8>),
+//     // Or any type that you want to implement
+// }
 
 impl OutputData {
-    pub(crate) fn id(&self) -> Option<TokenId> {
+    pub(crate) fn id(&self, first_input: &TransactionInput) -> Option<TokenId> {
         match self {
-            OutputData::TokenTransferV1 { ref token_id, .. }
-            | OutputData::TokenIssuanceV1 { ref token_id, .. }
-            | OutputData::NftMintV1 { ref token_id, .. } => Some(token_id.clone()),
-            _ => None,
+            OutputData::TokenTransferV1 { ref token_id, .. } => Some(token_id.clone()),
+            // OutputData::NftMintV1 { .. } |
+            OutputData::TokenIssuanceV1 { .. } => Some(TokenId::new(first_input)),
         }
     }
 }

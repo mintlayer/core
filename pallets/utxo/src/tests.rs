@@ -889,13 +889,168 @@ fn test_two_token_creation_in_one_tx() {
     });
 }
 
+// Let's wrap common acts
+fn test_tx_issuance_for_transfer<F>(expecting_err_msg: &'static str, test_func: F)
+where
+    F: Fn(TokenId, Public, Public, H256, TransactionOutput<H256>) -> Transaction<H256>,
+{
+    let (mut test_ext, alice_pub_key, karl_pub_key) = new_test_ext_and_keys();
+    test_ext.execute_with(|| {
+        // Alice issue 1_000_000_000 MLS-01, and send them to Karl
+        let (utxo0, input0) = tx_input_gen_no_signature();
+        let tx = Transaction {
+            inputs: vec![input0.clone()],
+            outputs: vec![
+                TransactionOutput::new_pubkey(90, H256::from(alice_pub_key)),
+                TransactionOutput::new_p2pk_with_data(
+                    10,
+                    H256::from(karl_pub_key),
+                    OutputData::TokenIssuanceV1 {
+                        token_ticker: "BensT".as_bytes().to_vec(),
+                        amount_to_issue: 1_000_000_000,
+                        // Should be not more than 18 numbers
+                        number_of_decimals: 2,
+                        metadata_uri: "facebook.com".as_bytes().to_vec(),
+                    },
+                ),
+            ],
+            time_lock: Default::default(),
+        }
+        .sign_unchecked(&[utxo0.clone()], 0, &alice_pub_key);
+        let token_id = TokenId::new(&tx.inputs[0]);
+        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx.clone()));
+
+        let token_utxo_hash = tx.outpoint(1);
+        let token_utxo: TransactionOutput<H256> = tx.outputs[1].clone();
+        // Call a test func
+        let tx = test_func(
+            token_id,
+            alice_pub_key,
+            karl_pub_key,
+            token_utxo_hash,
+            token_utxo,
+        );
+        frame_support::assert_err_ignore_postinfo!(
+            Utxo::spend(Origin::signed(H256::zero()), tx),
+            expecting_err_msg
+        );
+    });
+}
+
+#[test]
+fn test_token_transfer_with_wrong_token_id() {
+    let test_fun = Box::new(
+        move |_token_id,
+              alice_pub_key,
+              karl_pub_key,
+              token_utxo_hash,
+              token_utxo: TransactionOutput<H256>| {
+            let input = TransactionInput::new_empty(token_utxo_hash);
+            Transaction {
+                inputs: vec![input.clone()],
+                outputs: vec![TransactionOutput::new_p2pk_with_data(
+                    0,
+                    H256::from(alice_pub_key),
+                    OutputData::TokenTransferV1 {
+                        token_id: TokenId::new(&input),
+                        amount: 1_00_000_000,
+                    },
+                )],
+                time_lock: Default::default(),
+            }
+            .sign_unchecked(&[token_utxo.clone()], 0, &karl_pub_key)
+        },
+    );
+    test_tx_issuance_for_transfer("input for the token not found", test_fun);
+}
+
+#[test]
+fn test_token_transfer_exceed_amount_tokens() {
+    let test_fun = Box::new(
+        move |token_id,
+              alice_pub_key,
+              karl_pub_key,
+              token_utxo_hash,
+              token_utxo: TransactionOutput<H256>| {
+            Transaction {
+                inputs: vec![TransactionInput::new_empty(token_utxo_hash)],
+                outputs: vec![TransactionOutput::new_p2pk_with_data(
+                    0,
+                    H256::from(alice_pub_key),
+                    OutputData::TokenTransferV1 {
+                        token_id,
+                        amount: 1_000_000_001,
+                    },
+                )],
+                time_lock: Default::default(),
+            }
+            .sign_unchecked(&[token_utxo.clone()], 0, &karl_pub_key)
+        },
+    );
+    test_tx_issuance_for_transfer("output value must not exceed input value", test_fun);
+}
+
+#[test]
+fn test_token_transfer_exceed_amount_mlt() {
+    let test_fun = Box::new(
+        move |token_id: TokenId,
+              alice_pub_key,
+              karl_pub_key,
+              token_utxo_hash,
+              token_utxo: TransactionOutput<H256>| {
+            Transaction {
+                inputs: vec![TransactionInput::new_empty(token_utxo_hash)],
+                outputs: vec![TransactionOutput::new_p2pk_with_data(
+                    1_000_000_000,
+                    H256::from(alice_pub_key),
+                    OutputData::TokenTransferV1 {
+                        token_id: token_id.clone(),
+                        amount: 1_000_000_000,
+                    },
+                )],
+                time_lock: Default::default(),
+            }
+            .sign_unchecked(&[token_utxo.clone()], 0, &karl_pub_key)
+        },
+    );
+    test_tx_issuance_for_transfer("output value must not exceed input value", test_fun);
+}
+
+#[test]
+fn test_token_transfer_send_part_others_burn() {
+    let test_fun = Box::new(
+        move |token_id: TokenId,
+              alice_pub_key,
+              karl_pub_key,
+              token_utxo_hash,
+              token_utxo: TransactionOutput<H256>| {
+            Transaction {
+                inputs: vec![TransactionInput::new_empty(token_utxo_hash)],
+                outputs: vec![
+                    // Send only 30%, let's forget about another 70% of tokens
+                    TransactionOutput::new_p2pk_with_data(
+                        0,
+                        H256::from(alice_pub_key),
+                        OutputData::TokenTransferV1 {
+                            token_id: token_id.clone(),
+                            amount: 300_000_000,
+                        },
+                    ),
+                ],
+                time_lock: Default::default(),
+            }
+            .sign_unchecked(&[token_utxo.clone()], 0, &karl_pub_key)
+        },
+    );
+    test_tx_issuance_for_transfer("output value must not exceed input value", test_fun);
+}
+
 #[test]
 fn test_token_transfer() {
     let (mut test_ext, alice_pub_key, karl_pub_key) = new_test_ext_and_keys();
     test_ext.execute_with(|| {
         // Alice issue 1_000_000_000 MLS-01, and send them to Karl
         let (utxo0, input0) = tx_input_gen_no_signature();
-        let token_id = TokenId::new(&input0);
         let tx = Transaction {
             inputs: vec![input0],
             outputs: vec![
@@ -915,86 +1070,10 @@ fn test_token_transfer() {
             time_lock: Default::default(),
         }
         .sign_unchecked(&[utxo0.clone()], 0, &alice_pub_key);
+        let token_id = TokenId::new(&tx.inputs[0]);
         assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx.clone()));
         let token_utxo_hash = tx.outpoint(1);
         let token_utxo = tx.outputs[1].clone();
-
-        // Let's fail on wrong token id
-        let input = TransactionInput::new_empty(token_utxo_hash);
-        let tx = Transaction {
-            inputs: vec![input.clone()],
-            outputs: vec![TransactionOutput::new_p2pk_with_data(
-                0,
-                H256::from(alice_pub_key),
-                OutputData::TokenTransferV1 {
-                    token_id: TokenId::new(&input),
-                    amount: 1_00_000_000,
-                },
-            )],
-            time_lock: Default::default(),
-        }
-        .sign_unchecked(&[token_utxo.clone()], 0, &karl_pub_key);
-        frame_support::assert_err_ignore_postinfo!(
-            Utxo::spend(Origin::signed(H256::zero()), tx),
-            "input for the token not found"
-        );
-
-        // Let's fail on exceed token amount
-        let tx = Transaction {
-            inputs: vec![TransactionInput::new_empty(token_utxo_hash)],
-            outputs: vec![TransactionOutput::new_p2pk_with_data(
-                0,
-                H256::from(alice_pub_key),
-                OutputData::TokenTransferV1 {
-                    token_id: token_id.clone(),
-                    amount: 1_000_000_001,
-                },
-            )],
-            time_lock: Default::default(),
-        }
-        .sign_unchecked(&[token_utxo.clone()], 0, &karl_pub_key);
-        frame_support::assert_err_ignore_postinfo!(
-            Utxo::spend(Origin::signed(H256::zero()), tx),
-            "output value must not exceed input value"
-        );
-
-        // Let's send a big amount of MLT with the correct tokens
-        let tx = Transaction {
-            inputs: vec![TransactionInput::new_empty(token_utxo_hash)],
-            outputs: vec![TransactionOutput::new_p2pk_with_data(
-                1_000_000_000,
-                H256::from(alice_pub_key),
-                OutputData::TokenTransferV1 {
-                    token_id: token_id.clone(),
-                    amount: 1_000_000_000,
-                },
-            )],
-            time_lock: Default::default(),
-        }
-        .sign_unchecked(&[token_utxo.clone()], 0, &karl_pub_key);
-        frame_support::assert_err_ignore_postinfo!(
-            Utxo::spend(Origin::signed(H256::zero()), tx),
-            "output value must not exceed input value"
-        );
-
-        // Let's fail because there is occurred a tokens burn
-        let tx = Transaction {
-            inputs: vec![TransactionInput::new_empty(token_utxo_hash)],
-            outputs: vec![TransactionOutput::new_p2pk_with_data(
-                0,
-                H256::from(alice_pub_key),
-                OutputData::TokenTransferV1 {
-                    token_id: token_id.clone(),
-                    amount: 300_000_000,
-                },
-            )],
-            time_lock: Default::default(),
-        }
-        .sign_unchecked(&[token_utxo.clone()], 0, &karl_pub_key);
-        frame_support::assert_err_ignore_postinfo!(
-            Utxo::spend(Origin::signed(H256::zero()), tx),
-            "output value must not exceed input value"
-        );
 
         // Let's send 300_000_000 and rest back
         let tx = Transaction {
@@ -1213,7 +1292,10 @@ fn test_token_creation_with_insufficient_fee() {
         let tx = Transaction {
             inputs: vec![input0],
             outputs: vec![
-                TransactionOutput::new_pubkey(90, H256::from(alice_pub_key)),
+                TransactionOutput::new_pubkey(
+                    crate::tokens::Mlt(1).to_munit(),
+                    H256::from(karl_pub_key),
+                ),
                 TransactionOutput::new_p2pk_with_data(
                     0,
                     H256::from(karl_pub_key),
@@ -1253,7 +1335,7 @@ fn test_token_creation_with_insufficient_fee() {
         .sign_unchecked(&[token_utxo], 0, &karl_pub_key);
         frame_support::assert_err_ignore_postinfo!(
             Utxo::spend(Origin::signed(H256::zero()), tx),
-            "this id can't be used for a new token"
+            "insufficient fee"
         );
     });
 }

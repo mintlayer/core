@@ -45,7 +45,9 @@ use utxo_api::UtxoApi;
 pub mod pallet {
     pub use crate::script::{BlockTime, RawBlockTime};
     use crate::sign::{self, Scheme};
-    use crate::tokens::{NftDataHash, OutputData, TokenId, Value};
+    // todo: This part isn't fully tested, left for the next PR
+    // use crate::tokens::{NftDataHash};
+    use crate::tokens::{OutputData, TokenId, Value};
     use bech32;
     use chainscript::Script;
     use codec::{Decode, Encode};
@@ -349,14 +351,22 @@ pub mod pallet {
     pub(super) type UtxoStore<T: Config> = StorageMap<_, Identity, H256, TransactionOutputFor<T>>;
 
     #[pallet::storage]
-    #[pallet::getter(fn pointer_to_issue_token)]
+    #[pallet::getter(fn token_issuance_transactions)]
     pub(super) type TokenIssuanceTransactions<T: Config> =
-        StorageMap<_, Identity, TokenId, /* UTXO */ H256, OptionQuery>;
+        StorageMap<_, Identity, TokenId, TransactionFor<T>, OptionQuery>;
 
+    // When someone wants to issue a token we should calculate token_id and use it when the owner
+    // in other transactions will transfer the token.
     #[pallet::storage]
-    #[pallet::getter(fn nft_unique_data_hash)]
-    pub(super) type NftUniqueDataHash<T: Config> =
-        StorageMap<_, Identity, NftDataHash, /* UTXO */ H256, OptionQuery>;
+    #[pallet::getter(fn token_id_issuance)]
+    pub(super) type TokenIssuanceId<T: Config> =
+        StorageMap<_, Identity, /* outpoint */ H256, TokenId, OptionQuery>;
+
+    // todo: This part isn't fully tested, left for the next PR
+    // #[pallet::storage]
+    // #[pallet::getter(fn nft_unique_data_hash)]
+    // pub(super) type NftUniqueDataHash<T: Config> =
+    //     StorageMap<_, Identity, NftDataHash, /* UTXO */ H256, OptionQuery>;
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -372,12 +382,13 @@ pub mod pallet {
         }
     }
 
-    pub(crate) fn get_output_by_token_id<T: Config>(
-        token_id: TokenId,
-    ) -> Option<TransactionOutputFor<T>> {
-        let utxo_id = TokenIssuanceTransactions::<T>::get(token_id)?;
-        UtxoStore::<T>::get(utxo_id)
-    }
+    // todo: This part isn't fully tested, left for the next PR
+    // pub(crate) fn get_output_by_token_id<T: Config>(
+    //     token_id: TokenId,
+    // ) -> Option<TransactionOutputFor<T>> {
+    //     let utxo_id = TokenIssuanceTransactions::<T>::get(token_id)?;
+    //     UtxoStore::<T>::get(utxo_id)
+    // }
 
     // Strips a transaction of its Signature fields by replacing value with ZERO-initialized fixed hash.
     pub fn get_simple_transaction<AccountId: Encode + Clone>(
@@ -465,8 +476,6 @@ pub mod pallet {
     pub fn validate_transaction<T: Config>(
         tx: &TransactionFor<T>,
     ) -> Result<ValidTransaction, &'static str> {
-        //both inputs and outputs should contain at least 1 and at most u32::MAX - 1 entries
-
         //ensure rather than assert to avoid panic
         //both inputs and outputs should contain at least 1 and at most u32::MAX - 1 entries
         ensure!(!tx.inputs.is_empty(), "no inputs");
@@ -537,13 +546,19 @@ pub mod pallet {
         let full_inputs: Vec<(TokenId, TransactionOutputFor<T>)> = tx
             .inputs
             .iter()
-            .filter_map(|input| <UtxoStore<T>>::get(&input.outpoint))
-            .filter_map(|output| match output.data {
+            .filter_map(|input| Some((input.outpoint, <UtxoStore<T>>::get(&input.outpoint)?)))
+            .filter_map(|(outpoint, output)| match output.data {
                 Some(ref data) => match data {
-                    OutputData::TokenTransferV1 { token_id, .. }
-                    | OutputData::TokenIssuanceV1 { token_id, .. }
-                    | OutputData::NftMintV1 { token_id, .. } => Some((token_id.clone(), output)),
-                    OutputData::TokenBurnV1 { .. } => None,
+                    OutputData::TokenTransferV1 { token_id, .. } => {
+                        Some((token_id.clone(), output))
+                    }
+                    OutputData::TokenIssuanceV1 { .. } => {
+                        let token_id = <TokenIssuanceId<T>>::get(outpoint)?;
+                        Some((token_id, output))
+                    }
+                    // todo: This part isn't fully tested, left for the next PR
+                    // | OutputData::NftMintV1 { token_id, .. }
+                    // OutputData::TokenBurnV1 { .. } => None,
                 },
                 None => {
                     // We do not calculate MLT here
@@ -559,17 +574,14 @@ pub mod pallet {
             let output = <UtxoStore<T>>::get(&input.outpoint).ok_or("missing inputs")?;
             match &output.data {
                 Some(OutputData::TokenIssuanceV1 {
-                    ref token_id,
                     token_ticker,
                     amount_to_issue,
                     number_of_decimals,
                     metadata_uri,
                 }) => {
                     // We have to check is this token already issued?
-                    ensure!(
-                        TokenIssuanceTransactions::<T>::contains_key(token_id),
-                        "token has never been issued"
-                    );
+                    let token_id = TokenIssuanceId::<T>::get(input.outpoint)
+                        .ok_or("token has never been issued")?;
                     ensure!(
                         token_ticker.is_ascii(),
                         "token ticker has none ascii characters"
@@ -585,7 +597,7 @@ pub mod pallet {
                     ensure!(number_of_decimals <= &18, "too long decimals");
                     // If token has just created we can't meet another amount here.
                     ensure!(
-                        !total_value_of_input_tokens.contains_key(token_id),
+                        !total_value_of_input_tokens.contains_key(&token_id),
                         "this id can't be used for a token"
                     );
                     total_value_of_input_tokens.insert(token_id.clone(), *amount_to_issue);
@@ -599,6 +611,10 @@ pub mod pallet {
                     amount,
                     ..
                 }) => {
+                    ensure!(
+                        TokenIssuanceTransactions::<T>::contains_key(token_id),
+                        "token has never been issued"
+                    );
                     total_value_of_input_tokens.insert(
                         token_id.clone(),
                         total_value_of_input_tokens
@@ -612,31 +628,33 @@ pub mod pallet {
                         .checked_add(output.value)
                         .ok_or("input value overflow")?;
                 }
-                Some(OutputData::TokenBurnV1 { .. }) => {
-                    // Nothing to do here because tokens no longer exist.
-                }
-                Some(OutputData::NftMintV1 {
-                    ref token_id,
-                    data_hash,
-                    metadata_uri,
-                }) => {
-                    // We have to check is this token already issued?
-                    ensure!(
-                        TokenIssuanceTransactions::<T>::contains_key(token_id),
-                        "unable to use an input where NFT has not minted yet"
-                    );
-                    // Check is this digital data unique?
-                    ensure!(
-                        NftUniqueDataHash::<T>::contains_key(data_hash),
-                        "unable to use an input where NFT digital data was changed"
-                    );
-                    ensure!(
-                        metadata_uri.is_ascii(),
-                        "metadata uri has none ascii characters"
-                    );
-                    // If NFT has just created we can't meet another NFT part here.
-                    total_value_of_input_tokens.insert(token_id.clone(), 1);
-                }
+
+                // todo: This part isn't fully tested, left for the next PR
+                // Some(OutputData::TokenBurnV1 { .. }) => {
+                //     // Nothing to do here because tokens no longer exist.
+                // }
+                // Some(OutputData::NftMintV1 {
+                //     ref token_id,
+                //     data_hash,
+                //     metadata_uri,
+                // }) => {
+                //     // We have to check is this token already issued?
+                //     ensure!(
+                //         TokenIssuanceTransactions::<T>::contains_key(token_id),
+                //         "unable to use an input where NFT has not minted yet"
+                //     );
+                //     // Check is this digital data unique?
+                //     ensure!(
+                //         NftUniqueDataHash::<T>::contains_key(data_hash),
+                //         "unable to use an input where NFT digital data was changed"
+                //     );
+                //     ensure!(
+                //         metadata_uri.is_ascii(),
+                //         "metadata uri has none ascii characters"
+                //     );
+                //     // If NFT has just created we can't meet another NFT part here.
+                //     total_value_of_input_tokens.insert(token_id.clone(), 1);
+                // }
                 None => {
                     mlt_amount_in_inputs = mlt_amount_in_inputs
                         .checked_add(output.value)
@@ -650,15 +668,16 @@ pub mod pallet {
         for output in &tx.outputs {
             match &output.data {
                 Some(OutputData::TokenIssuanceV1 {
-                    ref token_id,
                     token_ticker,
                     amount_to_issue,
                     number_of_decimals,
                     metadata_uri,
                 }) => {
                     // We have to check is this token already issued?
+                    let token_id = TokenId::new(&tx.inputs[0]);
+
                     ensure!(
-                        !TokenIssuanceTransactions::<T>::contains_key(token_id),
+                        !TokenIssuanceTransactions::<T>::contains_key(&token_id),
                         "token has already been issued"
                     );
                     ensure!(
@@ -677,7 +696,7 @@ pub mod pallet {
 
                     // If token has just created we can't meet another amount here.
                     ensure!(
-                        !total_value_of_output_tokens.contains_key(token_id),
+                        !total_value_of_output_tokens.contains_key(&token_id),
                         "this id can't be used for a new token"
                     );
                     total_value_of_output_tokens.insert(token_id.clone(), *amount_to_issue);
@@ -691,6 +710,10 @@ pub mod pallet {
                     amount,
                     ..
                 }) => {
+                    ensure!(
+                        TokenIssuanceTransactions::<T>::contains_key(token_id),
+                        "input for the token not found"
+                    );
                     total_value_of_output_tokens.insert(
                         token_id.clone(),
                         total_value_of_output_tokens
@@ -704,32 +727,33 @@ pub mod pallet {
                         .checked_add(output.value)
                         .ok_or("input value overflow")?;
                 }
-                Some(OutputData::TokenBurnV1 { .. }) => {
-                    // Nothing to do here because tokens no longer exist.
-                }
-                Some(OutputData::NftMintV1 {
-                    ref token_id,
-                    data_hash,
-                    metadata_uri,
-                }) => {
-                    // We have to check is this token already issued?
-                    ensure!(
-                        !TokenIssuanceTransactions::<T>::contains_key(token_id),
-                        "token has already been issued"
-                    );
-
-                    // Check is this digital data unique?
-                    ensure!(
-                        !<NftUniqueDataHash<T>>::contains_key(data_hash),
-                        "digital data has already been minted"
-                    );
-                    ensure!(
-                        metadata_uri.is_ascii(),
-                        "metadata uri has none ascii characters"
-                    );
-                    // If NFT has just created we can't meet another NFT part here.
-                    total_value_of_output_tokens.insert(token_id.clone(), 1);
-                }
+                // todo: This part isn't fully tested, left for the next PR
+                // Some(OutputData::TokenBurnV1 { .. }) => {
+                //     // Nothing to do here because tokens no longer exist.
+                // }
+                // Some(OutputData::NftMintV1 {
+                //     ref token_id,
+                //     data_hash,
+                //     metadata_uri,
+                // }) => {
+                //     // We have to check is this token already issued?
+                //     ensure!(
+                //         !TokenIssuanceTransactions::<T>::contains_key(token_id),
+                //         "token has already been issued"
+                //     );
+                //
+                //     // Check is this digital data unique?
+                //     ensure!(
+                //         !<NftUniqueDataHash<T>>::contains_key(data_hash),
+                //         "digital data has already been minted"
+                //     );
+                //     ensure!(
+                //         metadata_uri.is_ascii(),
+                //         "metadata uri has none ascii characters"
+                //     );
+                //     // If NFT has just created we can't meet another NFT part here.
+                //     total_value_of_output_tokens.insert(token_id.clone(), 1);
+                // }
                 None => {
                     mlt_amount_in_outputs = mlt_amount_in_outputs
                         .checked_add(output.value)
@@ -741,11 +765,13 @@ pub mod pallet {
         // Check for token creation
         for output in tx.outputs.iter() {
             let tid = match output.data {
-                Some(OutputData::TokenTransferV1 { ref token_id, .. })
-                | Some(OutputData::TokenIssuanceV1 { ref token_id, .. }) => token_id.clone(),
-                Some(OutputData::NftMintV1 { .. })
-                | Some(OutputData::TokenBurnV1 { .. })
-                | None => continue,
+                Some(OutputData::TokenTransferV1 { ref token_id, .. }) => token_id.clone(),
+                Some(OutputData::TokenIssuanceV1 { .. }) => TokenId::new(&tx.inputs[0]),
+                None => continue,
+                // todo: This part isn't fully tested, left for the next PR
+                // Some(OutputData::NftMintV1 { .. })
+                // | Some(OutputData::TokenBurnV1 { .. })
+                // | None => continue,
             };
             // If we have input and output for the same token it's not a problem
             if full_inputs.iter().find(|&x| (x.0 == tid) && (x.1 != *output)).is_some() {
@@ -771,13 +797,14 @@ pub mod pallet {
                 Some(OutputData::TokenTransferV1 { amount, .. }) => {
                     ensure!(amount > 0, "output value must be nonzero")
                 }
-                Some(OutputData::TokenBurnV1 { amount_to_burn, .. }) => {
-                    ensure!(amount_to_burn > 0, "output value must be nonzero")
-                }
-                Some(OutputData::NftMintV1 { .. }) => {
-                    // Nothing to check
-                }
                 None => ensure!(output.value > 0, "output value must be nonzero"),
+                // todo: This part isn't fully tested, left for the next PR
+                // Some(OutputData::TokenBurnV1 { amount_to_burn, .. }) => {
+                //     ensure!(amount_to_burn > 0, "output value must be nonzero")
+                // }
+                // Some(OutputData::NftMintV1 { .. }) => {
+                //     // Nothing to check
+                // }
             }
             let hash = tx.outpoint(output_index as u64);
             ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
@@ -802,43 +829,57 @@ pub mod pallet {
                 "output value must not exceed input value"
             );
 
-            let mut num_creations = 0;
-            for output_token in &total_value_of_output_tokens {
-                match total_value_of_input_tokens.get(&output_token.0) {
+            let mut issuance_counter = 0;
+            for (token_id, token_value) in &total_value_of_output_tokens {
+                match total_value_of_input_tokens.get(&token_id) {
                     Some(input_value) => {
                         ensure!(
-                            input_value == output_token.1,
+                            input_value == token_value,
                             "output value must not exceed input value"
                         )
                     }
+                    // We have an output, but we have not an input
                     None => {
-                        match &tx.outputs.iter().find(|x| match x.data {
+                        // find TransactionOutput for this token_id
+                        let output = &tx.outputs.iter().find(|x| match x.data {
                             Some(ref output_data) => {
-                                output_data.id().as_ref() == Some(output_token.0)
+                                output_data.id(&tx.inputs[0]).as_ref() == Some(token_id)
                             }
                             None => false,
-                        }) {
+                        });
+
+                        match output {
                             Some(output) => match output.data {
-                                None
-                                | Some(OutputData::TokenTransferV1 { .. })
-                                | Some(OutputData::TokenBurnV1 { .. }) => {
-                                    frame_support::fail!("input for the token not found")
-                                }
-                                Some(OutputData::NftMintV1 { .. })
-                                | Some(OutputData::TokenIssuanceV1 { .. }) => {
-                                    num_creations += 1;
+                                // todo: This part isn't fully tested, left for the next PR
+                                // | Some(OutputData::TokenBurnV1 { .. }) =>
+                                // Some(OutputData::NftMintV1 { .. })
+                                Some(OutputData::TokenIssuanceV1 { .. }) => {
+                                    // If we make a new token then okay, this is not a problem
+                                    issuance_counter += 1;
                                     continue;
                                 }
+                                None | Some(OutputData::TokenTransferV1 { .. }) => {
+                                    // But we can't send a token without input
+                                    frame_support::fail!("input for the token not found2")
+                                }
                             },
+                            // This situation should never happen, but let's cover it
                             None => frame_support::fail!("corrupted output data"),
                         }
                     }
                 }
             }
             ensure!(
-                mlt_amount_in_inputs >= (num_creations * crate::tokens::Mlt(100).to_munit()),
-                "insufficient fee"
+                issuance_counter <= 1,
+                "too many issuance in one transaction"
             );
+            if issuance_counter == 1 {
+                // The sender should pay not less than 100 MLT for issuance
+                ensure!(
+                    mlt_amount_in_inputs >= crate::tokens::Mlt(100).to_munit(),
+                    "insufficient fee"
+                );
+            }
 
             for (index, (input, input_utxo)) in tx.inputs.iter().zip(input_utxos).enumerate() {
                 match &input_utxo.destination {
@@ -922,28 +963,33 @@ pub mod pallet {
                     log::debug!("inserting to UtxoStore {:?} as key {:?}", output, hash);
                     <UtxoStore<T>>::insert(hash, output);
                     match &output.data {
-                        Some(OutputData::NftMintV1 {
-                            token_id,
-                            data_hash,
-                            ..
-                        }) => {
-                            // We have to control that digital data of NFT is unique.
-                            // Otherwise, anybody else might make a new NFT with exactly the same hash.
-                            <NftUniqueDataHash<T>>::insert(data_hash, hash);
-                            // Also, we should provide possibility of find an output that by token_id.
-                            // This output is a place where token was created. It allow us to check that a token or
-                            // a NFT have not created yet.
-                            <TokenIssuanceTransactions<T>>::insert(token_id, hash);
-                        }
-                        Some(OutputData::TokenIssuanceV1 { token_id, .. }) => {
-                            // For MLS-01 we save a relation between token_id and the output where
+                        // todo: This part isn't fully tested, left for the next PR
+                        // Some(OutputData::NftMintV1 {
+                        //     token_id,
+                        //     data_hash,
+                        //     ..
+                        // }) => {
+                        //     // We have to control that digital data of NFT is unique.
+                        //     // Otherwise, anybody else might make a new NFT with exactly the same hash.
+                        //     <NftUniqueDataHash<T>>::insert(data_hash, hash);
+                        //     // Also, we should provide possibility of find an output that by token_id.
+                        //     // This output is a place where token was created. It allow us to check that a token or
+                        //     // a NFT have not created yet.
+                        //     <TokenIssuanceTransactions<T>>::insert(token_id, hash);
+                        // }
+                        Some(OutputData::TokenIssuanceV1 { .. }) => {
+                            let token_id = TokenId::new(&tx.inputs[0]);
+                            // Link output hash
+                            <TokenIssuanceId<T>>::insert(hash, &token_id);
+                            // For MLS-01 we save a relation between token_id and the tx where
                             // token was created.
-                            <TokenIssuanceTransactions<T>>::insert(token_id, hash);
+                            <TokenIssuanceTransactions<T>>::insert(&token_id, &tx);
                         }
                         // For the security reason we are implementing all cases
-                        Some(OutputData::TokenBurnV1 { .. })
-                        | Some(OutputData::TokenTransferV1 { .. })
-                        | None => continue,
+                        // todo: This part isn't fully tested, left for the next PR
+                        // Some(OutputData::TokenBurnV1 { .. })
+                        // |
+                        Some(OutputData::TokenTransferV1 { .. }) | None => continue,
                     }
                 }
                 Destination::CreatePP(script, data) => {
@@ -1115,22 +1161,23 @@ impl<T: Config> crate::Pallet<T> {
         1337
     }
 
-    pub fn nft_read(
-        nft_id: &core::primitive::str,
-    ) -> Option<(/* Data url */ Vec<u8>, /* Data hash */ Vec<u8>)> {
-        match crate::pallet::get_output_by_token_id::<T>(
-            crate::tokens::TokenId::from_string(&nft_id).ok()?,
-        )?
-        .data
-        {
-            Some(crate::tokens::OutputData::NftMintV1 {
-                data_hash,
-                metadata_uri,
-                ..
-            }) => Some((metadata_uri, data_hash.encode())),
-            _ => None,
-        }
-    }
+    // todo: This part isn't fully tested, left for the next PR
+    // pub fn nft_read(
+    //     nft_id: &core::primitive::str,
+    // ) -> Option<(/* Data url */ Vec<u8>, /* Data hash */ Vec<u8>)> {
+    //     match crate::pallet::get_output_by_token_id::<T>(
+    //         crate::tokens::TokenId::from_string(&nft_id).ok()?,
+    //     )?
+    //     .data
+    //     {
+    //         Some(crate::tokens::OutputData::NftMintV1 {
+    //             data_hash,
+    //             metadata_uri,
+    //             ..
+    //         }) => Some((metadata_uri, data_hash.encode())),
+    //         _ => None,
+    //     }
+    // }
 }
 
 fn coin_picker<T: Config>(outpoints: &Vec<H256>) -> Result<Vec<TransactionInput>, DispatchError> {
