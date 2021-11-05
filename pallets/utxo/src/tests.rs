@@ -709,7 +709,7 @@ fn test_token_issuance() {
                 token_ticker: "BensT".as_bytes().to_vec(),
                 amount_to_issue: 1_000_000_000,
                 number_of_decimals: 2,
-                metadata_uri: "facebook.com".as_bytes().to_vec(),
+                metadata_uri: "mintlayer.org".as_bytes().to_vec(),
             }),
         };
         let tx = Transaction {
@@ -741,7 +741,7 @@ fn test_token_issuance() {
                 assert_eq!(1_000_000_000, amount_to_issue);
                 assert_eq!("BensT".as_bytes().to_vec(), token_ticker);
                 assert_eq!(2, number_of_decimals);
-                assert_eq!("facebook.com".as_bytes().to_vec(), metadata_uri);
+                assert_eq!("mintlayer.org".as_bytes().to_vec(), metadata_uri);
             }
             _ => panic!("Transaction data is corrupted"),
         }
@@ -762,7 +762,7 @@ fn test_token_issuance() {
 //             data: Some(OutputData::NftMintV1 {
 //                 token_id: TokenId::new_asset(first_input_hash),
 //                 data_hash: data_hash.clone(),
-//                 metadata_uri: "facebook.com".as_bytes().to_vec(),
+//                 metadata_uri: "mintlayer.org".as_bytes().to_vec(),
 //             }),
 //         };
 //         let tx = Transaction {
@@ -801,7 +801,7 @@ fn test_token_issuance() {
 //         let mut nft_data = OutputData::NftMintV1 {
 //             token_id: TokenId::new_asset(first_input_hash),
 //             data_hash: NftDataHash::Hash32([255; 32]),
-//             metadata_uri: "facebook.com".as_bytes().to_vec(),
+//             metadata_uri: "mintlayer.org".as_bytes().to_vec(),
 //         };
 //         let tx = Transaction {
 //             inputs: vec![input0.clone()],
@@ -1003,7 +1003,7 @@ fn test_two_token_creation_in_one_tx() {
                         token_ticker: b"Enric".to_vec(),
                         amount_to_issue: 1_000_000_000,
                         number_of_decimals: 2,
-                        metadata_uri: "facebook.com".as_bytes().to_vec(),
+                        metadata_uri: "mintlayer.org".as_bytes().to_vec(),
                     },
                 ),
                 TransactionOutput::new_p2pk_with_data(
@@ -1013,7 +1013,7 @@ fn test_two_token_creation_in_one_tx() {
                         token_ticker: b"Ben".to_vec(),
                         amount_to_issue: 2_000_000_000,
                         number_of_decimals: 3,
-                        metadata_uri: "facebook.com".as_bytes().to_vec(),
+                        metadata_uri: "mintlayer.org".as_bytes().to_vec(),
                     },
                 ),
             ],
@@ -1048,7 +1048,7 @@ where
                         amount_to_issue: 1_000_000_000,
                         // Should be not more than 18 numbers
                         number_of_decimals: 2,
-                        metadata_uri: "facebook.com".as_bytes().to_vec(),
+                        metadata_uri: "mintlayer.org".as_bytes().to_vec(),
                     },
                 ),
             ],
@@ -1201,7 +1201,7 @@ fn test_token_transfer() {
                         amount_to_issue: 1_000_000_000,
                         // Should be not more than 18 numbers
                         number_of_decimals: 2,
-                        metadata_uri: "facebook.com".as_bytes().to_vec(),
+                        metadata_uri: "mintlayer.org".as_bytes().to_vec(),
                     },
                 ),
             ],
@@ -1319,7 +1319,7 @@ fn test_token_transfer() {
 //                     OutputData::NftMintV1 {
 //                         token_id: token_id.clone(),
 //                         data_hash: data_hash.clone(),
-//                         metadata_uri: "facebook.com".as_bytes().to_vec(),
+//                         metadata_uri: "mintlayer.org".as_bytes().to_vec(),
 //                     },
 //                 ),
 //             ],
@@ -1441,7 +1441,7 @@ fn test_token_creation_with_insufficient_fee() {
                         token_ticker: "BensT".as_bytes().to_vec(),
                         amount_to_issue: 1_000_000_000,
                         number_of_decimals: 2,
-                        metadata_uri: "facebook.com".as_bytes().to_vec(),
+                        metadata_uri: "mintlayer.org".as_bytes().to_vec(),
                     },
                 ),
             ],
@@ -1465,7 +1465,7 @@ fn test_token_creation_with_insufficient_fee() {
                     amount_to_issue: 1_000_000_000,
                     // Should be not more than 18 numbers
                     number_of_decimals: 2,
-                    metadata_uri: "facebook.com".as_bytes().to_vec(),
+                    metadata_uri: "mintlayer.org".as_bytes().to_vec(),
                 },
             )],
             time_lock: Default::default(),
