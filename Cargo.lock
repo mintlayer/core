@@ -4149,6 +4149,7 @@ dependencies = [
  "parity-scale-codec",
  "pp-api",
  "rand 0.4.6",
+ "proptest",
  "serde",
  "sp-consensus-aura",
  "sp-core",

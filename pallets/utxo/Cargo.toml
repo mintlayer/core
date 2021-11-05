@@ -113,3 +113,6 @@ branch = "master"
 git = 'https://github.com/paritytech/substrate.git'
 version = '0.10.0-dev'
 branch = "master"
+
+[dev-dependencies.proptest]
+version = "1.0.0"

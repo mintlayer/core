@@ -16,7 +16,7 @@
 // Author(s): C. Yap
 
 use crate::{
-    mock::*, tokens::Value, BlockTime, Destination, RewardTotal, Transaction, TransactionInput,
+    mock::*, tokens::Value, BlockTime, Destination, RawBlockTime, RewardTotal, Transaction, TransactionInput,
     TransactionOutput, UtxoStore,
 };
 use chainscript::{opcodes::all as opc, Builder};
@@ -28,6 +28,8 @@ use frame_support::{
 };
 
 use crate::tokens::OutputData;
+use proptest::prelude::*;
+use crate::script::test::gen_block_time_real;
 use sp_core::{sp_std::vec, sr25519::Public, testing::SR25519, H256, H512};
 
 fn tx_input_gen_no_signature() -> (TransactionOutput<H256>, TransactionInput) {
@@ -35,13 +37,13 @@ fn tx_input_gen_no_signature() -> (TransactionOutput<H256>, TransactionInput) {
     (utxo, TransactionInput::new_empty(hash))
 }
 
-fn execute_with_alice<F>(mut execute: F)
+fn execute_with_alice<F, R>(mut execute: F) -> R
 where
-    F: FnMut(Public),
+    F: FnMut(Public) -> R,
 {
     new_test_ext().execute_with(|| {
         let alice_pub_key = crypto::sr25519_public_keys(SR25519)[0];
-        execute(alice_pub_key);
+        execute(alice_pub_key)
     })
 }
 
@@ -542,6 +544,143 @@ fn test_send_to_address() {
             "Failed to decode address: invalid HRP",
         );
     })
+}
+
+proptest! {
+    #[test]
+    fn prop_gen_block_time_real_works(bt in gen_block_time_real()) {
+        // This generator should not sample block-based time.
+        prop_assert!(!bt.is_blocks());
+    }
+
+    #[test]
+    fn prop_time_lock_realtime_with_script(
+        script_lock_time in gen_block_time_real(),
+        tx_lock_time in gen_block_time_real(),
+        current_time in gen_block_time_real(),
+    ) {
+        let result = execute_with_alice(|alice| {
+            // Convert seconds to milliseconds
+            Timestamp::set_timestamp(current_time.as_u64() * 1000);
+
+            let (utxo0, input0) = tx_input_gen_no_signature();
+            let script = Builder::new()
+                .push_int(script_lock_time.as_u64() as i64)
+                .push_opcode(opc::OP_CLTV)
+                .into_script();
+            let script_hash: H256 = BlakeTwo256::hash(script.as_ref());
+            let tx1 = Transaction {
+                inputs: vec![input0],
+                outputs: vec![TransactionOutput::new_script_hash(90, script_hash)],
+                time_lock: Default::default(),
+            }
+            .sign_unchecked(&[utxo0], 0, &alice);
+            let outpoint = tx1.outpoint(0);
+            assert!(Utxo::spend(Origin::signed(H256::zero()), tx1).is_ok());
+
+            let tx2 = Transaction {
+                inputs: vec![TransactionInput::new_script(outpoint, script, Default::default())],
+                outputs: vec![TransactionOutput::new_pubkey(50, H256::from(alice))],
+                time_lock: tx_lock_time,
+            };
+            Utxo::spend(Origin::signed(H256::zero()), tx2)
+        });
+
+        // The transaction should be accepted if and only if:
+        // current time >= transaction lock time >= script lock time
+        let model = current_time.as_u64() >= tx_lock_time.as_u64()
+            && tx_lock_time.as_u64() >= script_lock_time.as_u64();
+        prop_assert_eq!(result.is_ok(), model);
+    }
+
+    #[test]
+    fn prop_time_lock_realtime_monotonic(
+        tx_lock_time in gen_block_time_real(),
+        time0 in gen_block_time_real(),
+        time1 in gen_block_time_real(),
+    ) {
+        // Make sure time0 and time1 are in order
+        let (time0, time1) = (
+            std::cmp::min_by_key(time0, time1, RawBlockTime::as_u64),
+            std::cmp::max_by_key(time0, time1, RawBlockTime::as_u64),
+        );
+
+        let (res0, res1) = execute_with_alice(|alice| {
+            let (utxo0, input0) = tx_input_gen_no_signature();
+            let tx = Transaction {
+                inputs: vec![input0],
+                outputs: vec![TransactionOutput::new_pubkey(50, H256::from(alice))],
+                time_lock: tx_lock_time,
+            }
+            .sign_unchecked(&[utxo0], 0, &alice);
+
+            Timestamp::set_timestamp(time0.as_u64() * 1000);
+            let res0 = crate::pallet::validate_transaction::<Test>(&tx);
+
+            Timestamp::set_timestamp(time1.as_u64() * 1000);
+            let res1 = crate::pallet::validate_transaction::<Test>(&tx);
+
+            (res0, res1)
+        });
+
+        // The flow of time cannot turn a valid transaction int an invalid one.
+        // This is an implication: If a transaction validates at time0, it validates at time1.
+        prop_assert!(!res0.is_ok() || res1.is_ok());
+
+        // Check the error message given if the transaction validation fails.
+        if let Err(e) = res0 {
+            prop_assert_eq!(e, "Time lock restrictions not satisfied");
+        }
+    }
+
+    #[test]
+    fn prop_time_lock_realtime_neighbourhood(before in gen_block_time_real()) {
+        let now = RawBlockTime::new(before.as_u64() + 1);
+        let after = RawBlockTime::new(now.as_u64() + 1);
+
+        let (res_before, res_now, res_after) = execute_with_alice(|alice| {
+            let (utxo0, input0) = tx_input_gen_no_signature();
+            let tx = Transaction {
+                inputs: vec![input0],
+                outputs: vec![TransactionOutput::new_pubkey(50, H256::from(alice))],
+                time_lock: now,
+            }
+            .sign_unchecked(&[utxo0], 0, &alice);
+
+            Timestamp::set_timestamp(before.as_u64() * 1000);
+            let res_before = crate::pallet::validate_transaction::<Test>(&tx);
+
+            Timestamp::set_timestamp(now.as_u64() * 1000);
+            let res_now = crate::pallet::validate_transaction::<Test>(&tx);
+
+            Timestamp::set_timestamp(after.as_u64() * 1000);
+            let res_after = crate::pallet::validate_transaction::<Test>(&tx);
+
+            (res_before, res_now, res_after)
+        });
+
+        prop_assert_eq!(res_before, Err("Time lock restrictions not satisfied"));
+        prop_assert!(res_now.is_ok());
+        prop_assert!(res_after.is_ok());
+    }
+
+    #[test]
+    fn prop_time_lock_realtime_overflow(
+        time in ((u64::MAX / 1000 + 1)..=u64::MAX).prop_map(RawBlockTime::new)
+    ) {
+        execute_with_alice(|alice| {
+            let (utxo0, input0) = tx_input_gen_no_signature();
+            let tx = Transaction {
+                inputs: vec![input0],
+                outputs: vec![TransactionOutput::new_pubkey(50, H256::from(alice))],
+                time_lock: time,
+            }
+            .sign_unchecked(&[utxo0], 0, &alice);
+
+            // Check validate_transaction does not crash due to time lock being close to u64::MAX
+            let _ = crate::pallet::validate_transaction::<Test>(&tx);
+        });
+    }
 }
 
 // Testing token creation:
