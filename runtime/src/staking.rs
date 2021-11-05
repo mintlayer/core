@@ -23,7 +23,7 @@ use frame_support::fail;
 use frame_system::{Config as SysConfig, RawOrigin};
 use pallet_staking::{BalanceOf, Pallet as StakingPallet};
 use pallet_utxo::staking::StakingHelper;
-use sp_core::{sp_std::vec, H256};
+use sp_core::sp_std::vec;
 use sp_runtime::traits::StaticLookup;
 
 type StakeAccountId<T> = <T as SysConfig>::AccountId;
@@ -176,7 +176,6 @@ where
 
     fn lock_extra_for_staking(
         stash_account: &StakeAccountId<T>,
-        controller_account: &StakeAccountId<T>,
         value: u128,
     ) -> DispatchResultWithPostInfo {
         StakingPallet::<T>::bond_extra(

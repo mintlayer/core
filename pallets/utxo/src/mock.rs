@@ -205,7 +205,6 @@ impl<T: pallet_utxo::Config> StakingHelper<AccountId> for MockStaking<T> {
 
     fn lock_extra_for_staking(
         stash_account: &AccountId,
-        _controller_account: &AccountId,
         _value: u128,
     ) -> DispatchResultWithPostInfo {
         MOCK_STAKING.with(|stake_info| {

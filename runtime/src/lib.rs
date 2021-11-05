@@ -615,8 +615,8 @@ impl_runtime_apis! {
                 }
                 }
 
-                Some(pallet_utxo::Call::withdraw_stake(ref stash_account, ref outpoints)) => {
-                    match pallet_utxo::staking::validate_withdrawal::<Runtime>(&stash_account, &outpoints) {
+                Some(pallet_utxo::Call::withdraw_stake(ref stash_account)) => {
+                    match pallet_utxo::staking::validate_withdrawal::<Runtime>(&stash_account) {
                         Ok(valid_tx) => { return Ok(valid_tx); }
                         Err(e) => {
                             log::error!("pallet_utxo withdraw_stake validation error: {:?}", e);

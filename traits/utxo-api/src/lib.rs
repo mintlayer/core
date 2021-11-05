@@ -41,7 +41,6 @@ pub trait UtxoApi {
     fn withdraw_stake(
         caller: &Self::AccountId,
         stash_account: Self::AccountId,
-        outpoints: Vec<H256>,
     ) -> DispatchResultWithPostInfo;
 
     fn send_conscrit_p2pk(

@@ -60,6 +60,10 @@ pub fn release_config(endowed_accounts: Vec<MltKeysInfo>) -> Result<ChainSpec, S
     // only Alice has sudo powers
     let sudo = endowed_accounts.first().cloned().ok_or("endowed accounts is empty")?;
 
+    // alice won't be a validator.
+    let mut validator_accounts = endowed_accounts.clone();
+    validator_accounts.remove(0);
+
     Ok(ChainSpec::from_genesis(
         // Name
         "Release",
@@ -70,7 +74,7 @@ pub fn release_config(endowed_accounts: Vec<MltKeysInfo>) -> Result<ChainSpec, S
             testnet_genesis(
                 wasm_binary,
                 // Initial PoA authorities;
-                endowed_accounts.clone(),
+                validator_accounts.clone(),
                 // Sudo account
                 sudo.controller_account_id(),
                 // Pre-funded accounts;

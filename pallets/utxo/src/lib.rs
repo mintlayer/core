@@ -1129,14 +1129,13 @@ pub mod pallet {
         /// its ledger of datatype `StakingLedger`,
         /// the field `unlocking` of datatype `UnlockChunk`,
         /// and at field `era`.
-        #[pallet::weight(<T as Config>::WeightInfo::withdraw_stake(outpoints.len() as u32))]
+        #[pallet::weight(<T as Config>::WeightInfo::withdraw_stake(1 as u32))]
         pub fn withdraw_stake(
             origin: OriginFor<T>,
             stash_account: T::AccountId,
-            outpoints: Vec<H256>,
         ) -> DispatchResultWithPostInfo {
             ensure_signed(origin)?;
-            staking::withdraw::<T>(stash_account, outpoints)
+            staking::withdraw::<T>(stash_account)
         }
     }
 
@@ -1255,9 +1254,8 @@ where
     fn withdraw_stake(
         _caller: &T::AccountId,
         stash_account: T::AccountId,
-        outpoints: Vec<H256>,
     ) -> DispatchResultWithPostInfo {
-        staking::withdraw::<T>(stash_account, outpoints)
+        staking::withdraw::<T>(stash_account)
     }
 
     fn send_conscrit_p2pk(

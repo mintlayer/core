@@ -29,6 +29,7 @@ use sp_runtime::traits::{BlakeTwo256, Hash};
 use sp_runtime::transaction_validity::{TransactionLongevity, ValidTransaction};
 use sp_std::vec;
 
+use crate::staking::utils::remove_locked_utxos;
 pub use validation::*;
 
 /// A helper trait to handle staking NOT found in pallet-utxo.
@@ -61,7 +62,6 @@ pub trait StakingHelper<AccountId> {
     /// stake more funds for the validator
     fn lock_extra_for_staking(
         stash_account: &AccountId,
-        controller_account: &AccountId,
         value: Value,
     ) -> DispatchResultWithPostInfo;
 
@@ -102,10 +102,10 @@ pub(crate) fn lock_extra_for_staking<T: Config>(
 ) -> DispatchResultWithPostInfo {
     if let Destination::LockExtraForStaking {
         stash_account,
-        controller_account,
+        controller_account: _,
     } = &output.destination
     {
-        T::StakingHelper::lock_extra_for_staking(stash_account, controller_account, output.value)?;
+        T::StakingHelper::lock_extra_for_staking(stash_account, output.value)?;
         return utils::add_to_locked_utxos::<T>(hash_key, output, stash_account);
     }
     fail!(Error::<T>::InvalidOperation)
@@ -126,11 +126,8 @@ pub(crate) fn unlock_request_for_withdrawal<T: Config>(
 /// Consolidates all unlocked utxos  into one, and moves it to `UtxoStore`.
 /// Make SURE that `fn unlock(...)` has been called and the era for withdrawal has passed, before
 /// performing a withdrawal.
-pub(crate) fn withdraw<T: Config>(
-    stash_account: T::AccountId,
-    outpoints: Vec<H256>,
-) -> DispatchResultWithPostInfo {
-    validate_withdrawal::<T>(&stash_account, &outpoints)?;
+pub(crate) fn withdraw<T: Config>(stash_account: T::AccountId) -> DispatchResultWithPostInfo {
+    validate_withdrawal::<T>(&stash_account)?;
 
     let res = T::StakingHelper::withdraw(&stash_account)?;
 
@@ -143,7 +140,11 @@ pub(crate) fn withdraw<T: Config>(
         .checked_sub(fee)
         .ok_or("Total amount of Locked UTXOs is less than minimum?")?;
 
-    outpoints.iter().for_each(|hash| <LockedUtxos<T>>::remove(hash));
+    let outpoints = remove_locked_utxos::<T>(&stash_account);
+    log::debug!(
+        "removed a total of {} in the LockedUtxo storage.",
+        outpoints.len()
+    );
 
     let hash = BlakeTwo256::hash_of(&outpoints);
     // move locked utxo back to UtxoStore
@@ -160,6 +161,7 @@ pub(crate) fn withdraw<T: Config>(
 
 pub mod validation {
     use super::*;
+    use crate::staking::utils::get_all_locked_utxo_outpoints;
     use crate::{OutputHeaderHelper, TokenType, TransactionOutputFor};
 
     /// to validate `LockForStaking` and `LockExtraForStaking`
@@ -292,12 +294,8 @@ pub mod validation {
     /// 2. Checking the number of outpoints owned by the given pub key
     /// 3. Checking each outpoints if they are indeed owned by the pub key
     /// Returns a Result with an empty Ok, or an Err in string.
-    /// # Arguments
-    /// * `stash_account` - An existing stash account
-    /// * `outpoints` - List of keys of unlocked utxos said to be "owned" by the controller_pubkey
     pub fn validate_withdrawal<T: Config>(
         stash_account: &T::AccountId,
-        outpoints: &Vec<H256>,
     ) -> Result<ValidTransaction, &'static str> {
         ensure!(
             <StakingCount<T>>::contains_key(stash_account),
@@ -306,20 +304,13 @@ pub mod validation {
 
         let (num_of_utxos, _) = <StakingCount<T>>::get(stash_account.clone())
             .ok_or("cannot find the stash account inside the StakingCount storage")?;
+
+        let outpoints = get_all_locked_utxo_outpoints::<T>(stash_account);
+
         ensure!(
             num_of_utxos == outpoints.len() as u64,
-            "please provide all staked outpoints."
+            "Unsynced actual locked utxos from the expected count."
         );
-
-        for hash in outpoints {
-            ensure!(
-                <LockedUtxos<T>>::contains_key(hash),
-                Error::<T>::OutpointDoesNotExist
-            );
-
-            let utxo = <LockedUtxos<T>>::get(hash).ok_or(Error::<T>::OutpointDoesNotExist)?;
-            utils::is_owned_locked_utxo::<T>(&utxo, stash_account)?;
-        }
 
         let controller_account = T::StakingHelper::get_controller_account(stash_account)?;
         // if the funds are already unlocked, it means you should withdraw them first,
@@ -345,31 +336,40 @@ mod utils {
     use super::*;
     use sp_runtime::DispatchError;
 
-    pub fn is_owned_locked_utxo<T: Config>(
-        utxo: &TransactionOutput<T::AccountId>,
-        expected_stash_account: &T::AccountId,
-    ) -> Result<(), &'static str> {
-        match &utxo.destination {
-            Destination::LockForStaking {
-                stash_account,
-                controller_account: _,
-                session_key: _,
-            }
-            | Destination::LockExtraForStaking {
-                stash_account,
-                controller_account: _,
-            } => {
-                ensure!(
-                    stash_account == expected_stash_account,
-                    "hash of stake not owned"
-                );
-            }
-            _ => {
-                log::error!("For locked utxos, only with destinations `Stake` and `StakeExtra` are allowed.");
-                Err("destination not applicable")?
-            }
+    /// Retrieves all the outpoints owned by the given stash acount.
+    // TODO: keep track of "our" Locked UTXO separately?
+    pub fn get_all_locked_utxo_outpoints<T: Config>(stash_acc: &T::AccountId) -> Vec<H256> {
+        LockedUtxos::<T>::iter()
+            .filter_map(|(k, v)| match v.destination {
+                Destination::LockForStaking {
+                    stash_account,
+                    controller_account: _,
+                    session_key: _,
+                }
+                | Destination::LockExtraForStaking {
+                    stash_account,
+                    controller_account: _,
+                } => {
+                    if *stash_acc == stash_account {
+                        Some(k)
+                    } else {
+                        None
+                    }
+                }
+                _non_staking_destination => None,
+            })
+            .collect()
+    }
+
+    /// removes all locked utxos of the given stash_account.
+    /// returns the list of outpoints removed from the `LockedUtxo` storage
+    pub fn remove_locked_utxos<T: Config>(stash_account: &T::AccountId) -> Vec<H256> {
+        let outpoints = get_all_locked_utxo_outpoints::<T>(stash_account);
+        for k in &outpoints {
+            LockedUtxos::<T>::remove(*k)
         }
-        Ok(())
+
+        outpoints
     }
 
     /// adds to the `LockedUtxo` storage
