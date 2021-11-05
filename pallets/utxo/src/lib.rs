@@ -217,7 +217,9 @@ pub mod pallet {
         CreatePP(Vec<u8>, Vec<u8>),
         /// Pay to an existing contract. Takes a destination account,
         /// whether the call funds the contract, and input data.
-        CallPP(AccountId, bool, Vec<u8>),
+        CallPP(AccountId, Vec<u8>),
+        /// Fund an existing contract
+        FundPP(AccountId),
         /// Pay to script hash
         ScriptHash(H256),
     }
@@ -272,16 +274,19 @@ pub mod pallet {
         }
 
         /// Create a new output to call a smart contract routine.
-        pub fn new_call_pp(
-            value: Value,
-            dest_account: AccountId,
-            fund: bool,
-            input: Vec<u8>,
-        ) -> Self {
+        pub fn new_call_pp(value: Value, dest_account: AccountId, input: Vec<u8>) -> Self {
             Self {
                 value,
                 header: 0,
-                destination: Destination::CallPP(dest_account, fund, input),
+                destination: Destination::CallPP(dest_account, input),
+            }
+        }
+
+        pub fn new_fund_pp(value: Value, dest_account: AccountId) -> Self {
+            Self {
+                value,
+                header: 0,
+                destination: Destination::FundPP(dest_account),
             }
         }
 
@@ -468,20 +473,11 @@ pub mod pallet {
         dest: &T::AccountId,
         utxo_hash: H256,
         utxo_value: u128,
-        fund_contract: bool,
         data: &Vec<u8>,
     ) -> Result<(), &'static str> {
         let weight: Weight = 6000000000;
 
-        T::ProgrammablePool::call(
-            caller,
-            dest,
-            weight,
-            utxo_hash,
-            utxo_value,
-            fund_contract,
-            data,
-        )
+        T::ProgrammablePool::call(caller, dest, weight, utxo_hash, utxo_value, data)
     }
 
     pub fn validate_transaction<T: Config>(
@@ -619,10 +615,10 @@ pub mod pallet {
                 Destination::CreatePP(_, _) => {
                     log::info!("TODO validate CreatePP as output");
                 }
-                Destination::CallPP(_, _, _) => {
+                Destination::CallPP(_, _) => {
                     log::info!("TODO validate CallPP as output");
                 }
-                Destination::Pubkey(_) | Destination::ScriptHash(_) => {}
+                Destination::Pubkey(_) | Destination::ScriptHash(_) | Destination::FundPP(_) => {}
             }
         }
 
@@ -682,7 +678,10 @@ pub mod pallet {
                     Destination::CreatePP(_, _) => {
                         log::info!("TODO validate spending of CreatePP");
                     }
-                    Destination::CallPP(_, _, _) => {
+                    Destination::CallPP(_, _) => {
+                        log::info!("TODO validate spending of CallPP");
+                    }
+                    Destination::FundPP(_) => {
                         // 32-byte hash + 1 byte length
                         ensure!(
                             input.witness.len() == 33,
@@ -758,8 +757,11 @@ pub mod pallet {
                 Destination::CreatePP(script, data) => {
                     create::<T>(caller, script, hash, output.value, &data)?;
                 }
-                Destination::CallPP(acct_id, fund, data) => {
-                    call::<T>(caller, acct_id, hash, output.value, *fund, data)?;
+                Destination::CallPP(acct_id, data) => {
+                    call::<T>(caller, acct_id, hash, output.value, data)?;
+                }
+                Destination::FundPP(acct_id) => {
+                    T::ProgrammablePool::fund(acct_id, hash, output.value)?;
                 }
                 _ => {}
             }
@@ -1020,7 +1022,7 @@ fn construct_inputs<T: Config>(
     for outpoint in outpoints.iter() {
         let tx = <UtxoStore<T>>::get(&outpoint).ok_or("UTXO doesn't exist!")?;
         match tx.destination {
-            Destination::CallPP(_, _, _) => {
+            Destination::FundPP(_) => {
                 inputs.push(TransactionInput::new_script(
                     *outpoint,
                     Builder::new().into_script(),
@@ -1092,7 +1094,7 @@ where
     ) -> Result<(), DispatchError> {
         let tx = Transaction {
             inputs: construct_inputs::<T>(outpoints)?,
-            outputs: vec![TransactionOutput::new_call_pp(value, dest.clone(), true, data.clone())],
+            outputs: vec![TransactionOutput::new_call_pp(value, dest.clone(), data.clone())],
             time_lock: Default::default(),
         };
 

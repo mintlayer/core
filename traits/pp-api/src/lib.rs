@@ -21,7 +21,8 @@ pub trait ProgrammablePoolApi {
         gas_limit: Weight,
         utxo_hash: H256,
         utxo_value: u128,
-        fund_contract: bool,
         input_data: &Vec<u8>,
     ) -> Result<(), &'static str>;
+
+    fn fund(dest: &Self::AccountId, utxo_hash: H256, utxo_value: u128) -> Result<(), &'static str>;
 }

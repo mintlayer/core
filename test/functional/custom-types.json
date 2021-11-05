@@ -13,8 +13,13 @@
 			"type": "struct",
 			"type_mapping": [
 				[ "dest_account", "AccountId" ],
-				[ "fund", "bool" ],
 				[ "input_data", "Vec<u8>" ]
+			]
+		},
+		"DestinationFundPP": {
+			"type": "struct",
+			"type_mapping": [
+				[ "dest_account", "AccountId" ]
 			]
 		},
 		"Destination": {
@@ -22,7 +27,8 @@
 			"type_mapping": [
 				[ "Pubkey", "Pubkey" ],
 				[ "CreatePP", "DestinationCreatePP" ],
-				[ "CallPP", "DestinationCallPP" ]
+				[ "CallPP", "DestinationCallPP" ],
+				[ "FundPP", "DestinationFundPP" ]
 			]
 		},
 		"TransactionInput": {

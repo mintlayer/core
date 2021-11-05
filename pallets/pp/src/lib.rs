@@ -232,22 +232,8 @@ where
         gas_limit: Weight,
         utxo_hash: H256,
         utxo_value: u128,
-        fund_contract: bool,
         input_data: &Vec<u8>,
     ) -> Result<(), &'static str> {
-        // check if `dest` exist and if it does, update its balance information
-        <ContractBalances<T>>::get(&dest).ok_or("Contract doesn't exist!")?;
-        <ContractBalances<T>>::mutate(dest, |info| {
-            info.as_mut().unwrap().utxos.push((utxo_hash, utxo_value));
-        });
-
-        // only if explicitly specified, fund the contract
-        if fund_contract {
-            <ContractBalances<T>>::mutate(dest, |info| {
-                info.as_mut().unwrap().funds += utxo_value.saturated_into::<u128>();
-            });
-        }
-
         let _ = pallet_contracts::Pallet::<T>::bare_call(
             caller.clone(),
             dest.clone(),
@@ -261,6 +247,16 @@ where
             log::error!("Call failed: {:?}", e);
             "Failed to call smart contract"
         })?;
+
+        Ok(())
+    }
+
+    fn fund(dest: &T::AccountId, utxo_hash: H256, utxo_value: u128) -> Result<(), &'static str> {
+        <ContractBalances<T>>::get(&dest).ok_or("Contract doesn't exist!")?;
+        <ContractBalances<T>>::mutate(dest, |info| {
+            info.as_mut().unwrap().utxos.push((utxo_hash, utxo_value));
+            info.as_mut().unwrap().funds += utxo_value;
+        });
 
         Ok(())
     }
