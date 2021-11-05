@@ -16,6 +16,7 @@ To run the test cases, just run command `cargo test`.
          "Pubkey": "Pubkey",
          "CreatePP": "DestinationCreatePP",
          "CallPP": "DestinationCallPP",
+         "FundPP": "DestinationFundPP",
          "ScriptHash": "H256",
          "LockForStaking": "DestinationStake",
          "LockExtraForStaking": "DestinationStakeExtra"
@@ -37,6 +38,9 @@ To run the test cases, just run command `cargo test`.
    "DestinationCallPP": {
       "dest_account": "AccountId",
       "input_data": "Vec<u8>"
+   },
+   "DestinationFundPP": {
+      "dest_account": "AccountId"
    },
    "TransactionInput": {
       "outpoint": "Hash",
