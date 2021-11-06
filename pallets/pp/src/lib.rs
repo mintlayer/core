@@ -230,8 +230,8 @@ where
         caller: &T::AccountId,
         dest: &T::AccountId,
         gas_limit: Weight,
-        utxo_hash: H256,
-        utxo_value: u128,
+        _utxo_hash: H256,
+        _utxo_value: u128,
         input_data: &Vec<u8>,
     ) -> Result<(), &'static str> {
         let _ = pallet_contracts::Pallet::<T>::bare_call(
