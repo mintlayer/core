@@ -233,10 +233,9 @@ pub mod pallet {
     }
 
     impl<AccountId> TransactionOutput<AccountId> {
-        /// By default the header is 0:
+        /// By default the data is None:
         /// token type for both the value and fee is MLT,
         /// and the signature method is BLS.
-        /// functions are available in TXOutputHeaderImpls to update the header.
         pub fn new_pubkey(value: Value, pubkey: H256) -> Self {
             let pubkey = sp_core::sr25519::Public::from_h256(pubkey);
             Self {
@@ -420,7 +419,6 @@ pub mod pallet {
         <RewardTotal<T>>::put(remainder as Value);
 
         for authority in auths {
-            // TODO: where do we get the header info?
             let utxo = TransactionOutput::new_pubkey(share_value, *authority);
 
             let hash = {

@@ -73,8 +73,8 @@ class ExampleTest(MintlayerTestFramework):
             outputs=[
                 utxo.Output(
                     value=50,
-                    header=0,
-                    destination=utxo.DestPubkey(bob.public_key)
+                    destination=utxo.DestPubkey(bob.public_key),
+                    data=None
                 ),
             ]
         ).sign(alice, [utxos[0][1]])
@@ -88,13 +88,13 @@ class ExampleTest(MintlayerTestFramework):
             outputs=[
                 utxo.Output(
                     value=30,
-                    header=0,
-                    destination=utxo.DestPubkey(alice.public_key)
+                    destination=utxo.DestPubkey(alice.public_key),
+                    data=None
                 ),
                 utxo.Output(
                     value=20,
-                    header=0,
-                    destination=utxo.DestPubkey(bob.public_key)
+                    destination=utxo.DestPubkey(bob.public_key),
+                    data=None
                 ),
             ]
         ).sign(bob, tx1.outputs)
