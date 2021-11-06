@@ -30,6 +30,10 @@ class Client():
     def encode_obj(self, ty, obj):
         return self.substrate.encode_scale(ty, obj)
 
+    """ SCALE-decode given object """
+    def decode_obj(self, ty, obj):
+        return self.substrate.decode_scale(ty, obj)
+
     """ SCALE-encode given object """
     def encode(self, obj):
         return self.encode_obj(obj.type_string(), obj.json())
@@ -155,6 +159,8 @@ class Destination():
             return DestCreatePP.load(obj['CreatePP'])
         if 'CallPP' in obj:
             return DestCallPP.load(obj['CallPP'])
+        if 'FundPP' in obj:
+            return DestFundPP.load(obj['FundPP'])
         if 'LockForStaking' in obj:
             return DestLockForStaking.load(obj['LockForStaking'])
         if 'LockExtraForStaking' in obj:
@@ -209,17 +215,30 @@ class DestCreatePP(Destination):
         return { 'CreatePP': { 'code': self.code, 'data': self.data } }
 
 class DestCallPP(Destination):
-    def __init__(self, dest_account, fund, input_data):
+    def __init__(self, dest_account, input_data):
         self.acct = dest_account
-        self.fund = fund
         self.data = input_data
 
     @staticmethod
     def load(obj):
-        return DestCallPP(ss58_decode(obj['dest_account']), obj['fund'], obj['input_data'])
+        return DestCallPP(ss58_decode(obj['dest_account']), obj['input_data'])
 
     def json(self):
-        return { 'CallPP': { 'dest_account': self.acct, 'fund': self.fund, 'input_data': self.data } }
+        return { 'CallPP': { 'dest_account': self.acct, 'input_data': self.data } }
+
+    def get_pubkey(self):
+        return str(self.acct)
+
+class DestFundPP(Destination):
+    def __init__(self, dest_account):
+        self.acct = dest_account
+
+    @staticmethod
+    def load(obj):
+        return DestFundPP(ss58_decode(obj['dest_account']))
+
+    def json(self):
+        return { 'FundPP': { 'dest_account': self.acct } }
 
     def get_pubkey(self):
         return str(self.acct)
