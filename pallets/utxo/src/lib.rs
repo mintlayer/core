@@ -944,7 +944,11 @@ pub mod pallet {
                     ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
                     log::info!("TODO validate CallPP as output");
                 }
-                Destination::Pubkey(_) | Destination::ScriptHash(_) | Destination::FundPP(_) => {
+                Destination::FundPP(_) => {
+                    ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
+                    log::info!("TODO validate FundPP as output");
+                }
+                Destination::Pubkey(_) | Destination::ScriptHash(_) => {
                     ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
                 }
                 Destination::LockForStaking { .. } | Destination::LockExtraForStaking { .. } => {
@@ -1383,8 +1387,9 @@ impl<T: Config> crate::Pallet<T> {
 
 fn construct_inputs<T: Config>(
     outpoints: &Vec<H256>,
-) -> Result<Vec<TransactionInput>, DispatchError> {
+) -> Result<(u128, Vec<TransactionInput>), DispatchError> {
     let mut inputs: Vec<TransactionInput> = Vec::new();
+    let mut total_value = 0u128;
 
     let mut outpoints = outpoints.clone();
     outpoints.sort();
@@ -1393,6 +1398,7 @@ fn construct_inputs<T: Config>(
         let tx = <UtxoStore<T>>::get(&outpoint).ok_or("UTXO doesn't exist!")?;
         match tx.destination {
             Destination::FundPP(_) => {
+                total_value = total_value.checked_add(tx.value).ok_or("total value overflow")?;
                 inputs.push(TransactionInput::new_script(
                     *outpoint,
                     Builder::new().into_script(),
@@ -1410,7 +1416,35 @@ fn construct_inputs<T: Config>(
         }
     }
 
-    Ok(inputs)
+    Ok((total_value, inputs))
+}
+
+fn submit_c2x_tx<T: Config>(
+    caller: &T::AccountId,
+    inputs: &Vec<H256>,
+    outpoint: TransactionOutputFor<T>,
+) -> Result<(), DispatchError> {
+    let (total_value, vins) = construct_inputs::<T>(inputs)?;
+    let mut vouts: Vec<TransactionOutputFor<T>> = vec![outpoint];
+
+    // if there are funds left over from the C2X transfer rest back to the contract
+    if total_value > vouts[0].value {
+        vouts.push(TransactionOutput::new_fund_pp(
+            total_value - vouts[0].value,
+            caller.clone(),
+        ));
+    }
+
+    spend::<T>(
+        caller,
+        &Transaction {
+            inputs: vins,
+            outputs: vouts,
+            time_lock: Default::default(),
+        },
+    )
+    .map_err(|_| "Failed to spend the transaction!")?;
+    Ok(())
 }
 
 impl<T: Config> UtxoApi for Pallet<T>
@@ -1455,14 +1489,11 @@ where
         let pubkey_raw: [u8; 32] =
             dest.encode().try_into().map_err(|_| "Failed to get caller's public key")?;
 
-        let tx = Transaction {
-            inputs: construct_inputs::<T>(outpoints)?,
-            outputs: vec![TransactionOutput::new_pubkey(value, H256::from(pubkey_raw))],
-            time_lock: Default::default(),
-        };
-
-        spend::<T>(caller, &tx).map_err(|_| "Failed to spend the transaction!")?;
-        Ok(())
+        submit_c2x_tx::<T>(
+            caller,
+            outpoints,
+            TransactionOutput::new_pubkey(value, H256::from(pubkey_raw)),
+        )
     }
 
     fn submit_c2c_tx(
@@ -1472,13 +1503,10 @@ where
         data: &Vec<u8>,
         outpoints: &Vec<H256>,
     ) -> Result<(), DispatchError> {
-        let tx = Transaction {
-            inputs: construct_inputs::<T>(outpoints)?,
-            outputs: vec![TransactionOutput::new_call_pp(value, dest.clone(), data.clone())],
-            time_lock: Default::default(),
-        };
-
-        spend::<T>(caller, &tx).map_err(|_| "Failed to spend the transaction!")?;
-        Ok(())
+        submit_c2x_tx::<T>(
+            caller,
+            outpoints,
+            TransactionOutput::new_call_pp(value, dest.clone(), data.clone()),
+        )
     }
 }
