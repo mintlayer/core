@@ -1,44 +1,26 @@
 {
   "metadataVersion": "0.1.0",
   "source": {
-    "hash": "0x2d1e1ed093dfb95c258342e80e7e1800c8c87cf4459837291a35245d23d15038",
-    "language": "ink! 3.0.0-rc4",
+    "hash": "0xc8d99645ca13ba2acbf5cc7942aa22fa3c94d9b5e4f0b6dc0f023494ceaf8893",
+    "language": "ink! 3.0.0-rc3",
     "compiler": "rustc 1.56.0-nightly"
   },
   "contract": {
     "name": "pooltester",
     "version": "0.1.0",
     "authors": [
-      "RBB S.r.l"
+      "[your_name] <[your_email]>"
     ]
   },
   "spec": {
     "constructors": [
       {
-        "args": [
-          {
-            "name": "value",
-            "type": {
-              "displayName": [
-                "i64"
-              ],
-              "type": 1
-            }
-          }
-        ],
+        "args": [],
         "docs": [],
         "name": [
           "new"
         ],
         "selector": "0x9bae9d5e"
-      },
-      {
-        "args": [],
-        "docs": [],
-        "name": [
-          "default"
-        ],
-        "selector": "0xed4b9d1b"
       }
     ],
     "docs": [],
@@ -47,7 +29,7 @@
       {
         "args": [],
         "docs": [],
-        "mutates": true,
+        "mutates": false,
         "name": [
           "get"
         ],
@@ -81,6 +63,15 @@
               ],
               "type": 2
             }
+          },
+          {
+            "name": "value",
+            "type": {
+              "displayName": [
+                "u128"
+              ],
+              "type": 5
+            }
           }
         ],
         "docs": [],
@@ -89,30 +80,13 @@
           "send_to_pubkey"
         ],
         "payable": false,
-        "returnType": null,
+        "returnType": {
+          "displayName": [
+            "Result"
+          ],
+          "type": 6
+        },
         "selector": "0xd10be299"
-      },
-      {
-        "args": [],
-        "docs": [],
-        "mutates": true,
-        "name": [
-          "fund"
-        ],
-        "payable": false,
-        "returnType": null,
-        "selector": "0x4aafa343"
-      },
-      {
-        "args": [],
-        "docs": [],
-        "mutates": true,
-        "name": [
-          "send_to_self"
-        ],
-        "payable": false,
-        "returnType": null,
-        "selector": "0xba6ee83a"
       },
       {
         "args": [
@@ -129,16 +103,16 @@
             "name": "selector",
             "type": {
               "displayName": [],
-              "type": 5
+              "type": 9
             }
           },
           {
             "name": "value",
             "type": {
               "displayName": [
-                "i64"
+                "u128"
               ],
-              "type": 1
+              "type": 5
             }
           }
         ],
@@ -148,7 +122,12 @@
           "call_contract"
         ],
         "payable": false,
-        "returnType": null,
+        "returnType": {
+          "displayName": [
+            "Result"
+          ],
+          "type": 6
+        },
         "selector": "0xc7c0b7ca"
       }
     ]
@@ -203,6 +182,65 @@
       "def": {
         "primitive": "u8"
       }
+    },
+    {
+      "def": {
+        "primitive": "u128"
+      }
+    },
+    {
+      "def": {
+        "variant": {
+          "variants": [
+            {
+              "fields": [
+                {
+                  "type": 7,
+                  "typeName": "T"
+                }
+              ],
+              "name": "Ok"
+            },
+            {
+              "fields": [
+                {
+                  "type": 8,
+                  "typeName": "E"
+                }
+              ],
+              "name": "Err"
+            }
+          ]
+        }
+      },
+      "params": [
+        7,
+        8
+      ],
+      "path": [
+        "Result"
+      ]
+    },
+    {
+      "def": {
+        "tuple": []
+      }
+    },
+    {
+      "def": {
+        "variant": {
+          "variants": [
+            {
+              "discriminant": 0,
+              "name": "FailGetRandomSource"
+            }
+          ]
+        }
+      },
+      "path": [
+        "pooltester",
+        "TransferError"
+      ]
     },
     {
       "def": {
