@@ -1096,7 +1096,8 @@ where
         )
     }
 
-    fn submit_c2pk_tx(
+	/// Create Contract-to-Pubkey UTXO (P2PK) and spend it right away
+    fn submit_c2pk_transfer(
         caller: &T::AccountId,
         dest: &T::AccountId,
         value: u128,
@@ -1112,7 +1113,8 @@ where
         )
     }
 
-    fn submit_c2c_tx(
+	/// Create Contract-to-Contract UTXO (CallPP) and spend it right away
+    fn submit_c2c_call(
         caller: &Self::AccountId,
         dest: &Self::AccountId,
         value: u128,
@@ -1123,6 +1125,20 @@ where
             caller,
             outpoints,
             TransactionOutput::new_call_pp(value, dest.clone(), data.clone()),
+        )
+    }
+
+	/// Create Contract-to-Contract UTXO (FundPP) and spend it right away
+    fn submit_c2c_transfer(
+        caller: &Self::AccountId,
+        dest: &Self::AccountId,
+        value: u128,
+        outpoints: &Vec<H256>,
+    ) -> Result<(), DispatchError> {
+        submit_c2x_tx::<T>(
+            caller,
+            outpoints,
+            TransactionOutput::new_fund_pp(value, dest.clone()),
         )
     }
 }

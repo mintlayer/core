@@ -33,14 +33,21 @@ pub trait UtxoApi {
         sig: H512,
     ) -> DispatchResultWithPostInfo;
 
-    fn submit_c2pk_tx(
+    fn submit_c2pk_transfer(
         caller: &Self::AccountId,
         destination: &Self::AccountId,
         value: u128,
         outpoints: &Vec<H256>,
     ) -> Result<(), DispatchError>;
 
-    fn submit_c2c_tx(
+    fn submit_c2c_transfer(
+        caller: &Self::AccountId,
+        destination: &Self::AccountId,
+        value: u128,
+        outpoints: &Vec<H256>,
+    ) -> Result<(), DispatchError>;
+    
+    fn submit_c2c_call(
         caller: &Self::AccountId,
         destination: &Self::AccountId,
         value: u128,

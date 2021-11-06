@@ -120,66 +120,40 @@ pub mod pallet {
     }
 }
 
-/// Create Pay-to-Pubkey transaction from smart contract's UTXOs
-/// and send it by calling into the UTXO system.
-///
-/// UTXO system implements the consensus-critical coin-picking
-/// algorithm by condensing all vins into one transaction and
-/// using the outpoint in asceding order to select the place
-/// for each vin in the array of inputs. This ensures that all
-/// PP validator nodes that execute the transaction output the
-/// exact same TX.
-///
-/// # Arguments
-/// * `caller` - Smart contract's account id
-/// * `dest`   - Recipients account id
-/// * `value`  - How much is tranferred to `dest`
-fn send_p2pk_tx<T: Config>(
+enum C2xType {
+    /// Transfer some of the contract funds to a public key
+    PubkeyTransfer,
+    /// Transfer some of the contract funds to another contract
+    ContractTransfer,
+    /// Call another contract with SCALE-encoded data
+    ContractCall(Vec<u8>),
+}
+
+// TODO:
+fn submit_c2x_tx<T: Config>(
     caller: &T::AccountId,
     dest: &T::AccountId,
     value: u128,
+    tx_type: C2xType,
 ) -> Result<(), DispatchError> {
     let fund_info =
-        <ContractBalances<T>>::get(&caller).ok_or(DispatchError::Other("Caller doesn't exist"))?;
+        <ContractBalances<T>>::take(&caller).ok_or(DispatchError::Other("Caller doesn't exist"))?;
     ensure!(fund_info.funds >= value, "Caller doesn't have enough funds");
     let outpoints = fund_info.utxos.iter().map(|x| x.0).collect::<Vec<H256>>();
 
-    T::Utxo::submit_c2pk_tx(caller, dest, value, &outpoints).map(|_| {
-        <ContractBalances<T>>::mutate(&caller, |info| {
-            info.as_mut().unwrap().utxos = Vec::new();
-            info.as_mut().unwrap().funds = 0;
-        });
-    })
-}
+    let res = match tx_type {
+        C2xType::PubkeyTransfer => {
+            T::Utxo::submit_c2pk_transfer(caller, dest, value, &outpoints)
+        }
+        C2xType::ContractTransfer => {
+            T::Utxo::submit_c2c_transfer(caller, dest, value, &outpoints)
+        }
+        C2xType::ContractCall(data) => {
+            T::Utxo::submit_c2c_call(caller, dest, fund_info.funds, &data, &outpoints)
+        }
+    };
 
-/// Create Contract-to-Contract transfer that allows smart contracts to
-/// call each other and transfer funds through the UTXO system.
-///
-/// UTXO system converts this high-level transaction request from
-/// `caller` to `dest` to an actual transaction, uses OP_SPEND
-/// to unlock the funds of the UTXOs that the `caller` has
-/// acquired and creates a new vout with `data` that
-/// calls `dest` and transfers all funds of `caller` to this smart contract
-///
-/// * `caller` -  Smart contract that is doing the calling
-/// * `dest` - Smart contract that is to be called
-/// * `data` - Selector and all other data `dest` takes as input
-fn send_c2c_tx<T: Config>(
-    caller: &T::AccountId,
-    dest: &T::AccountId,
-    data: &Vec<u8>,
-) -> Result<(), DispatchError> {
-    let fund_info = <ContractBalances<T>>::get(caller).ok_or(DispatchError::Other(
-        "Contract doesn't own any UTXO or it doesn't exist!",
-    ))?;
-    let outpoints = fund_info.utxos.iter().map(|x| x.0).collect::<Vec<H256>>();
-
-    T::Utxo::submit_c2c_tx(caller, dest, fund_info.funds, data, &outpoints).map(|_| {
-        <ContractBalances<T>>::mutate(&caller, |info| {
-            info.as_mut().unwrap().utxos = Vec::new();
-            info.as_mut().unwrap().funds = 0;
-        });
-    })
+    res
 }
 
 impl<T: Config> ProgrammablePoolApi for Pallet<T>
@@ -286,13 +260,10 @@ impl<T: pallet_contracts::Config + pallet::Config> ChainExtension<T> for Pallet<
             x if x == ChainExtensionCall::Transfer as u32 => {
                 let (dest, value): (T::AccountId, u128) = env.read_as()?;
 
-                if !<ContractBalances<T>>::get(&dest).is_none() {
-                    return Err(DispatchError::Other(
-                        "Contract-to-contract transactions not implemented",
-                    ));
+                match <ContractBalances<T>>::get(&dest) {
+                    Some(_) => submit_c2x_tx::<T>(&acc_id, &dest, value, C2xType::ContractTransfer)?,
+                    None => submit_c2x_tx::<T>(&acc_id, &dest, value, C2xType::PubkeyTransfer)?
                 }
-
-                send_p2pk_tx::<T>(&acc_id, &dest, value)?
             }
             x if x == ChainExtensionCall::Balance as u32 => {
                 let fund_info = <ContractBalances<T>>::get(&acc_id).ok_or(DispatchError::Other(
@@ -321,8 +292,7 @@ impl<T: pallet_contracts::Config + pallet::Config> ChainExtension<T> for Pallet<
                 let mut selector = selector.to_vec();
                 selector.append(&mut data);
 
-                // C2C transfers all funds as refunding to a contract is not possible (at least for now)
-                send_c2c_tx::<T>(&acc_id, &dest, &selector)?
+                submit_c2x_tx::<T>(&acc_id, &dest, value, C2xType::ContractCall(selector))?
             }
             _ => {
                 log::error!("Called an unregistered `func_id`: {:}", func_id);
