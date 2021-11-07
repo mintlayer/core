@@ -515,6 +515,13 @@ pub mod pallet {
             tx.check_time_lock::<T>(),
             "Time lock restrictions not satisfied"
         );
+        // In order to avoid race condition in network we maintain a list of required utxos for a tx
+        // Example of race condition:
+        // Assume both alice and bob have 10 coins each and bob owes charlie 20 coins
+        // In order to pay charlie alice must first send 10 coins to bob which creates a new utxo
+        // If bob uses the new utxo to try and send the coins to charlie before charlie receives the alice to bob 10 coins utxo
+        // then the tx from bob to charlie is invalid. By maintaining a list of required utxos we can ensure the tx can happen as and
+        // when the utxo is available. We use max longevity at the moment. That should be fixed.
 
         // Resolve the transaction inputs by looking up UTXOs being spent by them.
         //
