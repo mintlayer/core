@@ -10,50 +10,72 @@ To run the test cases, just run command `cargo test`.
 1. After running the core, declare the custom datatypes. GO to **Settings** > **Developer** tab and paste in the ff. JSON and then save:
 ```json
 {
-  "Value": "u128",
-  "Destination": {
-    "_enum": {
-      "Pubkey": "Pubkey",
-      "CreatePP": "DestinationCreatePP",
-      "CallPP": "DestinationCallPP",
-      "ScriptHash": "H256"
-    }
-  },
-  "DestinationCreatePP": {
-    "code": "Vec<u8>",
-    "data": "Vec<u8>"
-  },
-  "DestinationCallPP": {
-    "dest_account": "AccountId",
-    "input_data": "Vec<u8>"
-  },
-  "TransactionInput": {
-    "outpoint": "Hash",
-    "lock": "Vec<u8>",
-    "witness": "Vec<u8>"
-  },
-  "TransactionOutput": {
-    "value": "Value",
-    "header": "TXOutputHeader",
-    "destination": "Destination"
-  },
-  "TransactionOutputFor": "TransactionOutput",
-  "Transaction": {
-    "inputs": "Vec<TransactionInput>",
-    "outputs": "Vec<TransactionOutput>",
-    "time_lock": "Compact<u64>"
-  },
-  "TransactionFor": "Transaction",
-  "Address": "MultiAddress",
-  "LookupSource": "MultiAddress",
-  "TXOutputHeader": "u128",
-  "Difficulty": "U256",
-  "DifficultyAndTimestamp": {
-    "difficulty": "Difficulty",
-    "timestamp": "Moment"
-  },
-  "Pubkey": "H256",
-  "Public": "H256"
+   "Value": "u128",
+   "Destination": {
+      "_enum": {
+         "Pubkey": "Pubkey",
+         "CreatePP": "DestinationCreatePP",
+         "CallPP": "DestinationCallPP",
+         "ScriptHash": "H256"
+      }
+   },
+   "DestinationCreatePP": {
+      "code": "Vec<u8>",
+      "data": "Vec<u8>"
+   },
+   "DestinationCallPP": {
+      "dest_account": "AccountId",
+      "input_data": "Vec<u8>"
+   },
+   "TransactionInput": {
+      "outpoint": "Hash",
+      "lock": "Vec<u8>",
+      "witness": "Vec<u8>"
+   },
+   "NftDataHash": {
+      "Hash32": "[u8; 32]",
+      "Raw": "Vec<u8>"
+   },
+   "TokenId": {
+      "inner": "H160"
+   },
+   "TokenTransferV1": {
+      "token_id": "TokenId",
+      "amount": "Value"
+   },
+   "TokenIssuanceV1": {
+      "token_ticker": "Vec<u8>",
+      "amount_to_issue": "Value",
+      "number_of_decimals": "u8",
+      "metadata_uri": "Vec<u8>"
+   },
+   "OutputData": {
+      "_enum": {
+         "TokenTransferV1": "TokenTransferV1",
+         "TokenIssuanceV1": "TokenIssuanceV1"
+      }
+   },
+   "TransactionOutput": {
+      "value": "Value",
+      "destination": "Destination",
+      "data": "Option<OutputData>"
+   },
+   "TransactionOutputFor": "TransactionOutput",
+   "Transaction": {
+      "inputs": "Vec<TransactionInput>",
+      "outputs": "Vec<TransactionOutput>",
+      "time_lock": "Compact<u64>"
+   },
+   "TransactionFor": "Transaction",
+   "Address": "MultiAddress",
+   "LookupSource": "MultiAddress",
+   "Difficulty": "U256",
+   "DifficultyAndTimestamp": {
+      "difficulty": "Difficulty",
+      "timestamp": "Moment"
+   },
+   "Pubkey": "H256",
+   "Public": "H256"
 }
 ```
 2. To confirm that Alice already has UTXO at genesis, go to **Developer** > **Chain state** > **Storage**.  
