@@ -32,10 +32,6 @@ To run the test cases, just run command `cargo test`.
       "lock": "Vec<u8>",
       "witness": "Vec<u8>"
    },
-   "NftDataHash": {
-      "Hash32": "[u8; 32]",
-      "Raw": "Vec<u8>"
-   },
    "TokenId": {
       "inner": "H160"
    },
@@ -44,10 +40,10 @@ To run the test cases, just run command `cargo test`.
       "amount": "Value"
    },
    "TokenIssuanceV1": {
-      "token_ticker": "Vec<u8>",
+      "token_ticker": "String",
       "amount_to_issue": "Value",
       "number_of_decimals": "u8",
-      "metadata_uri": "Vec<u8>"
+      "metadata_uri": "String"
    },
    "OutputData": {
       "_enum": {
@@ -75,7 +71,8 @@ To run the test cases, just run command `cargo test`.
       "timestamp": "Moment"
    },
    "Pubkey": "H256",
-   "Public": "H256"
+   "Public": "H256",
+   "String": "Vec<u8>"
 }
 ```
 2. To confirm that Alice already has UTXO at genesis, go to **Developer** > **Chain state** > **Storage**.  
@@ -89,7 +86,7 @@ Click the **+** button on the right. It should show:
   header: 0
 }
 ```
-3. Let's spend 50 of Alice's utxo to Bob. Go to **Developer** > **Extrinsics**.
+3. Let's spend 50 of AlicFe's utxo to Bob. Go to **Developer** > **Extrinsics**.
    Choose `utxo` for _submit the following extrinsic_ dropdown.
    Input the following parameters (and then submit transaction):
     * outpoint: `0xe9ea4ce6bf71396302db8d08e7924b5be6a5b0913798bd38741c6c6e9811e864`

@@ -48,7 +48,6 @@
 		"TokenIssuanceV1": {
 			"type": "struct",
 			"type_mapping": [
-				[ "token_id", "TokenId" ],
 				[ "token_ticker", "Vec<u8>" ],
 				[ "amount_to_issue", "Value" ],
 				[ "number_of_decimals", "u8" ],

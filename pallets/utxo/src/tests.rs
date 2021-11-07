@@ -1608,7 +1608,199 @@ fn test_transfer_and_issuance_in_one_tx() {
 }
 
 #[test]
-fn test_transfer_for_multiple_tokens() {}
+fn test_transfer_for_multiple_tokens() {
+    let (mut test_ext, alice_pub_key, karl_pub_key) = new_test_ext_and_keys();
+    test_ext.execute_with(|| {
+        //
+        // Issue token 1 and send all tokens to Karl
+        //
+        let (utxo0, input0) = tx_input_gen_no_signature();
+        let tx = Transaction {
+            inputs: vec![input0],
+            outputs: vec![TransactionOutput::new_p2pk_with_data(
+                crate::tokens::Mlt(1000).to_munit(),
+                H256::from(karl_pub_key),
+                OutputData::TokenIssuanceV1 {
+                    token_ticker: "TKN1".as_bytes().to_vec(),
+                    amount_to_issue: 1_000_000_000,
+                    number_of_decimals: 2,
+                    metadata_uri: "tkn1.mintlayer.org".as_bytes().to_vec(),
+                },
+            )],
+            time_lock: Default::default(),
+        }
+        .sign_unchecked(&[utxo0.clone()], 0, &alice_pub_key);
+        let tkn1_token_id = TokenId::new(&tx.inputs[0]);
+        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx.clone()));
+        let tkn1_utxo_hash = tx.outpoint(0);
+        let tkn1_utxo = tx.outputs[0].clone();
+        //
+        // Issue token 2 and send all tokens to Alice
+        //
+        let input1 = TransactionInput::new_empty(tkn1_utxo_hash);
+        let tx = Transaction {
+            inputs: vec![input1],
+            outputs: vec![
+                TransactionOutput::new_p2pk_with_data(
+                    0,
+                    H256::from(alice_pub_key),
+                    OutputData::TokenTransferV1 {
+                        token_id: tkn1_token_id.clone(),
+                        amount: 1_000_000_000,
+                    },
+                ),
+                TransactionOutput::new_p2pk_with_data(
+                    crate::tokens::Mlt(500).to_munit(),
+                    H256::from(alice_pub_key),
+                    OutputData::TokenIssuanceV1 {
+                        token_ticker: "TKN2".as_bytes().to_vec(),
+                        amount_to_issue: 2_000_000_000,
+                        number_of_decimals: 4,
+                        metadata_uri: "tkn2.mintlayer.org".as_bytes().to_vec(),
+                    },
+                ),
+            ],
+            time_lock: Default::default(),
+        }
+        .sign_unchecked(&[tkn1_utxo.clone()], 0, &karl_pub_key);
+        let tkn2_token_id = TokenId::new(&tx.inputs[0]);
+        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx.clone()));
+        let tkn1_utxo_hash = tx.outpoint(0);
+        let tkn2_utxo_hash = tx.outpoint(1);
+        //
+        // Issue token 3 and send all tokens to Karl
+        //
+        let input1 = TransactionInput::new_empty(tkn1_utxo_hash);
+        let input2 = TransactionInput::new_empty(tkn2_utxo_hash);
+        let prev_utxos = [tx.outputs[0].clone(), tx.outputs[1].clone()];
+        let tx = Transaction {
+            inputs: vec![input1, input2],
+            outputs: vec![
+                TransactionOutput::new_p2pk_with_data(
+                    0,
+                    H256::from(karl_pub_key),
+                    OutputData::TokenTransferV1 {
+                        token_id: tkn1_token_id.clone(),
+                        amount: 1_000_000_000,
+                    },
+                ),
+                TransactionOutput::new_p2pk_with_data(
+                    0,
+                    H256::from(karl_pub_key),
+                    OutputData::TokenTransferV1 {
+                        token_id: tkn2_token_id.clone(),
+                        amount: 2_000_000_000,
+                    },
+                ),
+                TransactionOutput::new_p2pk_with_data(
+                    crate::tokens::Mlt(300).to_munit(),
+                    H256::from(karl_pub_key),
+                    OutputData::TokenIssuanceV1 {
+                        token_ticker: "TKN3".as_bytes().to_vec(),
+                        amount_to_issue: 3_000_000_000,
+                        number_of_decimals: 6,
+                        metadata_uri: "tkn3.mintlayer.org".as_bytes().to_vec(),
+                    },
+                ),
+            ],
+            time_lock: Default::default(),
+        }
+        .sign_unchecked(&prev_utxos, 0, &alice_pub_key)
+        .sign_unchecked(&prev_utxos, 1, &alice_pub_key);
+        let tkn3_token_id = TokenId::new(&tx.inputs[0]);
+        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx.clone()));
+        let tkn1_utxo_hash = tx.outpoint(0);
+        let tkn2_utxo_hash = tx.outpoint(1);
+        let tkn3_utxo_hash = tx.outpoint(2);
+
+        //
+        // Transfer 3 kinds of tokens to Alice and check them all
+        //
+        let input1 = TransactionInput::new_empty(tkn1_utxo_hash);
+        let input2 = TransactionInput::new_empty(tkn2_utxo_hash);
+        let input3 = TransactionInput::new_empty(tkn3_utxo_hash);
+        let prev_utxos = [tx.outputs[0].clone(), tx.outputs[1].clone(), tx.outputs[2].clone()];
+        let tx = Transaction {
+            inputs: vec![input1, input2, input3],
+            outputs: vec![
+                TransactionOutput::new_p2pk_with_data(
+                    0,
+                    H256::from(alice_pub_key),
+                    OutputData::TokenTransferV1 {
+                        token_id: tkn1_token_id.clone(),
+                        amount: 1_000_000_000,
+                    },
+                ),
+                TransactionOutput::new_p2pk_with_data(
+                    0,
+                    H256::from(alice_pub_key),
+                    OutputData::TokenTransferV1 {
+                        token_id: tkn2_token_id.clone(),
+                        amount: 2_000_000_000,
+                    },
+                ),
+                TransactionOutput::new_p2pk_with_data(
+                    0,
+                    H256::from(alice_pub_key),
+                    OutputData::TokenTransferV1 {
+                        token_id: tkn3_token_id.clone(),
+                        amount: 3_000_000_000,
+                    },
+                ),
+            ],
+            time_lock: Default::default(),
+        }
+        .sign_unchecked(&prev_utxos, 0, &karl_pub_key)
+        .sign_unchecked(&prev_utxos, 1, &karl_pub_key)
+        .sign_unchecked(&prev_utxos, 2, &karl_pub_key);
+        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx.clone()));
+        let tkn1_utxo_hash = tx.outpoint(0);
+        let tkn2_utxo_hash = tx.outpoint(1);
+        let tkn3_utxo_hash = tx.outpoint(2);
+        // Check tkn1
+        UtxoStore::<Test>::get(tkn1_utxo_hash)
+            .unwrap()
+            .data
+            .map(|x| match x {
+                OutputData::TokenTransferV1 { token_id, amount } => {
+                    assert_eq!(token_id, tkn1_token_id);
+                    assert_eq!(amount, 1_000_000_000);
+                }
+                _ => {
+                    panic!("corrupted data");
+                }
+            })
+            .unwrap();
+        // Check tkn2
+        UtxoStore::<Test>::get(tkn2_utxo_hash)
+            .unwrap()
+            .data
+            .map(|x| match x {
+                OutputData::TokenTransferV1 { token_id, amount } => {
+                    assert_eq!(token_id, tkn2_token_id);
+                    assert_eq!(amount, 2_000_000_000);
+                }
+                _ => {
+                    panic!("corrupted data");
+                }
+            })
+            .unwrap();
+        // Check tkn3
+        UtxoStore::<Test>::get(tkn3_utxo_hash)
+            .unwrap()
+            .data
+            .map(|x| match x {
+                OutputData::TokenTransferV1 { token_id, amount } => {
+                    assert_eq!(token_id, tkn3_token_id);
+                    assert_eq!(amount, 3_000_000_000);
+                }
+                _ => {
+                    panic!("corrupted data");
+                }
+            })
+            .unwrap();
+    });
+}
 
 #[test]
 fn test_immutable_tx_format() {
