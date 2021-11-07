@@ -905,7 +905,7 @@ fn test_tokens_issuance_empty_ticker() {
 fn test_tokens_issuance_too_big_ticker() {
     // Ticker too long
     let data = OutputData::TokenIssuanceV1 {
-        token_ticker: Vec::from([0u8; 10_000]),
+        token_ticker: Vec::from([b"A"[0]; 10_000]),
         amount_to_issue: 0,
         number_of_decimals: 0,
         metadata_uri: vec![],
@@ -1477,6 +1477,138 @@ fn test_token_creation_with_insufficient_fee() {
         );
     });
 }
+
+#[test]
+fn test_transfer_and_issuance_in_one_tx() {
+    let (mut test_ext, alice_pub_key, karl_pub_key) = new_test_ext_and_keys();
+    test_ext.execute_with(|| {
+        // Alice issue 1_000_000_000 MLS-01, and send them to Karl
+        let (utxo0, input0) = tx_input_gen_no_signature();
+        let tx = Transaction {
+            inputs: vec![input0],
+            outputs: vec![
+                TransactionOutput::new_pubkey(90, H256::from(alice_pub_key)),
+                TransactionOutput::new_p2pk_with_data(
+                    crate::tokens::Mlt(1000).to_munit(),
+                    H256::from(karl_pub_key),
+                    OutputData::TokenIssuanceV1 {
+                        token_ticker: "BensT".as_bytes().to_vec(),
+                        amount_to_issue: 1_000_000_000,
+                        // Should be not more than 18 numbers
+                        number_of_decimals: 2,
+                        metadata_uri: "mintlayer.org".as_bytes().to_vec(),
+                    },
+                ),
+            ],
+            time_lock: Default::default(),
+        }
+        .sign_unchecked(&[utxo0.clone()], 0, &alice_pub_key);
+        let first_issuance_token_id = TokenId::new(&tx.inputs[0]);
+        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx.clone()));
+        let token_utxo_hash = tx.outpoint(1);
+        let token_utxo = tx.outputs[1].clone();
+
+        // Let's send 300_000_000 and rest back and create another token
+        let tx = Transaction {
+            inputs: vec![TransactionInput::new_empty(token_utxo_hash)],
+            outputs: vec![
+                TransactionOutput::new_p2pk_with_data(
+                    0,
+                    H256::from(alice_pub_key),
+                    OutputData::TokenTransferV1 {
+                        token_id: first_issuance_token_id.clone(),
+                        amount: 300_000_000,
+                    },
+                ),
+                TransactionOutput::new_p2pk_with_data(
+                    0,
+                    H256::from(karl_pub_key),
+                    OutputData::TokenTransferV1 {
+                        token_id: first_issuance_token_id.clone(),
+                        amount: 700_000_000,
+                    },
+                ),
+                TransactionOutput::new_p2pk_with_data(
+                    0,
+                    H256::from(karl_pub_key),
+                    OutputData::TokenIssuanceV1 {
+                        token_ticker: "Token".as_bytes().to_vec(),
+                        amount_to_issue: 5_000_000_000,
+                        // Should be not more than 18 numbers
+                        number_of_decimals: 12,
+                        metadata_uri: "mintlayer.org".as_bytes().to_vec(),
+                    },
+                ),
+            ],
+            time_lock: Default::default(),
+        }
+        .sign_unchecked(&[token_utxo.clone()], 0, &karl_pub_key);
+        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx.clone()));
+        let alice_transfer_utxo_hash = tx.outpoint(0);
+        let karl_transfer_utxo_hash = tx.outpoint(1);
+        let karl_issuance_utxo_hash = tx.outpoint(2);
+        assert!(!UtxoStore::<Test>::contains_key(H256::from(
+            token_utxo_hash
+        )));
+        assert!(UtxoStore::<Test>::contains_key(alice_transfer_utxo_hash));
+        assert!(UtxoStore::<Test>::contains_key(karl_transfer_utxo_hash));
+        assert!(UtxoStore::<Test>::contains_key(karl_issuance_utxo_hash));
+
+        // Let's check token transfer
+        UtxoStore::<Test>::get(alice_transfer_utxo_hash)
+            .unwrap()
+            .data
+            .map(|x| match x {
+                OutputData::TokenTransferV1 { token_id, amount } => {
+                    assert_eq!(token_id, first_issuance_token_id);
+                    assert_eq!(amount, 300_000_000);
+                }
+                _ => {
+                    panic!("corrupted data");
+                }
+            })
+            .unwrap();
+
+        UtxoStore::<Test>::get(karl_transfer_utxo_hash)
+            .unwrap()
+            .data
+            .map(|x| match x {
+                OutputData::TokenTransferV1 { token_id, amount } => {
+                    assert_eq!(token_id, first_issuance_token_id);
+                    assert_eq!(amount, 700_000_000);
+                }
+                _ => {
+                    panic!("corrupted data");
+                }
+            })
+            .unwrap();
+
+        // Let's check token issuance
+        UtxoStore::<Test>::get(karl_issuance_utxo_hash)
+            .unwrap()
+            .data
+            .map(|x| match x {
+                OutputData::TokenIssuanceV1 {
+                    token_ticker,
+                    amount_to_issue,
+                    number_of_decimals,
+                    metadata_uri,
+                } => {
+                    assert_eq!(token_ticker, "Token".as_bytes().to_vec());
+                    assert_eq!(amount_to_issue, 5_000_000_000);
+                    assert_eq!(number_of_decimals, 12);
+                    assert_eq!(metadata_uri, "mintlayer.org".as_bytes().to_vec());
+                }
+                _ => {
+                    panic!("corrupted data");
+                }
+            })
+            .unwrap();
+    });
+}
+
+#[test]
+fn test_transfer_for_multiple_tokens() {}
 
 #[test]
 fn test_immutable_tx_format() {
