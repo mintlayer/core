@@ -29,3 +29,5 @@ test/config.ini
 # direnv cache
 .direnv
 
+# Python compiled files
+*.pyc

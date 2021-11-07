@@ -18,3 +18,11 @@ default-features = false
 git = 'https://github.com/paritytech/substrate.git'
 version = '4.0.0-dev'
 branch = "master"
+
+[features]
+default = ['std']
+testcontext = []
+std = [
+    "sp-std/std",
+    "frame-support/std",
+]

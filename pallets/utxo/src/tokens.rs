@@ -1,7 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use crate::TransactionInput;
-use base58_nostd::{FromBase58, FromBase58Error, ToBase58};
+use base58_nostd::{FromBase58, FromBase58Error, ToBase58, TOKEN_ID_PREFIX};
 use codec::{Decode, Encode};
 use frame_support::ensure;
 use frame_support::{dispatch::Vec, RuntimeDebug};
@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use sp_core::Hasher;
 use sp_core::H160;
 use sp_runtime::traits::BlakeTwo256;
+use sp_std::vec;
 
 const LENGTH_BYTES_TO_REPRESENT_ID: usize = 20;
 
@@ -39,11 +40,11 @@ impl TokenId {
     }
 
     pub fn to_string(&self) -> Vec<u8> {
-        self.inner.as_bytes().to_mls_b58check().to_vec()
+        self.inner.as_bytes().to_mls_b58check(Some(vec![TOKEN_ID_PREFIX])).to_vec()
     }
 
     pub fn from_string(data: &str) -> Result<TokenId, &'static str> {
-        let data = data.from_mls_b58check().map_err(|x| match x {
+        let data = data.from_mls_b58check(Some(vec![TOKEN_ID_PREFIX])).map_err(|x| match x {
             FromBase58Error::InvalidBase58Character { .. } => "Invalid Base58 character",
             FromBase58Error::InvalidBase58Length => "Invalid Base58 length",
             FromBase58Error::InvalidChecksum => "Invalid checksum",
