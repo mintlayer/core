@@ -254,6 +254,11 @@ pub fn run() -> sc_cli::Result<()> {
                     },
                 }
 
+                if cli.release {
+                    let chain_spec = cli.load_spec("release")?;
+                    config.chain_spec = chain_spec;
+                }
+
                 match config.role {
                     Role::Light => service::new_light(config),
                     _ => service::new_full(config),
