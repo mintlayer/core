@@ -1113,29 +1113,26 @@ pub mod pallet {
         }
 
         /// unlock the stake, if user wants to stop validating and withdraw the locked utxos.
+        /// it has to be the STASH ACCOUNT.
         /// If used with `pallet-staking`, it uses the `BondingDuration`
         /// to set the period/era on when to withdraw.
         #[pallet::weight(<T as Config>::WeightInfo::unlock_request_for_withdrawal(1 as u32))]
         pub fn unlock_request_for_withdrawal(
-            origin: OriginFor<T>,
-            stash_account: T::AccountId,
+            stash_origin: OriginFor<T>,
         ) -> DispatchResultWithPostInfo {
-            ensure_signed(origin)?;
-            staking::unlock_request_for_withdrawal::<T>(stash_account)
+            staking::unlock_request_for_withdrawal::<T>(ensure_signed(stash_origin)?)
         }
 
-        /// withdraw unlocked stake. Make sure the period for withdrawal has passed.
-        /// If used with `pallet-staking`, then the period can be found in
-        /// its ledger of datatype `StakingLedger`,
+        /// withdraw unlocked stake. Make sure the era for withdrawal has passed.
+        /// it has to be the STASH ACCOUNT.
+        /// If used with `pallet-staking`,it can be found in the ledger of datatype `StakingLedger`,
         /// the field `unlocking` of datatype `UnlockChunk`,
         /// and at field `era`.
         #[pallet::weight(<T as Config>::WeightInfo::withdraw_stake(1 as u32))]
         pub fn withdraw_stake(
-            origin: OriginFor<T>,
-            stash_account: T::AccountId,
+            stash_origin: OriginFor<T>
         ) -> DispatchResultWithPostInfo {
-            ensure_signed(origin)?;
-            staking::withdraw::<T>(stash_account)
+            staking::withdraw::<T>(ensure_signed(stash_origin)?)
         }
     }
 
@@ -1245,17 +1242,15 @@ where
     }
 
     fn unlock_request_for_withdrawal(
-        _caller: &T::AccountId,
-        stash_account: T::AccountId,
+        caller: &T::AccountId
     ) -> DispatchResultWithPostInfo {
-        staking::unlock_request_for_withdrawal::<T>(stash_account)
+        staking::unlock_request_for_withdrawal::<T>(caller.clone())
     }
 
     fn withdraw_stake(
-        _caller: &T::AccountId,
-        stash_account: T::AccountId,
+        caller: &T::AccountId
     ) -> DispatchResultWithPostInfo {
-        staking::withdraw::<T>(stash_account)
+        staking::withdraw::<T>(caller.clone())
     }
 
     fn send_conscrit_p2pk(

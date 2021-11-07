@@ -132,6 +132,8 @@ pub(crate) fn withdraw<T: Config>(stash_account: T::AccountId) -> DispatchResult
     let res = T::StakingHelper::withdraw(&stash_account)?;
 
     let stash_pubkey = convert_to_h256::<T>(&stash_account)?;
+
+    // remove from the `StakingCount` storage
     let (_, mut total) =
         <StakingCount<T>>::take(stash_account.clone()).ok_or(Error::<T>::StashAccountNotFound)?;
 

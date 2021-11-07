@@ -275,8 +275,8 @@ fn pausing_and_withdrawing() {
         let (alice_pub_key, _) = keys_and_hashes[0];
 
         assert_ok!(Utxo::unlock_request_for_withdrawal(
-            Origin::signed(H256::zero()),
-            H256::from(alice_pub_key)
+            Origin::signed(H256::from(alice_pub_key)),
+
         ));
 
         // increase the block number 6 times, as if new blocks has been created.
@@ -284,9 +284,7 @@ fn pausing_and_withdrawing() {
             next_block();
         }
         assert_ok!(Utxo::withdraw_stake(
-            Origin::signed(H256::zero()),
-            H256::from(alice_pub_key),
-            vec![alice_locked_utxo]
+            Origin::signed( H256::from(alice_pub_key))
         ));
 
         assert!(!LockedUtxos::<Test>::contains_key(alice_locked_utxo));
@@ -300,8 +298,8 @@ fn non_validator_pausing() {
         let (karl_pub_key, _) = keys_and_hashes[1];
         assert_err!(
             Utxo::unlock_request_for_withdrawal(
-                Origin::signed(H256::zero()),
-                H256::from(karl_pub_key)
+                Origin::signed(H256::from(karl_pub_key)),
+
             ),
             Error::<Test>::StashAccountNotFound
         );
@@ -314,15 +312,9 @@ fn non_validator_withdrawing() {
     test_ext.execute_with(|| {
         let (karl_pub_key, _) = keys_and_hashes[1];
 
-        let mut alice_locked_utxo: Vec<H256> =
-            LockedUtxos::<Test>::iter().map(|(key, _)| key).collect();
-        let alice_locked_utxo = alice_locked_utxo.pop().unwrap();
-
         assert_err!(
             Utxo::withdraw_stake(
-                Origin::signed(H256::zero()),
-                H256::from(karl_pub_key),
-                vec![alice_locked_utxo]
+                Origin::signed(H256::from(karl_pub_key))
             ),
             "StashAccountNotFound"
         );
@@ -335,48 +327,20 @@ fn withdrawing_before_expected_period() {
     test_ext.execute_with(|| {
         let mut alice_locked_utxo: Vec<H256> =
             LockedUtxos::<Test>::iter().map(|(key, _)| key).collect();
-        let alice_locked_utxo = alice_locked_utxo.pop().unwrap();
 
         // ALICE (index 0) wants to stop validating.
         let (alice_pub_key, _) = keys_and_hashes[0];
 
         assert_ok!(Utxo::unlock_request_for_withdrawal(
-            Origin::signed(H256::zero()),
-            H256::from(alice_pub_key)
+            Origin::signed(H256::from(alice_pub_key))
         ));
 
         // ALICE is not waiting for the withdrawal period.
         assert_err!(
             Utxo::withdraw_stake(
-                Origin::signed(H256::zero()),
-                H256::from(alice_pub_key),
-                vec![alice_locked_utxo]
+                Origin::signed(H256::from(alice_pub_key))
             ),
-            Error::<Test>::InvalidOperation
-        );
-    })
-}
-
-#[test]
-fn withdrawing_unknown_locked_utxo() {
-    let (mut test_ext, keys_and_hashes) = multiple_keys_test_ext();
-    test_ext.execute_with(|| {
-        // ALICE (index 0) wants to stop validating.
-        let (alice_pub_key, _) = keys_and_hashes[0];
-
-        assert_ok!(Utxo::unlock_request_for_withdrawal(
-            Origin::signed(H256::zero()),
-            H256::from(alice_pub_key)
-        ));
-
-        // ALICE withdrawing something.
-        assert_err!(
-            Utxo::withdraw_stake(
-                Origin::signed(H256::zero()),
-                H256::from(alice_pub_key),
-                vec![H256::random()]
-            ),
-            "OutpointDoesNotExist"
+            "not yet time to withdraw"
         );
     })
 }

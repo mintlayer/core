@@ -250,17 +250,22 @@ impl<T: pallet_utxo::Config> StakingHelper<AccountId> for MockStaking<T> {
         MOCK_STAKING.with(|stake_info| {
             let mut stake_info = stake_info.borrow_mut();
 
-            if let Some(Some(withdrawal_block)) = stake_info.lock_map.get(stash_account) {
-                if *withdrawal_block <= stake_info.current_block {
-                    let ctrl_account = stake_info.lock_ctrl_map.remove(stash_account).unwrap();
-                    stake_info.ctrl_map.remove(&ctrl_account);
-                    stake_info.lock_map.remove(&stash_account);
+            match stake_info.lock_map.get(stash_account) {
+                Some(Some(withdrawal_block)) => {
+                    if *withdrawal_block <= stake_info.current_block {
+                        let ctrl_account = stake_info.lock_ctrl_map.remove(stash_account).unwrap();
+                        stake_info.ctrl_map.remove(&ctrl_account);
+                        stake_info.lock_map.remove(&stash_account);
 
-                    return Ok(().into());
+                        Ok(().into())
+                    } else {
+                        Err("not yet time to withdraw".into())
+                    }
                 }
+                Some(_) | None => { Err("not yet unlocked".into()) }
+
             }
 
-            Err(pallet_utxo::Error::<T>::InvalidOperation)?
         })
     }
 }
