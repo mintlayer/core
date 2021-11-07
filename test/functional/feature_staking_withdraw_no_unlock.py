@@ -74,7 +74,7 @@ class ExampleTest(MintlayerTestFramework):
         ledger = list(client.get_staking_ledger())
         assert_equal(len(ledger),2)
 
-        client.withdraw_stake(alice_stash,locked_utxos)
+        client.withdraw_stake(alice_stash)
 
         assert_equal( len(list(client.staking_count())), 2)
 

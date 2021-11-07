@@ -91,7 +91,7 @@ class ExampleTest(MintlayerTestFramework):
 
         time.sleep(500)
 
-        (_, _, w_events) = client.withdraw_stake(alice_stash,locked_utxos)
+        (_, _, w_events) = client.withdraw_stake(alice_stash)
 
 
         assert_equal(w_events[0].value['module_id'],'Staking')

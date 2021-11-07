@@ -6,10 +6,9 @@ from substrateinterface.exceptions import SubstrateRequestException
 import scalecodec
 import os
 import logging
-from _staking import Staking
 
 """ Client. A thin wrapper over SubstrateInterface """
-class Client(Staking):
+class Client():
     def __init__(self, url="ws://127.0.0.1", port=9944):
         source_dir = os.path.dirname(os.path.abspath(__file__))
         types_file = os.path.join(source_dir, "..", "..", "custom-types.json")
@@ -72,6 +71,18 @@ class Client(Staking):
 
         return filter(matching , staking_count)
 
+
+    # TODO: move to a separate file
+    """ accesses pallet-staking to retrieve the ledger """
+    def get_staking_ledger(self):
+        query = self.substrate.query_map(
+            module='Staking',
+            storage_function='Ledger'
+        )
+
+        return ((h, o.value) for (h, o) in query)
+
+
     """ Submit a transaction onto the blockchain """
     def submit(self, keypair, tx):
         call = self.substrate.compose_call(
@@ -93,8 +104,7 @@ class Client(Staking):
     def unlock_request_for_withdrawal(self, keypair):
         call = self.substrate.compose_call(
             call_module = 'Utxo',
-            call_function = 'unlock_request_for_withdrawal',
-            call_params = { 'stash_account': keypair.public_key },
+            call_function = 'unlock_request_for_withdrawal'
         )
         #TODO ^ same code as above; put them in 1 func
         extrinsic = self.substrate.create_signed_extrinsic(call=call, keypair=keypair)
@@ -108,11 +118,10 @@ class Client(Staking):
             self.log.debug("Failed to send: {}".format(e))
 
     """ Submit a transaction onto the blockchain: withdraw """
-    def withdraw_stake(self, keypair, outpoints):
+    def withdraw_stake(self, keypair):
         call = self.substrate.compose_call(
             call_module = 'Utxo',
-            call_function = 'withdraw_stake',
-            call_params = { 'stash_account': keypair.public_key, 'outpoints': outpoints },
+            call_function = 'withdraw_stake'
         )
         #TODO ^ same code as above; put them in 1 func
         extrinsic = self.substrate.create_signed_extrinsic(call=call, keypair=keypair)

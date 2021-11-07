@@ -62,11 +62,11 @@ BASE_SCRIPTS= [
     'feature_staking_extra_wrong_controller.py',
     'feature_staking_first_time.py',
     'feature_staking_less_than_minimum.py',
-    'feature_staking_twice.py',
+    'feature_staking_diff_addresses.py',
     'feature_staking_unlock_not_validator.py',
     'feature_staking_withdraw_no_unlock.py',
-    'feature_staking_withdraw_not_validator.py',
-    # 'feature_staking_unlock_and_withdraw.py' ## should be ran on 20 secs
+    'feature_staking_withdraw_not_validator.py'
+#     'feature_staking_unlock_and_withdraw.py' ## should be ran on 20 secs
     # Don't append tests at the end to avoid merge conflicts
     # Put them in a random line within the section that fits their approximate run-time
 ]

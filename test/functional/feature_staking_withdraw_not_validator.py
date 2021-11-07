@@ -63,12 +63,8 @@ class ExampleTest(MintlayerTestFramework):
         assert_equal(len(ledger[0][1]['unlocking']),0)
         assert_equal(len(ledger[1][1]['unlocking']),0)
 
-        alice_stash = Keypair.create_from_uri('//Alice//stash')
         charlie = Keypair.create_from_uri('//Charlie')
-        # Alice's locked utxo
-        outpoints = list(map(lambda e: e[0].value, list(client.locked_utxos_for(alice_stash))))
-
-        client.withdraw_stake(charlie,outpoints)
+        client.withdraw_stake(charlie)
 
         ledger = list(client.get_staking_ledger())
         assert_equal(len(ledger[0][1]['unlocking']),0)
@@ -77,6 +73,21 @@ class ExampleTest(MintlayerTestFramework):
         locked_utxos = list(client.utxos('LockedUtxos'))
         # there should still be 2 utxo locked, no actual withdrawal happened.
         assert_equal(len(locked_utxos),2)
+
+        #check that unlocking is successful, after an error happened
+        alice_stash = Keypair.create_from_uri('//Alice//stash')
+        (_, _, events) = client.unlock_request_for_withdrawal(alice_stash)
+
+        assert_equal(events[0].value['module_id'],'Staking')
+        assert_equal(events[0].value['event_id'], 'Chilled')
+
+        assert_equal(events[1].value['module_id'],'Staking')
+        assert_equal(events[1].value['event_id'], 'Unbonded')
+
+        assert_equal(events[2].value['module_id'],'Utxo')
+        assert_equal(events[2].value['event_id'], 'StakeUnlocked')
+
+
 
 
 if __name__ == '__main__':

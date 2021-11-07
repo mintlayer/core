@@ -60,10 +60,8 @@ class ExampleTest(MintlayerTestFramework):
         client = self.nodes[0].rpc_client
 
         alice = Keypair.create_from_uri('//Alice')
-        alice_stash = Keypair.create_from_uri('//Alice//stash')
         charlie = Keypair.create_from_uri('//Charlie')
         charlie_stash = Keypair.create_from_uri('//Charlie//stash')
-        print("CHARLIE STASH: ", charlie_stash.public_key)
 
         # fetch the genesis utxo from storage
         utxos = list(client.utxos_for(alice))
@@ -105,7 +103,6 @@ class ExampleTest(MintlayerTestFramework):
             ]
         ).sign(charlie_stash, tx1.outputs)
         (_,_,events) = client.submit(charlie_stash, tx2)
-        print("THE EXPECTED EVENTS: ",events)
 
         # there should already be 3 staking, adding Charlie in the list.
         assert_equal( len(list(client.staking_count())), 3 )
