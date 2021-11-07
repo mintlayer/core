@@ -315,7 +315,7 @@ impl pallet_template::Config for Runtime {
 parameter_types! {
     pub const MinimumStake: u128 = MINIMUM_STAKE;
     pub const StakeWithdrawalFee: u128 =  1 * MLT_UNIT;
-    pub const RewardReductionPeriod: BlockNumber = 1 * YEARS; // reward reduced every year
+    pub const RewardReductionPeriod: BlockNumber = 1 * MINUTES; // reward reduced every year
     pub const RewardReductionFraction: Percent = Percent::from_percent(25); // reward reduced at 25%
     pub const InitialReward: u128 = 100 * MLT_UNIT;
     pub const DefaultMinimumReward: u128 = 1;
@@ -603,29 +603,16 @@ impl_runtime_apis! {
             tx: <Block as BlockT>::Extrinsic,
             block_hash: <Block as BlockT>::Hash,
         ) -> TransactionValidity {
-            log::debug!("transaction to validate: {:?}",tx);
-             match IsSubType::<pallet_utxo::Call::<Runtime>>::is_sub_type(&tx.function) {
-                Some(pallet_utxo::Call::spend(ref tx))  => {
-                    match pallet_utxo::validate_transaction::<Runtime>(&tx) {
+            log::info!("transaction to validate: {:?}",tx);
+            if let Some(pallet_utxo::Call::spend(ref tx)) =
+            IsSubType::<pallet_utxo::Call::<Runtime>>::is_sub_type(&tx.function) {
+                match pallet_utxo::validate_transaction::<Runtime>(&tx) {
                     Ok(valid_tx) => { return Ok(valid_tx); }
                     Err(e) => {
-                        log::error!("pallet_utxo spend validation error: {:?}", e);
+                        log::error!("utxo validation failed: {:?}",e);
                         return Err(TransactionValidityError::Invalid(InvalidTransaction::Custom(1)));
                     }
                 }
-                }
-
-                Some(pallet_utxo::Call::withdraw_stake(ref stash_account)) => {
-                    match pallet_utxo::staking::validate_withdrawal::<Runtime>(&stash_account) {
-                        Ok(valid_tx) => { return Ok(valid_tx); }
-                        Err(e) => {
-                            log::error!("pallet_utxo withdraw_stake validation error: {:?}", e);
-                            return Err(TransactionValidityError::Invalid(InvalidTransaction::Custom(2)));
-                        }
-                    }
-                }
-
-                None | Some(_) => {}
             }
 
             Executive::validate_transaction(source, tx, block_hash)

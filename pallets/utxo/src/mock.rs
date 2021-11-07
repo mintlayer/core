@@ -262,10 +262,8 @@ impl<T: pallet_utxo::Config> StakingHelper<AccountId> for MockStaking<T> {
                         Err("not yet time to withdraw".into())
                     }
                 }
-                Some(_) | None => { Err("not yet unlocked".into()) }
-
+                Some(_) | None => Err("not yet unlocked".into()),
             }
-
         })
     }
 }

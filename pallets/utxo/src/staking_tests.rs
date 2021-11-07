@@ -274,18 +274,17 @@ fn pausing_and_withdrawing() {
         // ALICE (index 0) wants to stop validating.
         let (alice_pub_key, _) = keys_and_hashes[0];
 
-        assert_ok!(Utxo::unlock_request_for_withdrawal(
-            Origin::signed(H256::from(alice_pub_key)),
-
-        ));
+        assert_ok!(Utxo::unlock_request_for_withdrawal(Origin::signed(
+            H256::from(alice_pub_key)
+        ),));
 
         // increase the block number 6 times, as if new blocks has been created.
         for _ in 1..6 {
             next_block();
         }
-        assert_ok!(Utxo::withdraw_stake(
-            Origin::signed( H256::from(alice_pub_key))
-        ));
+        assert_ok!(Utxo::withdraw_stake(Origin::signed(H256::from(
+            alice_pub_key
+        ))));
 
         assert!(!LockedUtxos::<Test>::contains_key(alice_locked_utxo));
     })
@@ -297,10 +296,7 @@ fn non_validator_pausing() {
     test_ext.execute_with(|| {
         let (karl_pub_key, _) = keys_and_hashes[1];
         assert_err!(
-            Utxo::unlock_request_for_withdrawal(
-                Origin::signed(H256::from(karl_pub_key)),
-
-            ),
+            Utxo::unlock_request_for_withdrawal(Origin::signed(H256::from(karl_pub_key)),),
             Error::<Test>::StashAccountNotFound
         );
     })
@@ -313,9 +309,7 @@ fn non_validator_withdrawing() {
         let (karl_pub_key, _) = keys_and_hashes[1];
 
         assert_err!(
-            Utxo::withdraw_stake(
-                Origin::signed(H256::from(karl_pub_key))
-            ),
+            Utxo::withdraw_stake(Origin::signed(H256::from(karl_pub_key))),
             "StashAccountNotFound"
         );
     })
@@ -331,15 +325,13 @@ fn withdrawing_before_expected_period() {
         // ALICE (index 0) wants to stop validating.
         let (alice_pub_key, _) = keys_and_hashes[0];
 
-        assert_ok!(Utxo::unlock_request_for_withdrawal(
-            Origin::signed(H256::from(alice_pub_key))
-        ));
+        assert_ok!(Utxo::unlock_request_for_withdrawal(Origin::signed(
+            H256::from(alice_pub_key)
+        )));
 
         // ALICE is not waiting for the withdrawal period.
         assert_err!(
-            Utxo::withdraw_stake(
-                Origin::signed(H256::from(alice_pub_key))
-            ),
+            Utxo::withdraw_stake(Origin::signed(H256::from(alice_pub_key))),
             "not yet time to withdraw"
         );
     })

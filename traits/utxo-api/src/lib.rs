@@ -34,12 +34,10 @@ pub trait UtxoApi {
     ) -> DispatchResultWithPostInfo;
 
     fn unlock_request_for_withdrawal(
-        caller: &Self::AccountId
+        stash_account_caller: &Self::AccountId,
     ) -> DispatchResultWithPostInfo;
 
-    fn withdraw_stake(
-        caller: &Self::AccountId
-    ) -> DispatchResultWithPostInfo;
+    fn withdraw_stake(stash_account_caller: &Self::AccountId) -> DispatchResultWithPostInfo;
 
     fn send_conscrit_p2pk(
         caller: &Self::AccountId,
