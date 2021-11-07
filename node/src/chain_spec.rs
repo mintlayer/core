@@ -89,7 +89,7 @@ pub fn development_config() -> Result<ChainSpec, String> {
         // Telemetry
         None,
         // Protocol ID
-        None,
+        "MintlayerDev".into(),
         // Properties
         None,
         // Extensions
@@ -141,7 +141,7 @@ pub fn local_testnet_config() -> Result<ChainSpec, String> {
         // Telemetry
         None,
         // Protocol ID
-        None,
+        "MintlayerTestLocal".into(),
         // Properties
         None,
         // Extensions
