@@ -83,6 +83,12 @@ class ExampleTest(MintlayerTestFramework):
                     destination=utxo.DestLockExtraForStaking(alice_stash.public_key, alice.public_key),
                     data=None
                 ),
+                # This output prevent reward overflow
+                utxo.Output(
+                    value=3981553255926290448385, # genesis amount - u64::MAX
+                    destination=utxo.DestPubkey(alice.public_key),
+                    data=None
+                )
             ]
         ).sign(alice_stash, [utxos[0][1]])
         (_,_,events) = client.submit(alice_stash, tx1)

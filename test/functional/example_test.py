@@ -121,6 +121,12 @@ class ExampleTest(MintlayerTestFramework):
                     destination=utxo.DestPubkey(alice.public_key),
                     data=None
                 ),
+                # This output prevent reward overflow
+                utxo.Output(
+                    value=3981553255926290448385, # genesis amount - u64::MAX
+                    destination=utxo.DestPubkey(alice.public_key),
+                    data=None
+                )
 
             ]
         ).sign(alice, [utxos[0][1]])
