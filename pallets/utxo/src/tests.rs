@@ -630,7 +630,17 @@ fn test_send_to_address() {
     })
 }
 
+// Proptest config to decrease the number of test runs by the factor of 16 (for expensive tests).
+fn proptest_expensive() -> proptest::test_runner::Config {
+    let mut config = proptest::test_runner::Config::default();
+    config.cases /= 16;
+    config
+}
+
 proptest! {
+    // These tests are fairly expensive, run fewer of them.
+    #![proptest_config(proptest_expensive())]
+
     #[test]
     fn prop_gen_block_time_real_works(bt in gen_block_time_real()) {
         // This generator should not sample block-based time.
