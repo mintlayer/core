@@ -894,9 +894,9 @@ fn test_tokens_issuance_empty_ticker() {
     // Ticker empty
     let data = OutputData::TokenIssuanceV1 {
         token_ticker: vec![],
-        amount_to_issue: 0,
-        number_of_decimals: 0,
-        metadata_uri: vec![],
+        amount_to_issue: 1_000_000_000,
+        number_of_decimals: 2,
+        metadata_uri: "mintlayer.org".to_bytes().to_vec(),
     };
     test_tx!(data, Err, "token ticker can't be empty");
 }
@@ -906,9 +906,9 @@ fn test_tokens_issuance_too_big_ticker() {
     // Ticker too long
     let data = OutputData::TokenIssuanceV1 {
         token_ticker: Vec::from([b"A"[0]; 10_000]),
-        amount_to_issue: 0,
-        number_of_decimals: 0,
-        metadata_uri: vec![],
+        amount_to_issue: 1_000_000_000,
+        number_of_decimals: 2,
+        metadata_uri: "mintlayer.org".to_bytes().to_vec(),
     };
     test_tx!(data, Err, "token ticker is too long");
 }
@@ -919,8 +919,8 @@ fn test_tokens_issuance_amount_zero() {
     let data = OutputData::TokenIssuanceV1 {
         token_ticker: b"BensT".to_vec(),
         amount_to_issue: 0,
-        number_of_decimals: 0,
-        metadata_uri: vec![],
+        number_of_decimals: 2,
+        metadata_uri: "mintlayer.org".to_bytes().to_vec(),
     };
     test_tx!(data, Err, "output value must be nonzero");
 }
@@ -932,7 +932,7 @@ fn test_tokens_issuance_too_big_decimals() {
         token_ticker: b"BensT".to_vec(),
         amount_to_issue: 1_000_000_000,
         number_of_decimals: 19,
-        metadata_uri: vec![],
+        metadata_uri: "mintlayer.org".to_bytes().to_vec(),
     };
     test_tx!(data, Err, "too long decimals");
 }
@@ -1463,7 +1463,6 @@ fn test_token_creation_with_insufficient_fee() {
                 OutputData::TokenIssuanceV1 {
                     token_ticker: b"Enric".to_vec(),
                     amount_to_issue: 1_000_000_000,
-                    // Should be not more than 18 numbers
                     number_of_decimals: 2,
                     metadata_uri: "mintlayer.org".as_bytes().to_vec(),
                 },
@@ -1494,7 +1493,6 @@ fn test_transfer_and_issuance_in_one_tx() {
                     OutputData::TokenIssuanceV1 {
                         token_ticker: "BensT".as_bytes().to_vec(),
                         amount_to_issue: 1_000_000_000,
-                        // Should be not more than 18 numbers
                         number_of_decimals: 2,
                         metadata_uri: "mintlayer.org".as_bytes().to_vec(),
                     },
