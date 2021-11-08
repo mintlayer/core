@@ -4168,6 +4168,7 @@ dependencies = [
  "jsonrpc-core",
  "jsonrpc-core-client",
  "jsonrpc-derive",
+ "pallet-utxo",
  "pallet-utxo-rpc-runtime-api",
  "parity-scale-codec",
  "serde",
@@ -4182,6 +4183,7 @@ name = "pallet-utxo-rpc-runtime-api"
 version = "0.1.0"
 dependencies = [
  "frame-support",
+ "pallet-utxo",
  "parity-scale-codec",
  "serde",
  "serde_json",

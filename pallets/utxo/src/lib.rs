@@ -39,6 +39,7 @@ use frame_support::{
 };
 use sp_core::{crypto::UncheckedFrom, H256, H512};
 use sp_runtime::sp_std::vec;
+use std::collections::BTreeMap;
 use utxo_api::UtxoApi;
 
 #[frame_support::pallet]
@@ -125,6 +126,17 @@ pub mod pallet {
         fn spend(u: u32) -> Weight;
         fn token_create(u: u32) -> Weight;
         fn send_to_address(u: u32) -> Weight;
+    }
+
+    #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+    #[derive(
+        Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, RuntimeDebug, Hash, Default,
+    )]
+    pub struct RpcBalanceRecord {
+        pub token_id: Some<TokenId>,
+        pub token_ticker: Vec<u8>,
+        pub amount: Value,
+        pub decimals: u8,
     }
 
     /// Transaction input
@@ -1183,6 +1195,71 @@ impl<T: Config> crate::Pallet<T> {
     //         _ => None,
     //     }
     // }
+
+    pub fn utxo_balance(sender: sp_core::sr25519::Public) -> Result<Vec<RpcBalanceRecord>> {
+        let mut balances: BTreeMap<Option<crate::tokens::TokenId>, RpcBalanceRecord> =
+            BTreeMap::new();
+
+        for (hash, utxo) in UtxoStore::<T>::iter() {
+            match &utxo.destination {
+                Destination::Pubkey(pubkey) => {
+                    if sender == pubkey {
+                        match balances.get(&None) {
+                            Some(ref mut rec) => {
+                                rec.amount = utxo.value.checked_add(rec.amount)?;
+                                balances.insert(None, rec);
+                            },
+                            None => balances.insert(
+                                None,
+                                RpcBalanceRecord {
+                                    token_ticker: b"MLT".as_bytes().to_vec(),
+                                    amount: utxo.value,
+                                    decimals: 0,
+                                },
+                            ),
+                        }
+                        match utxo.data {
+                            crate::tokens::OutputData::TokenTransferV1 {
+                                ref token_id, amount
+                            } => {
+                                match balances.get(token_id) {
+                                    Some(rec) => {},
+                                    None => {
+                                        let token_ticker;
+                                        let decimals;
+                                        let rec = RpcBalanceRecord {
+                                            token_id: token_id.clone(),
+                                            token_ticker,
+                                            amount,
+                                            decimals,
+                                        };
+                                        balances.insert(token_id, rec);
+                                    },
+                                }
+                            },
+                            crate::tokens::OutputData::TokenIssuanceV1 {
+
+                            },
+                        }
+                    }
+                }
+                _ => continue,
+            }
+        }
+
+        pub fn pick_utxo<T: Config>(
+            caller: &T::AccountId,
+            value: Value,
+        ) -> (Value, Vec<H256>, Vec<TransactionOutputFor<T>>) {
+            let mut utxos = Vec::new();
+            let mut hashes = Vec::new();
+            let mut total = 0;
+
+            (total, hashes, utxos)
+        }
+
+        vec![]
+    }
 }
 
 fn coin_picker<T: Config>(outpoints: &Vec<H256>) -> Result<Vec<TransactionInput>, DispatchError> {

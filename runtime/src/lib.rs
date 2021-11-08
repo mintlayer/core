@@ -570,6 +570,10 @@ impl_runtime_apis! {
         fn send() -> u32 {
             Utxo::send()
         }
+
+        fn utxo_balance(pubkey: sp_core::sr25519::Public) -> Vec<pallet_utxo::RpcBalanceRecord> {
+            Utxo::utxo_balance(pubkey)
+        }
     }
 
     impl pallet_contracts_rpc_runtime_api::ContractsApi<

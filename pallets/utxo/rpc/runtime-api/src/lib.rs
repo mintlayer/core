@@ -16,8 +16,13 @@
 // Author(s): A. Altonen, Anton Sinitsyn
 #![cfg_attr(not(feature = "std"), no_std)]
 
+use frame_support::inherent::Vec;
+use pallet_utxo::RpcBalanceRecord;
+use sp_core::sr25519;
+
 sp_api::decl_runtime_apis! {
     pub trait UtxoApi {
         fn send() -> u32;
+        fn utxo_balance(sender: sr25519::Public) -> Vec<RpcBalanceRecord>;
     }
 }

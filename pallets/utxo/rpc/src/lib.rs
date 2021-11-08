@@ -17,9 +17,11 @@
 
 use jsonrpc_core::{Error as RpcError, ErrorCode, Result};
 use jsonrpc_derive::rpc;
+use pallet_utxo::RpcBalanceRecord;
 pub use pallet_utxo_rpc_runtime_api::UtxoApi as UtxoRuntimeApi;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::HeaderBackend;
+use sp_core::sr25519::Public;
 use sp_runtime::{generic::BlockId, traits::Block as BlockT};
 use std::sync::Arc;
 
@@ -27,6 +29,8 @@ use std::sync::Arc;
 pub trait UtxoApi<BlockHash> {
     #[rpc(name = "utxo_send")]
     fn send(&self, at: Option<BlockHash>) -> Result<u32>;
+    #[rpc(name = "utxo_balance")]
+    fn utxo_balance(&self, sender: Public) -> Result<Vec<RpcBalanceRecord>>;
 }
 
 /// A struct that implements the [`UtxoApi`].
@@ -70,6 +74,17 @@ where
             self.client.info().best_hash));
 
         api.send(&at).map_err(|e| RpcError {
+            code: ErrorCode::ServerError(Error::RuntimeError as i64),
+            message: "Unable to query dispatch info.".into(),
+            data: Some(format!("{:?}", e).into()),
+        })
+    }
+
+    fn utxo_balance(&self, sender: Public) -> Result<Vec<RpcBalanceRecord>> {
+        let api = self.client.runtime_api();
+        let at = BlockId::hash(self.client.info().best_hash);
+
+        api.utxo_balance(&at, sender).map_err(|e| RpcError {
             code: ErrorCode::ServerError(Error::RuntimeError as i64),
             message: "Unable to query dispatch info.".into(),
             data: Some(format!("{:?}", e).into()),

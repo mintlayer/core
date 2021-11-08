@@ -6,6 +6,7 @@ edition = "2018"
 
 [dependencies]
 pallet-utxo-rpc-runtime-api = { path = "./runtime-api" }
+pallet-utxo = {default-features = false, path = "../../utxo" }
 jsonrpc-core = "18.0.0"
 jsonrpc-core-client = "18.0.0"
 jsonrpc-derive = "18.0.0"
