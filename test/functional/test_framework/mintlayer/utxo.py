@@ -8,7 +8,7 @@ import os
 import logging
 
 """ Client. A thin wrapper over SubstrateInterface """
-class Client:
+class Client():
     def __init__(self, url="ws://127.0.0.1", port=9944):
         source_dir = os.path.dirname(os.path.abspath(__file__))
         types_file = os.path.join(source_dir, "..", "..", "custom-types.json")
@@ -36,10 +36,10 @@ class Client:
         return '0x' + str(substrateinterface.utils.hasher.blake2_256(encoded))
 
     """ Query the node for the list of utxos """
-    def utxos(self):
+    def utxos(self, storage_name):
         query = self.substrate.query_map(
             module="Utxo",
-            storage_function="UtxoStore",
+            storage_function=storage_name,
             ignore_decoding_errors=False
         )
 
@@ -48,7 +48,40 @@ class Client:
     """ Get UTXOs for given key """
     def utxos_for(self, keypair):
         matching = lambda e: e[1].destination.get_pubkey() == keypair.public_key
-        return filter(matching, self.utxos())
+        return filter(matching, self.utxos('UtxoStore'))
+
+    """ Get UTXOs for given key """
+    def locked_utxos_for(self, keypair):
+        matching = lambda e: e[1].destination.get_ss58_address() == keypair.ss58_address
+        return filter(matching, self.utxos('LockedUtxos'))
+
+    """ Query the node for the list of public keys with staking """
+    def staking_count(self):
+        query = self.substrate.query_map(
+            module="Utxo",
+            storage_function="StakingCount",
+            ignore_decoding_errors=False
+        )
+
+        return ((h, tuple(map(int,str(obj)[1:-1].split(', ')))) for (h, obj) in query)
+
+    def get_staking_count(self, stash_keypair):
+        staking_count = list(self.staking_count())
+        matching = lambda e: e[0].value == stash_keypair.ss58_address
+
+        return filter(matching , staking_count)
+
+
+    # TODO: move to a separate file
+    """ accesses pallet-staking to retrieve the ledger """
+    def get_staking_ledger(self):
+        query = self.substrate.query_map(
+            module='Staking',
+            storage_function='Ledger'
+        )
+
+        return ((h, o.value) for (h, o) in query)
+
 
     """ Submit a transaction onto the blockchain """
     def submit(self, keypair, tx):
@@ -63,7 +96,41 @@ class Client:
         try:
             receipt = self.substrate.submit_extrinsic(extrinsic, wait_for_inclusion=True)
             self.log.debug("Extrinsic '{}' sent and included in block '{}'".format(receipt.extrinsic_hash, receipt.block_hash))
-            return (receipt.extrinsic_hash, receipt.block_hash)
+            return (receipt.extrinsic_hash, receipt.block_hash, receipt.triggered_events)
+        except SubstrateRequestException as e:
+            self.log.debug("Failed to send: {}".format(e))
+
+    """ Submit a transaction onto the blockchain: unlock """
+    def unlock_request_for_withdrawal(self, keypair):
+        call = self.substrate.compose_call(
+            call_module = 'Utxo',
+            call_function = 'unlock_request_for_withdrawal'
+        )
+        #TODO ^ same code as above; put them in 1 func
+        extrinsic = self.substrate.create_signed_extrinsic(call=call, keypair=keypair)
+        self.log.debug("unlock request extrinsic submitted...")
+
+        try:
+            receipt = self.substrate.submit_extrinsic(extrinsic, wait_for_inclusion=True)
+            self.log.debug("Extrinsic '{}' sent and included in block '{}'".format(receipt.extrinsic_hash, receipt.block_hash))
+            return (receipt.extrinsic_hash, receipt.block_hash, receipt.triggered_events)
+        except SubstrateRequestException as e:
+            self.log.debug("Failed to send: {}".format(e))
+
+    """ Submit a transaction onto the blockchain: withdraw """
+    def withdraw_stake(self, keypair):
+        call = self.substrate.compose_call(
+            call_module = 'Utxo',
+            call_function = 'withdraw_stake'
+        )
+        #TODO ^ same code as above; put them in 1 func
+        extrinsic = self.substrate.create_signed_extrinsic(call=call, keypair=keypair)
+        self.log.debug("withdraw extrinsic submitted...")
+
+        try:
+            receipt = self.substrate.submit_extrinsic(extrinsic, wait_for_inclusion=True)
+            self.log.debug("Extrinsic '{}' sent and included in block '{}'".format(receipt.extrinsic_hash, receipt.block_hash))
+            return (receipt.extrinsic_hash, receipt.block_hash, receipt.triggered_events)
         except SubstrateRequestException as e:
             self.log.info("Failed to send: {}".format(e))
 
@@ -76,12 +143,19 @@ class Destination():
             return DestCreatePP.load(obj['CreatePP'])
         if 'CallPP' in obj:
             return DestCallPP.load(obj['CallPP'])
+        if 'LockForStaking' in obj:
+            return DestLockForStaking.load(obj['LockForStaking'])
+        if 'LockExtraForStaking' in obj:
+            return DestLockExtraForStaking.load(obj['LockExtraForStaking'])
         return None
 
     def type_string(self):
         return 'Destination'
 
     def get_pubkey(self):
+        return None
+
+    def get_ss58_address(self):
         return None
 
 # Only Schnorr pubkey type supported now.
@@ -134,6 +208,38 @@ class DestCallPP(Destination):
 
     def json(self):
         return { 'CallPP': { 'dest_account': self.acct, 'fund': self.fund, 'input_data': self.data } }
+
+class DestLockForStaking(Destination):
+    def __init__(self, stash_account, controller_account, session_key):
+        self.stash = stash_account
+        self.controller = controller_account
+        self.sesh = session_key
+
+    @staticmethod
+    def load(obj):
+        return DestLockForStaking(obj['stash_account'], obj['controller_account'], ['session_key'])
+
+    def json(self):
+        return { 'LockForStaking': { 'stash_account': self.stash, 'controller_account': self.controller, 'session_key': self.sesh } }
+
+    def get_ss58_address(self):
+        return self.stash
+
+class DestLockExtraForStaking(Destination):
+    def __init__(self, stash_account, controller_account):
+        self.stash = stash_account
+        self.controller = controller_account
+
+    @staticmethod
+    def load(obj):
+        return DestLockExtraForStaking(obj['stash_account'], obj['controller_account'])
+
+    def json(self):
+        return { 'LockExtraForStaking': { 'stash_account': self.stash, 'controller_account': self.controller } }
+
+    def get_ss58_address(self):
+        return self.stash
+
 
 class Output():
     def __init__(self, value, destination, data):

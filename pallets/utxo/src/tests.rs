@@ -41,7 +41,7 @@ fn execute_with_alice<F, R>(mut execute: F) -> R
 where
     F: FnMut(Public) -> R,
 {
-    new_test_ext().execute_with(|| {
+    alice_test_ext().execute_with(|| {
         let alice_pub_key = crypto::sr25519_public_keys(SR25519)[0];
         execute(alice_pub_key)
     })
@@ -150,7 +150,7 @@ fn test_simple_tx() {
 
 #[test]
 fn attack_with_sending_to_own_account() {
-    let (mut test_ext, _alice, karl_pub_key) = new_test_ext_and_keys();
+    let (mut test_ext, _alice, karl_pub_key) = alice_test_ext_and_keys();
     test_ext.execute_with(|| {
         // Karl wants to send himself a new utxo of value 50 out of thin air.
         let mut tx = Transaction {
@@ -171,9 +171,7 @@ fn attack_with_sending_to_own_account() {
 
 #[test]
 fn attack_with_empty_transactions() {
-    new_test_ext().execute_with(|| {
-        // We should use the real input because. Otherwise, appears another error
-        let (_, input) = tx_input_gen_no_signature();
+    alice_test_ext().execute_with(|| {
         assert_err!(
             Utxo::spend(Origin::signed(H256::zero()), Transaction::default()), // empty tx
             "no inputs"
@@ -299,7 +297,7 @@ fn attack_by_overspending() {
 // then send the rest of the tokens to karl
 #[test]
 fn tx_from_alice_to_karl() {
-    let (mut test_ext, alice_pub_key, karl_pub_key) = new_test_ext_and_keys();
+    let (mut test_ext, alice_pub_key, karl_pub_key) = alice_test_ext_and_keys();
     test_ext.execute_with(|| {
         // alice sends 10 tokens to karl and the rest back to herself
         let (utxo0, input0) = tx_input_gen_no_signature();
@@ -451,7 +449,7 @@ fn attack_double_spend_by_tweaking_input() {
 
 #[test]
 fn test_send_to_address() {
-    let (mut test_ext, alice_pub_key, _karl_pub_key) = new_test_ext_and_keys();
+    let (mut test_ext, alice_pub_key, _karl_pub_key) = alice_test_ext_and_keys();
     test_ext.execute_with(|| {
         // `addr` is bech32-encoded, SCALE-encoded `Destination::Pubkey(alice_pub_key)`
         let addr = "ml1qrft7juyfhl06emj4zzrue5ljs6q39n2jalr4c40rhtcur647n0kwueyfsn";
@@ -896,7 +894,7 @@ fn test_tokens_issuance_empty_ticker() {
         token_ticker: vec![],
         amount_to_issue: 1_000_000_000,
         number_of_decimals: 2,
-        metadata_uri: "mintlayer.org".to_bytes().to_vec(),
+        metadata_uri: "mintlayer.org".as_bytes().to_vec(),
     };
     test_tx!(data, Err, "token ticker can't be empty");
 }
@@ -908,7 +906,7 @@ fn test_tokens_issuance_too_big_ticker() {
         token_ticker: Vec::from([b"A"[0]; 10_000]),
         amount_to_issue: 1_000_000_000,
         number_of_decimals: 2,
-        metadata_uri: "mintlayer.org".to_bytes().to_vec(),
+        metadata_uri: "mintlayer.org".as_bytes().to_vec(),
     };
     test_tx!(data, Err, "token ticker is too long");
 }
@@ -920,7 +918,7 @@ fn test_tokens_issuance_amount_zero() {
         token_ticker: b"BensT".to_vec(),
         amount_to_issue: 0,
         number_of_decimals: 2,
-        metadata_uri: "mintlayer.org".to_bytes().to_vec(),
+        metadata_uri: "mintlayer.org".as_bytes().to_vec(),
     };
     test_tx!(data, Err, "output value must be nonzero");
 }
@@ -932,7 +930,7 @@ fn test_tokens_issuance_too_big_decimals() {
         token_ticker: b"BensT".to_vec(),
         amount_to_issue: 1_000_000_000,
         number_of_decimals: 19,
-        metadata_uri: "mintlayer.org".to_bytes().to_vec(),
+        metadata_uri: "mintlayer.org".as_bytes().to_vec(),
     };
     test_tx!(data, Err, "too long decimals");
 }

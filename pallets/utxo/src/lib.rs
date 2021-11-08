@@ -19,14 +19,20 @@
 
 pub use pallet::*;
 
-#[cfg(feature = "runtime-benchmarks")]
-mod benchmarking;
+
 #[cfg(test)]
 mod mock;
-mod script;
-mod sign;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod staking_tests;
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarking;
+mod header;
+mod rewards;
+mod script;
+mod sign;
+pub mod staking;
 pub mod tokens;
 pub mod weights;
 
@@ -43,11 +49,13 @@ use utxo_api::UtxoApi;
 
 #[frame_support::pallet]
 pub mod pallet {
+    use crate::rewards::reward_block_author;
     pub use crate::script::{BlockTime, RawBlockTime};
     use crate::sign::{self, Scheme};
     // todo: This part isn't fully tested, left for the next PR
     // use crate::tokens::{NftDataHash};
     use crate::tokens::{OutputData, TokenId, Value};
+    use crate::staking::{self, StakingHelper};
     use bech32;
     use chainscript::Script;
     use codec::{Decode, Encode};
@@ -56,7 +64,8 @@ pub mod pallet {
         dispatch::{DispatchResultWithPostInfo, Vec},
         pallet_prelude::*,
         sp_io::crypto,
-        sp_runtime::traits::{BlakeTwo256, Dispatchable, Hash, SaturatedConversion},
+        sp_runtime::traits::{BlakeTwo256, Dispatchable, Hash},
+        sp_runtime::Percent,
         traits::{IsSubType, UnixTime},
     };
     use frame_system::pallet_prelude::*;
@@ -100,6 +109,33 @@ pub mod pallet {
         WouldDie,
         /// Thrown when there is an attempt to mint a duplicate collection.
         NftCollectionExists,
+
+        /// When occurs during LockExtraForStaking, use Destination::LockForStaking for first time staking.
+        /// When occurs during unstaking, it means there's no coordination with pallet-staking
+        ControllerAccountNotFound,
+
+        /// Occurs during `unlock_request_for_withdrawal` and `withdraw_stake`,
+        /// when the given stash account does not exist.
+        StashAccountNotFound,
+
+        /// Use Destination::LockExtraForStaking for additional funds to stake.
+        StashAccountAlreadyRegistered,
+
+        /// An action not opted to be performed.
+        InvalidOperation,
+
+        /// Problem signing a transaction with the public key
+        FailedSigningTransaction,
+
+        /// The hash outpoint key does not exist in the storage where it expects to be.
+        OutpointDoesNotExist,
+
+        /// The hash outpoint key already exists in the storage where it expects to be.
+        OutpointAlreadyExists,
+
+        /// Funds are waiting for the bonding duration to end,
+        /// before withdrawal is allowed.
+        FundsAtUnlockedState,
     }
 
     #[pallet::pallet]
@@ -118,6 +154,35 @@ pub mod pallet {
 
         type ProgrammablePool: ProgrammablePoolApi<AccountId = Self::AccountId>;
 
+        /// the rate of diminishing reward
+        #[pallet::constant]
+        type InitialReward: Get<Value>;
+
+        /// the rate of diminishing reward
+        #[pallet::constant]
+        type DefaultMinimumReward: Get<Value>;
+
+        /// the rate of diminishing reward
+        #[pallet::constant]
+        type RewardReductionFraction: Get<Percent>;
+
+        /// duration of unchanged rewards, before applying the RewardReductionFraction
+        #[pallet::constant]
+        type RewardReductionPeriod: Get<Self::BlockNumber>;
+
+        /// the minimum value for initial staking.
+        #[pallet::constant]
+        type MinimumStake: Get<Value>;
+
+        /// how much are we charging for withdrawing the unlocked stake.
+        #[pallet::constant]
+        type StakeWithdrawalFee: Get<Value>;
+
+        /// helps in dealing with staking, using the logic outside of this pallet.
+        /// An example is the `pallet-staking`, where it deals with multiple operations
+        /// that utxo will convert with only a few. see the trait at pallet-utxo's `staking.rs`.
+        type StakingHelper: StakingHelper<Self::AccountId>;
+
         fn authorities() -> Vec<H256>;
     }
 
@@ -125,6 +190,8 @@ pub mod pallet {
         fn spend(u: u32) -> Weight;
         fn token_create(u: u32) -> Weight;
         fn send_to_address(u: u32) -> Weight;
+        fn unlock_request_for_withdrawal(u: u32) -> Weight;
+        fn withdraw_stake(u: u32) -> Weight;
     }
 
     /// Transaction input
@@ -204,6 +271,20 @@ pub mod pallet {
         CallPP(AccountId, bool, Vec<u8>),
         /// Pay to script hash
         ScriptHash(H256),
+        /// First attempt of staking.
+        /// Must assign a controller, in order to bond and validate. see pallet-staking
+        LockForStaking {
+            stash_account: AccountId,
+            controller_account: AccountId,
+            session_key: Vec<u8>,
+        },
+        /// lock more funds
+        /// The controller_account should be the EXACT one for the stash_account,
+        /// as done in the `LockForStaking`
+        LockExtraForStaking {
+            stash_account: AccountId,
+            controller_account: AccountId,
+        },
     }
 
     impl<AccountId> Destination<AccountId> {
@@ -241,6 +322,48 @@ pub mod pallet {
             Self {
                 value,
                 destination: Destination::Pubkey(pubkey.into()),
+                data: None,
+            }
+        }
+
+        /// Create a new stake for the first time.
+        /// This is assumed, that an entity staking its funds also means playing the role of a `Validator`.
+        /// # Arguments
+        /// * `value` - This is assuming that the value is received in a format that's already `x * 1_000, * 1_000_000`
+        /// * `stash_acount` - This is considered as the "bank", which holds the funds. The full meaning is found in `pallet-staking`.
+        /// * `controller_account` = can be considered as the "manager". The full meaning is found in `pallet-staking`.
+        /// * `session_key` - for every new validator candidate, you want to link it to a session key.
+        /// Generation of `session_key` is done through an rpc call `author_rotateKeys`.
+        /// See https://docs.substrate.io/v3/concepts/session-keys/
+        pub fn new_lock_for_staking(
+            value: Value,
+            stash_account: AccountId,
+            controller_account: AccountId,
+            session_key: Vec<u8>,
+        ) -> Self {
+            Self {
+                value,
+                destination: Destination::LockForStaking {
+                    stash_account,
+                    controller_account,
+                    session_key,
+                },
+                data: None,
+            }
+        }
+
+        /// Create a staking extra of an existing validator.
+        pub fn new_lock_extra_for_staking(
+            value: Value,
+            stash_account: AccountId,
+            controller_account: AccountId,
+        ) -> Self {
+            Self {
+                value,
+                destination: Destination::LockExtraForStaking {
+                    stash_account,
+                    controller_account,
+                },
                 data: None,
             }
         }
@@ -286,6 +409,15 @@ pub mod pallet {
                 data: Some(data),
             }
         }
+    }
+
+    pub fn convert_to_h256<T: Config>(account: &T::AccountId) -> Result<H256, DispatchError> {
+        let pubkey_raw: [u8; 32] = account
+            .encode()
+            .try_into()
+            .map_err(|_| DispatchError::Other("Failed to get account's public key"))?;
+
+        Ok(H256::from(pubkey_raw))
     }
 
     #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
@@ -346,6 +478,10 @@ pub mod pallet {
     pub(super) type RewardTotal<T> = StorageValue<_, Value, ValueQuery>;
 
     #[pallet::storage]
+    #[pallet::getter(fn current_block_author)]
+    pub(super) type BlockAuthor<T> = StorageValue<_, H256, OptionQuery>;
+
+    #[pallet::storage]
     #[pallet::getter(fn utxo_store)]
     pub(super) type UtxoStore<T: Config> = StorageMap<_, Identity, H256, TransactionOutputFor<T>>;
 
@@ -367,17 +503,42 @@ pub mod pallet {
     // pub(super) type NftUniqueDataHash<T: Config> =
     //     StorageMap<_, Identity, NftDataHash, /* UTXO */ H256, OptionQuery>;
 
+    /// Represents the validators' stakes. When a validator chooses to stop validating,
+    /// the utxo here is transferred back to `UtxoStore`.
+    #[pallet::storage]
+    #[pallet::getter(fn locked_utxos)]
+    pub(super) type LockedUtxos<T: Config> =
+        StorageMap<_, Identity, H256, TransactionOutputFor<T>, OptionQuery>;
+
+    /// this is to count how many stakings done for that stash account.
+    #[pallet::storage]
+    #[pallet::getter(fn staking_count)]
+    pub(super) type StakingCount<T: Config> =
+        StorageMap<_, Identity, T::AccountId, (u64, Value), OptionQuery>;
+
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     #[pallet::metadata(T::AccountId = "AccountId")]
     pub enum Event<T: Config> {
         TransactionSuccess(TransactionFor<T>),
+
+        /// The block author has been rewarded with MLT Coins.
+        /// \[utxo_for_block_author\]
+        BlockAuthorRewarded(TransactionOutput<T::AccountId>),
+
+        /// Unstaking is enabled after the end of bonding duration, as set in pallet-staking.
+        /// \[stash_account\]
+        StakeUnlocked(T::AccountId),
+
+        /// Unlocked stake has been withdrawn.
+        /// \[total_stake, stash_account\]
+        StakeWithdrawn(Value, T::AccountId),
     }
 
     #[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
         fn on_finalize(block_num: T::BlockNumber) {
-            disperse_reward::<T>(&T::authorities(), block_num)
+            reward_block_author::<T>(block_num);
         }
     }
 
@@ -398,38 +559,6 @@ pub mod pallet {
             input.witness = Vec::new();
         }
         trx.encode()
-    }
-
-    fn disperse_reward<T: Config>(auths: &[H256], block_number: T::BlockNumber) {
-        let reward = <RewardTotal<T>>::take();
-        let share_value: Value =
-            reward.checked_div(auths.len() as Value).ok_or("No authorities").unwrap();
-        if share_value == 0 {
-            //put reward back if it can't be split nicely
-            <RewardTotal<T>>::put(reward as Value);
-            return;
-        }
-
-        let remainder = reward
-            .checked_sub(share_value * auths.len() as Value)
-            .ok_or("Sub underflow")
-            .unwrap();
-
-        log::debug!("disperse_reward:: reward total: {:?}", remainder);
-        <RewardTotal<T>>::put(remainder as Value);
-
-        for authority in auths {
-            let utxo = TransactionOutput::new_pubkey(share_value, *authority);
-
-            let hash = {
-                let b_num = block_number.saturated_into::<u64>();
-                BlakeTwo256::hash_of(&(&utxo, b_num))
-            };
-
-            if !<UtxoStore<T>>::contains_key(hash) {
-                <UtxoStore<T>>::insert(hash, utxo);
-            }
-        }
     }
 
     pub fn create<T: Config>(
@@ -812,16 +941,23 @@ pub mod pallet {
                 // }
             }
             let hash = tx.outpoint(output_index as u64);
-            ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
             new_utxos.push(hash.as_fixed_bytes().to_vec());
 
             match output.destination {
                 Destination::Pubkey(_) | Destination::ScriptHash(_) => {}
                 Destination::CreatePP(_, _) => {
-                    log::info!("TODO validate OP_CREATE");
+                    ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
+                    log::info!("TODO validate CreatePP as output");
                 }
                 Destination::CallPP(_, _, _) => {
-                    log::info!("TODO validate OP_CALL");
+                    ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
+                    log::info!("TODO validate CallPP as output");
+                }
+                Destination::Pubkey(_) | Destination::ScriptHash(_) => {
+                    ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
+                }
+                Destination::LockForStaking { .. } | Destination::LockExtraForStaking { .. } => {
+                    staking::validate_staking_ops::<T>(output, hash)?;
                 }
             }
         }
@@ -920,6 +1056,10 @@ pub mod pallet {
                         crate::script::verify(&tx, &input_utxos, index as u64, witness, lock)
                             .map_err(|_| "script verification failed")?;
                     }
+                    Destination::LockForStaking { .. }
+                    | Destination::LockExtraForStaking { .. } => {
+                        return Err("cannot spend a staking utxo.");
+                    }
                 }
             }
 
@@ -959,8 +1099,6 @@ pub mod pallet {
 
         for (index, output) in tx.outputs.iter().enumerate() {
             let hash = tx.outpoint(index as u64);
-            log::debug!("inserting to UtxoStore {:?} as key {:?}", output, hash);
-            <UtxoStore<T>>::insert(hash, output);
 
             match &output.destination {
                 Destination::Pubkey(_) | Destination::ScriptHash(_) => {
@@ -998,10 +1136,20 @@ pub mod pallet {
                     }
                 }
                 Destination::CreatePP(script, data) => {
+                    log::debug!("inserting to UtxoStore {:?} as key {:?}", output, hash);
+                    <UtxoStore<T>>::insert(hash, output);
                     create::<T>(caller, script, hash, output.value, &data);
                 }
                 Destination::CallPP(acct_id, fund, data) => {
+                    log::debug!("inserting to UtxoStore {:?} as key {:?}", output, hash);
+                    <UtxoStore<T>>::insert(hash, output);
                     call::<T>(caller, acct_id, hash, output.value, *fund, data);
+                }
+                Destination::LockForStaking { .. } => {
+                    staking::lock_for_staking::<T>(hash, output)?;
+                }
+                Destination::LockExtraForStaking { .. } => {
+                    staking::lock_extra_for_staking::<T>(hash, output)?;
                 }
             }
         }
@@ -1133,12 +1281,34 @@ pub mod pallet {
 
             spend::<T>(&signer, &tx)
         }
+
+        /// unlock the stake using the STASH ACCOUNT. Stops validating, and allow access to withdraw.
+        /// If used with `pallet-staking`, it uses the `BondingDuration`
+        /// to set the period/era on when to withdraw.
+        #[pallet::weight(<T as Config>::WeightInfo::unlock_request_for_withdrawal(1 as u32))]
+        pub fn unlock_request_for_withdrawal(
+            stash_origin: OriginFor<T>,
+        ) -> DispatchResultWithPostInfo {
+            staking::unlock_request_for_withdrawal::<T>(ensure_signed(stash_origin)?)
+        }
+
+        /// withdraw unlocked stake using the STASH ACCOUNT. Make sure the era for withdrawal has passed.
+        /// If used with `pallet-staking`,it can be found in the ledger of datatype `StakingLedger`,
+        /// the field `unlocking` of datatype `UnlockChunk`,
+        /// and at field `era`.
+        #[pallet::weight(<T as Config>::WeightInfo::withdraw_stake(1 as u32))]
+        pub fn withdraw_stake(stash_origin: OriginFor<T>) -> DispatchResultWithPostInfo {
+            staking::withdraw::<T>(ensure_signed(stash_origin)?)
+        }
     }
 
     #[pallet::genesis_config]
     pub struct GenesisConfig<T: Config> {
         pub genesis_utxos: Vec<TransactionOutputFor<T>>,
-        pub _marker: PhantomData<T>,
+        /// initially staked utxos of the initial validators.
+        pub locked_utxos: Vec<TransactionOutputFor<T>>,
+        // /// the amount to reward block authors/producers.
+        // pub initial_reward_amount:Value
     }
 
     #[cfg(feature = "std")]
@@ -1146,7 +1316,7 @@ pub mod pallet {
         fn default() -> Self {
             Self {
                 genesis_utxos: vec![],
-                _marker: Default::default(),
+                locked_utxos: vec![],
             }
         }
     }
@@ -1154,8 +1324,23 @@ pub mod pallet {
     #[pallet::genesis_build]
     impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
         fn build(&self) {
-            self.genesis_utxos.iter().cloned().for_each(|u| {
-                UtxoStore::<T>::insert(BlakeTwo256::hash_of(&u), u);
+            self.genesis_utxos.iter().cloned().enumerate().for_each(|(index, u)| {
+                // added the index and the `genesis` on the hashing, to indicate that these utxos are from the beginning of the chain.
+                UtxoStore::<T>::insert(BlakeTwo256::hash_of(&(&u, index as u64, "genesis")), u);
+            });
+
+            self.locked_utxos.iter().cloned().enumerate().for_each(|(index, u)| {
+                if let Destination::LockForStaking {
+                    stash_account,
+                    controller_account: _,
+                    session_key: _,
+                } = &u.destination
+                {
+                    <StakingCount<T>>::insert(stash_account.clone(), (1, u.value));
+                }
+
+                // added the index and the `genesis` on the hashing, to indicate that these utxos are from the beginning of the chain.
+                LockedUtxos::<T>::insert(BlakeTwo256::hash_of(&(&u, index as u64, "genesis")), u);
             });
         }
     }
@@ -1232,6 +1417,16 @@ where
                 time_lock: Default::default(),
             },
         )
+    }
+
+    fn unlock_request_for_withdrawal(
+        stash_account_caller: &T::AccountId,
+    ) -> DispatchResultWithPostInfo {
+        staking::unlock_request_for_withdrawal::<T>(stash_account_caller.clone())
+    }
+
+    fn withdraw_stake(stash_account_caller: &T::AccountId) -> DispatchResultWithPostInfo {
+        staking::withdraw::<T>(stash_account_caller.clone())
     }
 
     fn send_conscrit_p2pk(

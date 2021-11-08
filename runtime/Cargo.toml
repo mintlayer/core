@@ -15,6 +15,10 @@ git = 'https://github.com/paritytech/substrate.git'
 version = '5.0.0-dev'
 branch = "master"
 
+[dependencies]
+log = "0.4.14"
+pallet-utxo-tokens = { path = "../pallets/utxo/tokens" }
+
 [dependencies.codec]
 default-features = false
 features = ['derive']
@@ -27,6 +31,12 @@ git = 'https://github.com/paritytech/substrate.git'
 optional = true
 branch = "master"
 version = '4.0.0-dev'
+
+[dependencies.frame-election-provider-support]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+version = '4.0.0-dev'
+branch = "master"
 
 [dependencies.frame-executive]
 default-features = false
@@ -69,6 +79,12 @@ git = 'https://github.com/paritytech/substrate.git'
 version = '4.0.0-dev'
 branch = "master"
 
+[dependencies.pallet-authorship]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+version = '4.0.0-dev'
+branch = "master"
+
 [dependencies.pallet-balances]
 default-features = false
 git = 'https://github.com/paritytech/substrate.git'
@@ -82,6 +98,18 @@ version = '4.0.0-dev'
 branch = "master"
 
 [dependencies.pallet-randomness-collective-flip]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+version = '4.0.0-dev'
+branch = "master"
+
+[dependencies.pallet-session]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+version = '4.0.0-dev'
+branch = "master"
+
+[dependencies.pallet-staking]
 default-features = false
 git = 'https://github.com/paritytech/substrate.git'
 version = '4.0.0-dev'
@@ -154,6 +182,12 @@ branch = "master"
 version = '4.0.0-dev'
 
 [dependencies.sp-session]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+version = '4.0.0-dev'
+branch = "master"
+
+[dependencies.sp-staking]
 default-features = false
 git = 'https://github.com/paritytech/substrate.git'
 version = '4.0.0-dev'
@@ -234,9 +268,12 @@ std = [
     'frame-system-rpc-runtime-api/std',
     'frame-system/std',
     'pallet-aura/std',
+    'pallet-authorship/std',
     'pallet-balances/std',
     'pallet-grandpa/std',
     'pallet-randomness-collective-flip/std',
+    'pallet-session/std',
+    'pallet-staking/std',
     'pallet-sudo/std',
     'pallet-template/std',
     'pallet-timestamp/std',
@@ -254,6 +291,7 @@ std = [
     'sp-offchain/std',
     'sp-runtime/std',
     'sp-session/std',
+    'sp-staking/std',
     'sp-std/std',
     'sp-transaction-pool/std',
     'sp-version/std',

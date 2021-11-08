@@ -17,12 +17,30 @@
 				[ "input_data", "Vec<u8>" ]
 			]
 		},
+		"DestinationStake": {
+			"type": "struct",
+			"type_mapping": [
+				[ "stash_account", "AccountId" ],
+				[ "controller_account", "AccountId" ],
+				[ "session_key", "Vec<u8>" ]
+			]
+		},
+		"DestinationStakeExtra": {
+			"type": "struct",
+			"type_mapping": [
+				[ "stash_account", "AccountId" ],
+				[ "controller_account", "AccountId" ]
+			]
+		},
 		"Destination": {
 			"type": "enum",
 			"type_mapping": [
 				[ "Pubkey", "Pubkey" ],
 				[ "CreatePP", "DestinationCreatePP" ],
-				[ "CallPP", "DestinationCallPP" ]
+				[ "CallPP", "DestinationCallPP" ],
+				[ "ScriptHash", "H256"],
+				[ "LockForStaking", "DestinationStake" ],
+				[ "LockExtraForStaking", "DestinationStakeExtra" ]
 			]
 		},
 		"NftDataHash": {
@@ -125,6 +143,7 @@
 			]
 		},
 		"Pubkey": "H256",
+		"Public": "H256",
 		"SignatureData": {
 			"type": "struct",
 			"type_mapping": [
