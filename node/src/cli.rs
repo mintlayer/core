@@ -6,6 +6,7 @@ pub struct Cli {
     #[structopt(subcommand)]
     pub subcommand: Option<Subcommand>,
 
+    /// Connect to Mintlayer TestNet
     #[structopt(long, conflicts_with_all = &["chain", "dev"])]
     pub testnet: bool,
 
