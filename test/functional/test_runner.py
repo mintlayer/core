@@ -56,7 +56,6 @@ TEST_EXIT_SKIPPED = 77
 BASE_SCRIPTS= [
     'example_test.py',
     'feature_alice_bob_test.py',
-    'feature_smart_contract_test.py',
     'feature_staking_extra.py',
     'feature_staking_extra_not_validator.py',
     'feature_staking_extra_wrong_controller.py',
@@ -67,6 +66,7 @@ BASE_SCRIPTS= [
     'feature_staking_withdraw_no_unlock.py',
     'feature_staking_withdraw_not_validator.py'
 #     'feature_staking_unlock_and_withdraw.py' ## should be ran on 20 secs
+    # 'feature_smart_contract_test.py',
     # Don't append tests at the end to avoid merge conflicts
     # Put them in a random line within the section that fits their approximate run-time
 ]

@@ -576,42 +576,42 @@ pub mod pallet {
     }
 
     pub fn create<T: Config>(
-        caller: &T::AccountId,
-        code: &Vec<u8>,
-        utxo_hash: H256,
-        utxo_value: u128,
-        data: &Vec<u8>,
+        _caller: &T::AccountId,
+        _code: &Vec<u8>,
+        _utxo_hash: H256,
+        _utxo_value: u128,
+        _data: &Vec<u8>,
     ) {
-        let weight: Weight = 6000000000;
+        // let weight: Weight = 6000000000;
 
-        match T::ProgrammablePool::create(caller, weight, code, utxo_hash, utxo_value, data) {
-            Ok(_) => log::info!("success!"),
-            Err(e) => log::error!("failure: {:#?}", e),
-        }
+        // match T::ProgrammablePool::create(caller, weight, code, utxo_hash, utxo_value, data) {
+        //     Ok(_) => log::info!("success!"),
+        //     Err(e) => log::error!("failure: {:#?}", e),
+        // }
     }
 
     pub fn call<T: Config>(
-        caller: &T::AccountId,
-        dest: &T::AccountId,
-        utxo_hash: H256,
-        utxo_value: u128,
-        fund_contract: bool,
-        data: &Vec<u8>,
+        _caller: &T::AccountId,
+        _dest: &T::AccountId,
+        _utxo_hash: H256,
+        _utxo_value: u128,
+        _fund_contract: bool,
+        _data: &Vec<u8>,
     ) {
-        let weight: Weight = 6000000000;
+        // let weight: Weight = 6000000000;
 
-        match T::ProgrammablePool::call(
-            caller,
-            dest,
-            weight,
-            utxo_hash,
-            utxo_value,
-            fund_contract,
-            data,
-        ) {
-            Ok(_) => log::info!("success!"),
-            Err(e) => log::error!("failure: {:#?}", e),
-        }
+        // match T::ProgrammablePool::call(
+        //     caller,
+        //     dest,
+        //     weight,
+        //     utxo_hash,
+        //     utxo_value,
+        //     fund_contract,
+        //     data,
+        // ) {
+        //     Ok(_) => log::info!("success!"),
+        //     Err(e) => log::error!("failure: {:#?}", e),
+        // }
     }
 
     pub fn validate_transaction<T: Config>(
