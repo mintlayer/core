@@ -6,6 +6,9 @@ pub struct Cli {
     #[structopt(subcommand)]
     pub subcommand: Option<Subcommand>,
 
+    #[structopt(long, conflicts_with_all = &["chain", "dev"])]
+    pub release: bool,
+
     #[structopt(flatten)]
     pub run: RunCmd,
 }
