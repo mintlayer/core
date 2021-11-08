@@ -100,30 +100,40 @@ fn less_than_minimum_stake() {
 
 #[test]
 fn non_mlt_staking() {
+    use crate::tokens::OutputData;
+
     let (mut test_ext, keys_and_hashes) = multiple_keys_test_ext();
     test_ext.execute_with(|| {
         let (karl_pub_key, karl_genesis) = keys_and_hashes[1];
         let (greg_pub_key, _) = keys_and_hashes[2];
-        let mut tx = Transaction {
+
+        let utxo = UtxoStore::<Test>::get(karl_genesis).expect("kar's utxo does not exist");
+
+        let tx = Transaction {
             inputs: vec![TransactionInput::new_empty(karl_genesis)],
             outputs: vec![
                 // KARL (index 1) wants to be a validator. He will use GREG (index 2) as the controller account.
                 // minimum value to stake is 10, but KARL only staked 5.
                 TransactionOutput {
-                    value: 5,
+                    value: 10,
                     destination: Destination::LockForStaking {
                         stash_account: H256::from(karl_pub_key),
                         controller_account: H256::from(greg_pub_key),
                         session_key: vec![2, 1],
                     },
-                    data: None,
+                    data: Some(OutputData::TokenIssuanceV1 {
+                        token_ticker: "Token".as_bytes().to_vec(),
+                        amount_to_issue: 5_000_000_000,
+                        // Should be not more than 18 numbers
+                        number_of_decimals: 12,
+                        metadata_uri: "mintlayer.org".as_bytes().to_vec(),
+                    }),
                 },
-                TransactionOutput::new_pubkey(90, H256::from(karl_pub_key)),
+                TransactionOutput::new_pubkey(80, H256::from(karl_pub_key)),
             ],
             time_lock: Default::default(),
-        };
-        let karl_sig = crypto::sr25519_sign(SR25519, &karl_pub_key, &tx.encode()).unwrap();
-        tx.inputs[0].witness = karl_sig.0.to_vec();
+        }.sign(&[utxo],0,&karl_pub_key)
+            .expect("karl's pub key not found");
 
         assert_err!(
             Utxo::spend(Origin::signed(H256::zero()), tx),
