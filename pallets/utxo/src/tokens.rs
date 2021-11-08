@@ -1,6 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use crate::TransactionInput;
+use crate::{TransactionInput, MLT_UNIT};
 use base58_nostd::{FromBase58, FromBase58Error, ToBase58, TOKEN_ID_PREFIX};
 use codec::{Decode, Encode};
 use frame_support::ensure;
@@ -19,7 +19,7 @@ pub type Value = u128;
 pub struct Mlt(pub Value);
 impl Mlt {
     pub fn to_munit(&self) -> Value {
-        self.0 * 1_000 * 100_000_000
+        self.0 * MLT_UNIT
     }
 }
 
