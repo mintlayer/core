@@ -161,7 +161,7 @@ impl SubstrateCli for Cli {
 
 /// Parse and run command line arguments
 pub fn run() -> sc_cli::Result<()> {
-    let cli = Cli::from_args();
+    let mut cli = Cli::from_args();
 
     match &cli.subcommand {
         Some(Subcommand::Key(cmd)) => cmd.run(&cli),
@@ -243,6 +243,11 @@ pub fn run() -> sc_cli::Result<()> {
             }
         }
         None => {
+            if cli.testnet {
+                // for testnet, set base path to tmp folder.
+                // this has to be called before running the node.
+                cli.run.tmp = true;
+            }
             let runner = cli.create_runner(&cli.run)?;
             runner.run_node_until_exit(|mut config| async move {
                 // if dev chainspec is not used, fetch an up-to-date bootnode list from Github
@@ -255,8 +260,9 @@ pub fn run() -> sc_cli::Result<()> {
                 }
 
                 if cli.testnet {
-                    let chain_spec = cli.load_spec("testnet")?;
-                    config.chain_spec = chain_spec;
+                    // for testnet, specify chain_spec to use the `testnet_config()`
+                    // from the `chain_spec.rs`
+                    config.chain_spec = cli.load_spec("testnet")?;
                 }
 
                 match config.role {
