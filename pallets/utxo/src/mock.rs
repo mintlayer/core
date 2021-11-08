@@ -141,7 +141,7 @@ impl<T: pallet_utxo::Config> StakingHelper<AccountId> for MockStaking<T> {
         })
     }
 
-    fn can_decode_session_key(session_key: &Vec<u8>) -> bool {
+    fn can_decode_session_key(_session_key: &Vec<u8>) -> bool {
         true
     }
 
@@ -276,6 +276,7 @@ frame_support::construct_runtime!(
         UncheckedExtrinsic = UncheckedExtrinsic,
     {
         System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
+        Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent},
         Utxo: pallet_utxo::{Pallet, Call, Config<T>, Storage, Event<T>},
     }
 );

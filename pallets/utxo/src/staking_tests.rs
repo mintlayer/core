@@ -319,8 +319,6 @@ fn non_validator_withdrawing() {
 fn withdrawing_before_expected_period() {
     let (mut test_ext, keys_and_hashes) = multiple_keys_test_ext();
     test_ext.execute_with(|| {
-        let mut alice_locked_utxo: Vec<H256> =
-            LockedUtxos::<Test>::iter().map(|(key, _)| key).collect();
 
         // ALICE (index 0) wants to stop validating.
         let (alice_pub_key, _) = keys_and_hashes[0];
