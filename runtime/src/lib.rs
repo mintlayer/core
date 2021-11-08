@@ -315,7 +315,7 @@ impl pallet_template::Config for Runtime {
 parameter_types! {
     pub const MinimumStake: u128 = MINIMUM_STAKE;
     pub const StakeWithdrawalFee: u128 =  1 * MLT_UNIT;
-    pub const RewardReductionPeriod: BlockNumber = 1 * MINUTES; // reward reduced every year
+    pub const RewardReductionPeriod: BlockNumber = 1 * YEARS; // reward reduced every year
     pub const RewardReductionFraction: Percent = Percent::from_percent(25); // reward reduced at 25%
     pub const InitialReward: u128 = 100 * MLT_UNIT;
     pub const DefaultMinimumReward: u128 = 1;
