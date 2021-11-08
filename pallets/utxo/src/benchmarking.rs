@@ -123,12 +123,12 @@ benchmarks! {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mock::{new_test_ext, Test};
+    use crate::mock::{alice_test_ext, Test};
     use frame_support::assert_ok;
 
     #[test]
     fn spend() {
-        new_test_ext().execute_with(|| {
+        alice_test_ext().execute_with(|| {
             assert_ok!(test_benchmark_test_spend::<Test>());
         });
     }

@@ -33,6 +33,11 @@ version = '1.0.45'
 default-features = false
 features = ['alloc']
 
+[dependencies.serde]
+version = '1.0.130'
+default-features = false
+features = ['derive']
+
 [dependencies.frame-benchmarking]
 git = 'https://github.com/paritytech/substrate.git'
 version = '4.0.0-dev'

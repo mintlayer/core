@@ -40,7 +40,7 @@ fn execute_with_alice<F, R>(mut execute: F) -> R
 where
     F: FnMut(Public) -> R,
 {
-    new_test_ext().execute_with(|| {
+    alice_test_ext().execute_with(|| {
         let alice_pub_key = crypto::sr25519_public_keys(SR25519)[0];
         execute(alice_pub_key)
     })
@@ -149,7 +149,7 @@ fn test_simple_tx() {
 
 #[test]
 fn attack_with_sending_to_own_account() {
-    let (mut test_ext, _alice, karl_pub_key) = new_test_ext_and_keys();
+    let (mut test_ext, _alice, karl_pub_key) = alice_test_ext_and_keys();
     test_ext.execute_with(|| {
         // Karl wants to send himself a new utxo of value 50 out of thin air.
         let mut tx = Transaction {
@@ -170,7 +170,7 @@ fn attack_with_sending_to_own_account() {
 
 #[test]
 fn attack_with_empty_transactions() {
-    new_test_ext().execute_with(|| {
+    alice_test_ext().execute_with(|| {
         assert_err!(
             Utxo::spend(Origin::signed(H256::zero()), Transaction::default()), // empty tx
             "no inputs"
@@ -296,7 +296,7 @@ fn attack_by_overspending() {
 // then send the rest of the tokens to karl
 #[test]
 fn tx_from_alice_to_karl() {
-    let (mut test_ext, alice_pub_key, karl_pub_key) = new_test_ext_and_keys();
+    let (mut test_ext, alice_pub_key, karl_pub_key) = alice_test_ext_and_keys();
     test_ext.execute_with(|| {
         // alice sends 10 tokens to karl and the rest back to herself
         let (utxo0, input0) = tx_input_gen_no_signature();
@@ -415,7 +415,7 @@ fn test_time_lock_script_fail() {
 fn test_tokens() {
     use crate::TokensHigherID;
 
-    let (mut test_ext, alice_pub_key, karl_pub_key) = new_test_ext_and_keys();
+    let (mut test_ext, alice_pub_key, karl_pub_key) = alice_test_ext_and_keys();
     test_ext.execute_with(|| {
         // Let's create a new test token
         let token_id = <TokensHigherID<Test>>::get()
@@ -509,7 +509,7 @@ fn attack_double_spend_by_tweaking_input() {
 
 #[test]
 fn test_send_to_address() {
-    let (mut test_ext, alice_pub_key, _karl_pub_key) = new_test_ext_and_keys();
+    let (mut test_ext, alice_pub_key, _karl_pub_key) = alice_test_ext_and_keys();
     test_ext.execute_with(|| {
         // `addr` is bech32-encoded, SCALE-encoded `Destination::Pubkey(alice_pub_key)`
         let addr = "ml1qrft7juyfhl06emj4zzrue5ljs6q39n2jalr4c40rhtcur647n0kwueyfsn";

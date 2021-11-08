@@ -15,12 +15,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::chain_spec::MltKeysInfo;
 use crate::cli::{Cli, Subcommand};
 use crate::{chain_spec, service};
-use node_template_runtime::Block;
+use node_template_runtime::{pallet_utxo, Block, TEST_NET_MLT_ORIG_SUPPLY};
 use sc_cli::{ChainSpec, Role, RuntimeVersion, SubstrateCli};
 use sc_network::config::MultiaddrWithPeerId;
 use sc_service::PartialComponents;
+use sp_core::H256;
+use sp_core::{ed25519, sr25519};
 use std::error::Error;
 use std::time::Duration;
 use ureq::Agent;
@@ -28,6 +31,14 @@ use ureq::Agent;
 const BOOTNODE_LIST_URL: &str =
     "https://raw.githubusercontent.com/mintlayer/core/master/assets/bootnodes.json";
 const HTTP_TIMEOUT: u64 = 3000;
+
+// actual keys for the test net
+const TEST_KEYS_URL: &str =
+    "https://raw.githubusercontent.com/mintlayer/core/staking_and_rewards/assets/test_keys.json";
+
+// used by 'dev' mode, in the functional tests.
+const FUNC_TEST_KEYS_URL: &str =
+    "https://raw.githubusercontent.com/mintlayer/core/staking_and_rewards/assets/functional_test_keys.json";
 
 /// Fetch an up-to-date list of bootnodes from Github
 fn fetch_bootnode_list() -> Result<Vec<MultiaddrWithPeerId>, Box<dyn Error>> {
@@ -47,6 +58,60 @@ fn fetch_bootnode_list() -> Result<Vec<MultiaddrWithPeerId>, Box<dyn Error>> {
     }
 
     Ok(parsed_nodes)
+}
+
+// Just to help translate json from the file.
+#[derive(Default, Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct MltKeysFromFile {
+    name: String,
+    sr25519_public_controller: H256,
+    sr25519_public_stash: H256,
+    ed25519_public: H256,
+}
+
+impl MltKeysFromFile {
+    fn into_mlt_keys_info(self, mlt_tokens: pallet_utxo::Value) -> MltKeysInfo {
+        MltKeysInfo {
+            name: self.name,
+            sr25519_public_controller: sr25519::Public::from_h256(self.sr25519_public_controller),
+            sr25519_public_stash: sr25519::Public::from_h256(self.sr25519_public_stash),
+            ed25519_public: ed25519::Public::from_h256(self.ed25519_public),
+            mlt_tokens,
+        }
+    }
+}
+
+/// fetching all the needed keys for the accounts.
+/// # Arguments
+/// * `auth_keys_url` - Provide the url location of the keys to use as genesis validators
+pub fn fetch_keys(auth_keys_url: &'static str) -> Result<Vec<MltKeysInfo>, String> {
+    let mut key_list: Vec<MltKeysInfo> = vec![];
+
+    let agent: Agent = ureq::AgentBuilder::new()
+        .timeout_read(Duration::from_millis(HTTP_TIMEOUT))
+        .timeout_write(Duration::from_millis(HTTP_TIMEOUT))
+        .build();
+
+    if let Ok(contents) = agent.get(auth_keys_url).call().map_err(|e| e.to_string())?.into_string()
+    {
+        let users: serde_json::Value =
+            serde_json::from_str(&contents).map_err(|e| e.to_string())?;
+
+        let users = users["users"].as_array().ok_or("invalid json to extract user list")?;
+        let share_per_user = TEST_NET_MLT_ORIG_SUPPLY
+            .checked_div(users.len() as pallet_utxo::Value)
+            .ok_or("unable to share mlt orig supply evenly.")?;
+
+        for user in users {
+            let x: MltKeysFromFile =
+                serde_json::from_value(user.clone()).map_err(|e| e.to_string())?;
+            key_list.push(x.into_mlt_keys_info(share_per_user));
+        }
+        return Ok(key_list);
+    }
+
+    log::debug!("failed to get keys from a file; using dummy values to populate keys");
+    Err("failed to read keys from json file".to_string())
 }
 
 impl SubstrateCli for Cli {
@@ -76,8 +141,13 @@ impl SubstrateCli for Cli {
 
     fn load_spec(&self, id: &str) -> Result<Box<dyn sc_service::ChainSpec>, String> {
         Ok(match id {
-            "dev" => Box::new(chain_spec::development_config()?),
-            "" | "local" => Box::new(chain_spec::local_testnet_config()?),
+            "release" => Box::new(chain_spec::release_config(fetch_keys(TEST_KEYS_URL)?)?),
+            "dev" => Box::new(chain_spec::development_config(fetch_keys(
+                FUNC_TEST_KEYS_URL,
+            )?)?),
+            "" | "local" => Box::new(chain_spec::local_testnet_config(fetch_keys(
+                FUNC_TEST_KEYS_URL,
+            )?)?),
             path => Box::new(chain_spec::ChainSpec::from_json_file(
                 std::path::PathBuf::from(path),
             )?),
@@ -182,6 +252,11 @@ pub fn run() -> sc_cli::Result<()> {
                         Ok(mut bootnodes) => config.network.boot_nodes.append(&mut bootnodes),
                         Err(e) => log::error!("Failed to update bootnode list: {:?}", e),
                     },
+                }
+
+                if cli.release {
+                    let chain_spec = cli.load_spec("release")?;
+                    config.chain_spec = chain_spec;
                 }
 
                 match config.role {
