@@ -1065,6 +1065,9 @@ pub mod pallet {
             reward = mlt_amount_in_inputs
                 .checked_sub(mlt_amount_in_outputs)
                 .ok_or("reward underflow")?;
+            if reward >= u64::MAX.into() {
+                frame_support::fail!("reward exceed allowed amount");
+            }
         }
 
         Ok(ValidTransaction {

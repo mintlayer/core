@@ -334,22 +334,64 @@ fn tx_from_alice_to_karl() {
 fn test_reward() {
     execute_with_alice(|alice_pub_key| {
         let (utxo0, input0) = tx_input_gen_no_signature();
+
+        // Check the default parameters
+        let utxos = UtxoStore::<Test>::get(input0.outpoint).unwrap();
+        assert_eq!(utxos.value, ALICE_GENESIS_BALANCE);
+        let reward = RewardTotal::<Test>::get();
+        assert_eq!(reward, 0);
+
+        // Make a new transaction
         let tx = Transaction {
             inputs: vec![input0],
-            outputs: vec![TransactionOutput::new_pubkey(90, H256::from(alice_pub_key))],
+            outputs: vec![TransactionOutput::new_pubkey(
+                ALICE_GENESIS_BALANCE - 90,
+                H256::from(alice_pub_key),
+            )],
             time_lock: Default::default(),
         }
         .sign_unchecked(&[utxo0], 0, &alice_pub_key);
 
         assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx.clone()));
+        let utxo_hash = tx.outpoint(0);
 
         // if the previous spend succeeded, there should be one utxo
-        // that has a value of 90 and a reward that has a value of 10
-        let utxos = UtxoStore::<Test>::iter_values().next().unwrap();
+        // that has a value of ALICE_GENESIS_BALANCE - 90 and a reward that has a value of 90
+        let utxos = UtxoStore::<Test>::get(utxo_hash).unwrap();
         let reward = RewardTotal::<Test>::get();
+        assert_eq!(utxos.value, ALICE_GENESIS_BALANCE - 90);
+        assert_eq!(reward, 90);
+    })
+}
 
-        assert_eq!(utxos.value, 90);
-        assert_eq!(reward, ALICE_GENESIS_BALANCE - 90);
+#[test]
+fn test_reward_overflow() {
+    execute_with_alice(|alice_pub_key| {
+        let (utxo0, input0) = tx_input_gen_no_signature();
+
+        // Check the default parameters
+        let utxos = UtxoStore::<Test>::get(input0.outpoint).unwrap();
+        assert_eq!(utxos.value, ALICE_GENESIS_BALANCE);
+        let reward = RewardTotal::<Test>::get();
+        assert_eq!(reward, 0);
+
+        // Make a new transaction where
+        // Input balance:  4_000_000_000_000_000_000_000
+        // u64::MAX:          18_446_744_073_709_551_615
+        // the difference: 3_981_553_255_926_290_448_385
+        let tx = Transaction {
+            inputs: vec![input0],
+            outputs: vec![TransactionOutput::new_pubkey(
+                3_981_553_255_926_290_448_385,
+                H256::from(alice_pub_key),
+            )],
+            time_lock: Default::default(),
+        }
+        .sign_unchecked(&[utxo0], 0, &alice_pub_key);
+        assert_err!(
+            Utxo::spend(Origin::signed(H256::zero()), tx),
+            "reward exceed allowed amount"
+        );
     })
 }
 
