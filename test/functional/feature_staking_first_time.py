@@ -92,12 +92,14 @@ class ExampleTest(MintlayerTestFramework):
             ],
             outputs=[
                 utxo.Output(
-                    value=40000 * COIN,
+                    # value=40000 * COIN,
+                    value=1,
                     destination=utxo.DestLockForStaking(charlie_stash.public_key, charlie.public_key,'0xa03bcfaac6ebdc26bb9c256c51b08f9c1c6d4569f48710a42939168d1d7e5b6086b20e145e97158f6a0b5bff2994439d3320543c8ff382d1ab3e5eafffaf1a18'),
                     data=None
                 ),
                 utxo.Output(
-                    value=9999 * COIN,
+                    # value=9999 * COIN,
+                    value=1,
                     destination=utxo.DestPubkey(charlie_stash.public_key),
                     data=None
                 ),

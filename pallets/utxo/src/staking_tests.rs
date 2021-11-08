@@ -17,11 +17,67 @@
 
 use crate::{
     mock::*, Destination, Error, LockedUtxos, StakingCount, Transaction, TransactionInput,
-    TransactionOutput, UtxoStore,
+    TransactionOutput, UtxoStore, MLT_UNIT,
 };
 use codec::Encode;
 use frame_support::{assert_err, assert_ok, sp_io::crypto};
 use sp_core::{sp_std::vec, testing::SR25519, H256};
+
+// JUST FOR SEEKING BUG IN FUNCTIONAL TEST
+// todo: Remove this
+#[test]
+fn staking_first_time() {
+    let (mut test_ext, keys_and_hashes) = multiple_keys_test_ext();
+    test_ext.execute_with(|| {
+        let (karl_pub_key, karl_genesis) = keys_and_hashes[1];
+        let (alice_pub_key, _) = keys_and_hashes[0];
+        let (greg_pub_key, _) = keys_and_hashes[2];
+
+        let utxo = UtxoStore::<Test>::get(karl_genesis).expect("tom's utxo does not exist");
+        let tx1 = Transaction {
+            inputs: vec![TransactionInput::new_empty(karl_genesis)],
+            outputs: vec![TransactionOutput::new_pubkey(100, H256::from(alice_pub_key))],
+            time_lock: Default::default(),
+        }
+        .sign(&[utxo], 0, &karl_pub_key)
+        .expect("karl's pub key not found");
+        let utxo = &tx1.outputs[0];
+        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx1.clone()));
+
+        let tx2 = Transaction {
+            inputs: vec![TransactionInput::new_empty(tx1.outpoint(0))],
+            outputs: vec![
+                // KARL (index 1) wants to be a validator. He will use GREG (index 2) as the controller account.
+                // minimum value to stake is 10,
+                TransactionOutput::new_lock_for_staking(
+                    90, // 40000 * MLT_UNIT,
+                    H256::from(greg_pub_key),
+                    H256::from(greg_pub_key),
+                    vec![2, 1],
+                ),
+                TransactionOutput::new_pubkey(
+                    10, /*9999 * MLT_UNIT*/
+                    H256::from(karl_pub_key),
+                ),
+            ],
+            time_lock: Default::default(),
+        }
+        .sign(&[utxo.clone()], 0, &alice_pub_key)
+        .expect("Alice's pub key not found");
+        let new_utxo_hash = tx2.outpoint(1);
+
+        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx2));
+        assert!(UtxoStore::<Test>::contains_key(new_utxo_hash));
+        assert!(StakingCount::<Test>::contains_key(H256::from(greg_pub_key)));
+        assert!(StakingCount::<Test>::contains_key(H256::from(
+            alice_pub_key
+        )));
+        assert_eq!(
+            StakingCount::<Test>::get(H256::from(greg_pub_key)),
+            Some((1, 90))
+        );
+    })
+}
 
 #[test]
 fn simple_staking() {
@@ -132,8 +188,9 @@ fn non_mlt_staking() {
                 TransactionOutput::new_pubkey(80, H256::from(karl_pub_key)),
             ],
             time_lock: Default::default(),
-        }.sign(&[utxo],0,&karl_pub_key)
-            .expect("karl's pub key not found");
+        }
+        .sign(&[utxo], 0, &karl_pub_key)
+        .expect("karl's pub key not found");
 
         assert_err!(
             Utxo::spend(Origin::signed(H256::zero()), tx),
