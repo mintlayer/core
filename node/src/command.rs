@@ -34,11 +34,11 @@ const HTTP_TIMEOUT: u64 = 3000;
 
 // actual keys for the test net
 const TEST_KEYS_URL: &str =
-    "https://raw.githubusercontent.com/mintlayer/core/staking_and_rewards/assets/test_keys.json";
+    "https://raw.githubusercontent.com/mintlayer/core/staging/assets/test_keys.json";
 
 // used by 'dev' mode, in the functional tests.
 const FUNC_TEST_KEYS_URL: &str =
-    "https://raw.githubusercontent.com/mintlayer/core/staking_and_rewards/assets/functional_test_keys.json";
+    "https://raw.githubusercontent.com/mintlayer/core/staging/assets/functional_test_keys.json";
 
 /// Fetch an up-to-date list of bootnodes from Github
 fn fetch_bootnode_list() -> Result<Vec<MultiaddrWithPeerId>, Box<dyn Error>> {
