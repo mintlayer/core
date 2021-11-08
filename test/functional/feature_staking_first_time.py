@@ -76,16 +76,11 @@ class ExampleTest(MintlayerTestFramework):
             ],
             outputs=[
                 utxo.Output(
-                    value=50000 * COIN,
+                    #value=50000 * COIN,
+                    value=3981553255926290448385,
                     destination=utxo.DestPubkey(charlie_stash.public_key),
                     data=None
                 ),
-                # This output prevent reward overflow
-                utxo.Output(
-                    value=3981553255926290448385 - 50000 * COIN, # genesis amount - u64::MAX
-                    destination=utxo.DestPubkey(alice.public_key),
-                    data=None
-                )
             ]
         ).sign(alice, [utxos[0][1]])
         client.submit(alice, tx1)
@@ -107,7 +102,7 @@ class ExampleTest(MintlayerTestFramework):
                     data=None
                 ),
             ]
-        ).sign(charlie_stash, [tx1.outputs[0]])
+        ).sign(charlie_stash, tx1.outputs)
         (_,_,events) = client.submit(charlie_stash, tx2)
 
         # there should already be 3 staking, adding Charlie in the list.
