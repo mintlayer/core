@@ -27,6 +27,8 @@ frame-support = { default-features = false, version = '4.0.0-dev', git = 'https:
 
 [dev-dependencies]
 # serde = '1.0.119'
+flate2 = "1.0.22"
+hex = '0.4.3'
 hex-literal = "0.3.1"
 proptest = "1.0.0"
 
