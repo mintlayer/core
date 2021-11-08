@@ -16,8 +16,8 @@
 // Author(s): C. Yap
 
 use crate::{
-    convert_to_h256, Config, Destination, Error, Event, LockedUtxos, Pallet, RewardTotal,
-    StakingCount, TransactionOutput, UtxoStore, Value,
+    convert_to_h256, tokens::Value, Config, Destination, Error, Event, LockedUtxos, Pallet,
+    RewardTotal, StakingCount, TransactionOutput, UtxoStore,
 };
 use frame_support::{
     dispatch::{DispatchResultWithPostInfo, Vec},
@@ -164,7 +164,7 @@ pub(crate) fn withdraw<T: Config>(stash_account: T::AccountId) -> DispatchResult
 pub mod validation {
     use super::*;
     use crate::staking::utils::get_all_locked_utxo_outpoints;
-    use crate::{OutputHeaderHelper, TokenType, TransactionOutputFor};
+    use crate::TransactionOutputFor;
 
     /// to validate `LockForStaking` and `LockExtraForStaking`
     pub fn validate_staking_ops<T: Config>(
@@ -177,10 +177,7 @@ pub mod validation {
         );
 
         ensure!(
-            matches!(
-                tx.header.as_tx_output_header().token_type(),
-                Some(TokenType::MLT)
-            ),
+            tx.data.is_none(),
             "only MLT tokens are supported for staking"
         );
 

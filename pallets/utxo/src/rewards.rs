@@ -16,8 +16,8 @@
 // Author(s): C. Yap
 
 use crate::{
-    convert_to_h256, BlockAuthor, Config, Event, Pallet, RewardTotal, TransactionOutput, UtxoStore,
-    Value,
+    convert_to_h256, tokens::Value, BlockAuthor, Config, Event, Pallet, RewardTotal,
+    TransactionOutput, UtxoStore,
 };
 
 use frame_support::traits::Get;

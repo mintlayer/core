@@ -19,20 +19,18 @@
 
 pub use pallet::*;
 
-
-#[cfg(test)]
-mod mock;
-#[cfg(test)]
-mod tests;
-#[cfg(test)]
-mod staking_tests;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
-mod header;
+#[cfg(test)]
+mod mock;
 mod rewards;
 mod script;
 mod sign;
 pub mod staking;
+#[cfg(test)]
+mod staking_tests;
+#[cfg(test)]
+mod tests;
 pub mod tokens;
 pub mod weights;
 
@@ -54,8 +52,8 @@ pub mod pallet {
     use crate::sign::{self, Scheme};
     // todo: This part isn't fully tested, left for the next PR
     // use crate::tokens::{NftDataHash};
-    use crate::tokens::{OutputData, TokenId, Value};
     use crate::staking::{self, StakingHelper};
+    use crate::tokens::{OutputData, TokenId, Value};
     use bech32;
     use chainscript::Script;
     use codec::{Decode, Encode};
@@ -80,6 +78,7 @@ pub mod pallet {
         testing::SR25519,
         H256, H512,
     };
+    pub const MLT_UNIT: Value = 1_000 * 100_000_000;
 
     #[pallet::error]
     pub enum Error<T> {
@@ -944,7 +943,6 @@ pub mod pallet {
             new_utxos.push(hash.as_fixed_bytes().to_vec());
 
             match output.destination {
-                Destination::Pubkey(_) | Destination::ScriptHash(_) => {}
                 Destination::CreatePP(_, _) => {
                     ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
                     log::info!("TODO validate CreatePP as output");

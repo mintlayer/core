@@ -25,7 +25,7 @@ pub struct MltKeysInfo {
     pub sr25519_public_controller: sr25519::Public,
     pub sr25519_public_stash: sr25519::Public,
     pub ed25519_public: sp_core::ed25519::Public,
-    pub mlt_tokens: pallet_utxo::Value,
+    pub mlt_tokens: pallet_utxo::tokens::Value,
 }
 
 impl MltKeysInfo {

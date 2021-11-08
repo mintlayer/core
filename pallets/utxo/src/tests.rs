@@ -172,6 +172,8 @@ fn attack_with_sending_to_own_account() {
 #[test]
 fn attack_with_empty_transactions() {
     alice_test_ext().execute_with(|| {
+        // We should use the real input because. Otherwise, appears another error
+        let (_, input) = tx_input_gen_no_signature();
         assert_err!(
             Utxo::spend(Origin::signed(H256::zero()), Transaction::default()), // empty tx
             "no inputs"
@@ -1030,7 +1032,7 @@ fn test_tx_issuance_for_transfer<F>(expecting_err_msg: &'static str, test_func: 
 where
     F: Fn(TokenId, Public, Public, H256, TransactionOutput<H256>) -> Transaction<H256>,
 {
-    let (mut test_ext, alice_pub_key, karl_pub_key) = new_test_ext_and_keys();
+    let (mut test_ext, alice_pub_key, karl_pub_key) = alice_test_ext_and_keys();
     test_ext.execute_with(|| {
         // Alice issue 1_000_000_000 MLS-01, and send them to Karl
         let (utxo0, input0) = tx_input_gen_no_signature();
@@ -1183,7 +1185,7 @@ fn test_token_transfer_send_part_others_burn() {
 
 #[test]
 fn test_token_transfer() {
-    let (mut test_ext, alice_pub_key, karl_pub_key) = new_test_ext_and_keys();
+    let (mut test_ext, alice_pub_key, karl_pub_key) = alice_test_ext_and_keys();
     test_ext.execute_with(|| {
         // Alice issue 1_000_000_000 MLS-01, and send them to Karl
         let (utxo0, input0) = tx_input_gen_no_signature();
@@ -1421,7 +1423,7 @@ fn test_token_transfer() {
 #[test]
 // Test tx where Input with token and without MLT, output has token (without MLT)
 fn test_token_creation_with_insufficient_fee() {
-    let (mut test_ext, alice_pub_key, karl_pub_key) = new_test_ext_and_keys();
+    let (mut test_ext, alice_pub_key, karl_pub_key) = alice_test_ext_and_keys();
     test_ext.execute_with(|| {
         // Alice issue 1000 MLS-01, and send them to Karl and the rest back to herself
         let (utxo0, input0) = tx_input_gen_no_signature();
@@ -1477,7 +1479,7 @@ fn test_token_creation_with_insufficient_fee() {
 
 #[test]
 fn test_transfer_and_issuance_in_one_tx() {
-    let (mut test_ext, alice_pub_key, karl_pub_key) = new_test_ext_and_keys();
+    let (mut test_ext, alice_pub_key, karl_pub_key) = alice_test_ext_and_keys();
     test_ext.execute_with(|| {
         // Alice issue 1_000_000_000 MLS-01, and send them to Karl
         let (utxo0, input0) = tx_input_gen_no_signature();
@@ -1605,7 +1607,7 @@ fn test_transfer_and_issuance_in_one_tx() {
 
 #[test]
 fn test_transfer_for_multiple_tokens() {
-    let (mut test_ext, alice_pub_key, karl_pub_key) = new_test_ext_and_keys();
+    let (mut test_ext, alice_pub_key, karl_pub_key) = alice_test_ext_and_keys();
     test_ext.execute_with(|| {
         //
         // Issue token 1 and send all tokens to Karl

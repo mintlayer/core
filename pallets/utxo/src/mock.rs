@@ -20,6 +20,7 @@ use pallet_utxo::TransactionOutput;
 use pp_api::ProgrammablePoolApi;
 
 use crate::tokens::Value;
+use crate::MLT_UNIT;
 use frame_support::dispatch::DispatchResultWithPostInfo;
 use frame_support::{dispatch::Vec, weights::Weight};
 use frame_support::{
@@ -64,7 +65,8 @@ thread_local! {
 pub const ALICE_PHRASE: &str =
     "news slush supreme milk chapter athlete soap sausage put clutch what kitten";
 
-pub const ALICE_GENESIS_BALANCE: Value = 1_000_000_000_000_000;
+// 1 / 10 of TEST_NET_MLT_ORIG_SUPPLY
+pub const ALICE_GENESIS_BALANCE: Value = MLT_UNIT * 400_000_000_00;
 
 pub fn genesis_utxo() -> (TransactionOutput<H256>, H256) {
     let keystore = KeyStore::new();
@@ -343,7 +345,6 @@ impl pallet_utxo::Config for Test {
     type Call = Call;
     type WeightInfo = crate::weights::WeightInfo<Test>;
     type ProgrammablePool = MockPool<Test>;
-    type AssetId = u64;
     type RewardReductionFraction = RewardReductionFraction;
     type RewardReductionPeriod = RewardReductionPeriod;
 
@@ -376,7 +377,6 @@ pub fn alice_test_ext() -> TestExternalities {
             ALICE_GENESIS_BALANCE,
             H256::from(alice_pub_key),
         )],
-        _marker: Default::default(),
         locked_utxos: vec![],
     }
     .assimilate_storage(&mut t)
@@ -402,7 +402,6 @@ pub fn alice_test_ext_and_keys() -> (TestExternalities, Public, Public) {
             ALICE_GENESIS_BALANCE,
             H256::from(alice_pub_key),
         )],
-        _marker: Default::default(),
         locked_utxos: vec![],
     }
     .assimilate_storage(&mut t)

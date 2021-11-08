@@ -111,12 +111,12 @@ fn non_mlt_staking() {
                 // minimum value to stake is 10, but KARL only staked 5.
                 TransactionOutput {
                     value: 5,
-                    header: 1, // not an MLT token
                     destination: Destination::LockForStaking {
                         stash_account: H256::from(karl_pub_key),
                         controller_account: H256::from(greg_pub_key),
                         session_key: vec![2, 1],
                     },
+                    data: None,
                 },
                 TransactionOutput::new_pubkey(90, H256::from(karl_pub_key)),
             ],
@@ -319,7 +319,6 @@ fn non_validator_withdrawing() {
 fn withdrawing_before_expected_period() {
     let (mut test_ext, keys_and_hashes) = multiple_keys_test_ext();
     test_ext.execute_with(|| {
-
         // ALICE (index 0) wants to stop validating.
         let (alice_pub_key, _) = keys_and_hashes[0];
 
