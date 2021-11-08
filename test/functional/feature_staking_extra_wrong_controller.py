@@ -80,8 +80,8 @@ class ExampleTest(MintlayerTestFramework):
             outputs=[
                 utxo.Output(
                     value=40000 * COIN,
-                    header=0,
-                    destination=utxo.DestLockExtraForStaking(alice_stash.public_key, bob.public_key)
+                    destination=utxo.DestLockExtraForStaking(alice_stash.public_key, bob.public_key),
+                    data=None
                 ),
             ]
         ).sign(alice_stash, [utxos[0][1]])

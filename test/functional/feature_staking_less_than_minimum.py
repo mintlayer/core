@@ -77,8 +77,8 @@ class ExampleTest(MintlayerTestFramework):
             outputs=[
                 utxo.Output(
                     value=50000 * COIN,
-                    header=0,
-                    destination=utxo.DestPubkey(charlie_stash.public_key)
+                    destination=utxo.DestPubkey(charlie_stash.public_key),
+                    data=None
                 ),
             ]
         ).sign(alice, [utxos[0][1]])
@@ -92,13 +92,13 @@ class ExampleTest(MintlayerTestFramework):
             outputs=[
                 utxo.Output(
                     value=4000 * COIN,
-                    header=0,
-                    destination=utxo.DestLockForStaking(charlie_stash.public_key, charlie.public_key,'0xa03bcfaac6ebdc26bb9c256c51b08f9c1c6d4569f48710a42939168d1d7e5b6086b20e145e97158f6a0b5bff2994439d3320543c8ff382d1ab3e5eafffaf1a18')
+                    destination=utxo.DestLockForStaking(charlie_stash.public_key, charlie.public_key,'0xa03bcfaac6ebdc26bb9c256c51b08f9c1c6d4569f48710a42939168d1d7e5b6086b20e145e97158f6a0b5bff2994439d3320543c8ff382d1ab3e5eafffaf1a18'),
+                    data=None
                 ),
                 utxo.Output(
                     value=45999 * COIN,
-                    header=0,
-                    destination=utxo.DestPubkey(charlie_stash.public_key)
+                    destination=utxo.DestPubkey(charlie_stash.public_key),
+                    data=None
                 ),
             ]
         ).sign(charlie_stash, tx1.outputs)
