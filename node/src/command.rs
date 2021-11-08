@@ -141,7 +141,7 @@ impl SubstrateCli for Cli {
 
     fn load_spec(&self, id: &str) -> Result<Box<dyn sc_service::ChainSpec>, String> {
         Ok(match id {
-            "release" => Box::new(chain_spec::release_config(fetch_keys(TEST_KEYS_URL)?)?),
+            "testnet" => Box::new(chain_spec::testnet_config(fetch_keys(TEST_KEYS_URL)?)?),
             "dev" => Box::new(chain_spec::development_config(fetch_keys(
                 FUNC_TEST_KEYS_URL,
             )?)?),
@@ -254,8 +254,8 @@ pub fn run() -> sc_cli::Result<()> {
                     },
                 }
 
-                if cli.release {
-                    let chain_spec = cli.load_spec("release")?;
+                if cli.testnet {
+                    let chain_spec = cli.load_spec("testnet")?;
                     config.chain_spec = chain_spec;
                 }
 
