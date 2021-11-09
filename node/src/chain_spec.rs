@@ -87,7 +87,7 @@ pub fn testnet_config(endowed_accounts: Vec<MltKeysInfo>) -> Result<ChainSpec, S
         // Telemetry
         None,
         // Protocol ID
-        None,
+        "MintlayerTestV0".into(),
         // Properties
         None,
         // Extensions
