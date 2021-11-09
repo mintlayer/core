@@ -51,7 +51,7 @@ where
     fn bond(
         controller_account: StakeAccountId<T>,
         stash_account: StakeAccountId<T>,
-        value: pallet_utxo::Value,
+        value: pallet_utxo::tokens::Value,
     ) -> DispatchResult {
         let controller_lookup: LookupSourceOf<T> = T::Lookup::unlookup(controller_account.clone());
         let reward_destination = pallet_staking::RewardDestination::Staked;

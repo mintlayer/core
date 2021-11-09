@@ -22,13 +22,20 @@ std = [
 hex-literal = "0.2.1"
 log = "0.4.8"
 serde = '1.0.119'
-pallet-utxo-tokens = { path = "./tokens" }
 variant_count = '1.1'
+
+[dev-dependencies]
+rand = "0.4"
 
 [dependencies.bech32]
 default-features = false
 path = '../../libs/bech32'
 version = '0.8.1'
+
+[dependencies.base58_nostd]
+default-features = false
+path = '../../libs/base58_nostd'
+version = '0.1.0'
 
 [dependencies.chainscript]
 default-features = false
@@ -37,7 +44,7 @@ version = '0.1.0'
 
 [dependencies.codec]
 default-features = false
-features = ['derive']
+features = ["derive", "chain-error"]
 package = 'parity-scale-codec'
 version = '2.0.0'
 

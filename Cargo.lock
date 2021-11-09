@@ -397,6 +397,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5024ee8015f02155eee35c711107ddd9a9bf3cb689cf2a9089c97e79b6e1ae83"
 
 [[package]]
+name = "base58_nostd"
+version = "0.1.0"
+dependencies = [
+ "frame-support",
+ "sp-std",
+]
+
+[[package]]
 name = "base64"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3400,7 +3408,6 @@ dependencies = [
  "pallet-transaction-payment-rpc",
  "pallet-utxo-rpc",
  "pallet-utxo-rpc-runtime-api",
- "pallet-utxo-tokens",
  "sc-authority-discovery",
  "sc-basic-authorship",
  "sc-cli",
@@ -3683,7 +3690,6 @@ dependencies = [
  "pallet-transaction-payment-rpc-runtime-api",
  "pallet-utxo",
  "pallet-utxo-rpc-runtime-api",
- "pallet-utxo-tokens",
  "parity-scale-codec",
  "sp-api",
  "sp-block-builder",
@@ -4170,6 +4176,7 @@ dependencies = [
 name = "pallet-utxo"
 version = "0.1.0"
 dependencies = [
+ "base58_nostd",
  "bech32",
  "chainscript",
  "frame-benchmarking",
@@ -4179,10 +4186,10 @@ dependencies = [
  "log",
  "pallet-authorship",
  "pallet-timestamp",
- "pallet-utxo-tokens",
  "parity-scale-codec",
  "pp-api",
  "proptest",
+ "rand 0.4.6",
  "serde",
  "sp-core",
  "sp-keystore",
@@ -4201,11 +4208,11 @@ dependencies = [
  "jsonrpc-core-client",
  "jsonrpc-derive",
  "pallet-utxo-rpc-runtime-api",
- "pallet-utxo-tokens",
  "parity-scale-codec",
  "serde",
  "sp-api",
  "sp-blockchain",
+ "sp-core",
  "sp-runtime",
 ]
 
@@ -4214,23 +4221,12 @@ name = "pallet-utxo-rpc-runtime-api"
 version = "0.1.0"
 dependencies = [
  "frame-support",
- "pallet-utxo-tokens",
  "parity-scale-codec",
  "serde",
  "serde_json",
  "sp-api",
+ "sp-core",
  "sp-runtime",
-]
-
-[[package]]
-name = "pallet-utxo-tokens"
-version = "0.1.0"
-dependencies = [
- "frame-support",
- "hex-literal 0.2.1",
- "log",
- "parity-scale-codec",
- "serde",
 ]
 
 [[package]]

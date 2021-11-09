@@ -326,7 +326,6 @@ impl pallet_utxo::Config for Runtime {
     type Call = Call;
     type WeightInfo = pallet_utxo::weights::WeightInfo<Runtime>;
     type ProgrammablePool = pallet_pp::Pallet<Runtime>;
-    type AssetId = u64;
 
     type RewardReductionFraction = RewardReductionFraction;
     type RewardReductionPeriod = RewardReductionPeriod;
@@ -702,12 +701,6 @@ impl_runtime_apis! {
     impl pallet_utxo_rpc_runtime_api::UtxoApi<Block> for Runtime {
         fn send() -> u32 {
             Utxo::send()
-        }
-
-        // What means Vec<(u64, Vec<u8>)> ? Have a look at utxo/rpc/runtime-api/src/lib.rs
-        fn tokens_list() -> Vec<(u64, Vec<u8>)> {
-            let list = Utxo::tokens_list();
-            list.into_iter().map(|x| (x.id, x.name)).collect()
         }
     }
 

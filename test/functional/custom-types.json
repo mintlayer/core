@@ -43,6 +43,59 @@
 				[ "LockExtraForStaking", "DestinationStakeExtra" ]
 			]
 		},
+		"NftDataHash": {
+			"type": "struct",
+			"type_mapping": [
+				[ "Hash32", "[u8; 32]" ],
+				[ "Raw", "Vec<u8>" ]
+			]
+		},
+		"TokenId": {
+			"type": "struct",
+			"type_mapping": [
+				[ "inner", "H160" ]
+			]
+		},
+		"TokenTransferV1": {
+			"type": "struct",
+			"type_mapping": [
+				[ "token_id", "TokenId" ],
+				[ "amount", "Value" ]
+			]
+		},
+		"TokenIssuanceV1": {
+			"type": "struct",
+			"type_mapping": [
+				[ "token_ticker", "Vec<u8>" ],
+				[ "amount_to_issue", "Value" ],
+				[ "number_of_decimals", "u8" ],
+				[ "metadata_uri", "Vec<u8>" ]
+			]
+		},
+		"TokenBurnV1": {
+			"type": "struct",
+			"type_mapping": [
+				[ "token_id", "TokenId" ],
+				[ "amount_to_burn", "Value" ]
+			]
+		},
+		"NftMintV1": {
+			"type": "struct",
+			"type_mapping": [
+				[ "token_id", "TokenId" ],
+				[ "data_hash", "NftDataHash" ],
+				[ "metadata_uri", "Vec<u8>" ]
+			]
+		},
+		"OutputData": {
+			"type": "enum",
+			"type_mapping": [
+				[ "TokenTransfer", "TokenTransferV1" ],
+				[ "TokenIssuance", "TokenIssuanceV1" ],
+				[ "TokenBurn", "TokenBurnV1" ],
+				[ "NftMint", "NftMintV1" ]
+			]
+		},
 		"TransactionInput": {
 			"type": "struct",
 			"type_mapping": [
@@ -55,8 +108,8 @@
 			"type": "struct",
 			"type_mapping": [
 				[ "value", "Value" ],
-				[ "header", "TXOutputHeader"],
-				[ "destination", "Destination" ]
+				[ "destination", "Destination" ],
+				[ "data", "Option<OutputData>"]
 			]
 		},
 		"Transaction": {
@@ -79,10 +132,8 @@
 		"Address": "MultiAddress",
 		"LookupSource": "MultiAddress",
 		"Value": "u128",
-		"TXOutputHeader": "u128",
 		"value": "Value",
 		"pub_key": "H256",
-		"header": "TXOutputHeader",
 		"Difficulty": "U256",
 		"DifficultyAndTimestamp": {
 			"type": "struct",

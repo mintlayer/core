@@ -19,6 +19,8 @@ use pallet_utxo::staking::StakingHelper;
 use pallet_utxo::TransactionOutput;
 use pp_api::ProgrammablePoolApi;
 
+use crate::tokens::Value;
+use crate::MLT_UNIT;
 use frame_support::dispatch::DispatchResultWithPostInfo;
 use frame_support::{dispatch::Vec, weights::Weight};
 use frame_support::{
@@ -63,10 +65,14 @@ thread_local! {
 pub const ALICE_PHRASE: &str =
     "news slush supreme milk chapter athlete soap sausage put clutch what kitten";
 
+// 1 / 10 of TEST_NET_MLT_ORIG_SUPPLY
+pub const ALICE_GENESIS_BALANCE: Value = MLT_UNIT * 400_000_000_00;
+
 pub fn genesis_utxo() -> (TransactionOutput<H256>, H256) {
     let keystore = KeyStore::new();
     let alice_pub_key = create_pub_key(&keystore, ALICE_PHRASE);
-    let output = TransactionOutput::<H256>::new_pubkey(100, H256::from(alice_pub_key));
+    let output =
+        TransactionOutput::<H256>::new_pubkey(ALICE_GENESIS_BALANCE, H256::from(alice_pub_key));
     let hash = BlakeTwo256::hash_of(&(&output, 0u64, "genesis"));
     (output, hash)
 }
@@ -339,7 +345,6 @@ impl pallet_utxo::Config for Test {
     type Call = Call;
     type WeightInfo = crate::weights::WeightInfo<Test>;
     type ProgrammablePool = MockPool<Test>;
-    type AssetId = u64;
     type RewardReductionFraction = RewardReductionFraction;
     type RewardReductionPeriod = RewardReductionPeriod;
 
@@ -368,7 +373,10 @@ pub fn alice_test_ext() -> TestExternalities {
     let mut t = frame_system::GenesisConfig::default().build_storage::<Test>().unwrap();
 
     pallet_utxo::GenesisConfig::<Test> {
-        genesis_utxos: vec![TransactionOutput::new_pubkey(100, H256::from(alice_pub_key))],
+        genesis_utxos: vec![TransactionOutput::new_pubkey(
+            ALICE_GENESIS_BALANCE,
+            H256::from(alice_pub_key),
+        )],
         locked_utxos: vec![],
     }
     .assimilate_storage(&mut t)
@@ -390,7 +398,10 @@ pub fn alice_test_ext_and_keys() -> (TestExternalities, Public, Public) {
 
     let mut t = frame_system::GenesisConfig::default().build_storage::<Test>().unwrap();
     pallet_utxo::GenesisConfig::<Test> {
-        genesis_utxos: vec![TransactionOutput::new_pubkey(100, H256::from(alice_pub_key))],
+        genesis_utxos: vec![TransactionOutput::new_pubkey(
+            ALICE_GENESIS_BALANCE,
+            H256::from(alice_pub_key),
+        )],
         locked_utxos: vec![],
     }
     .assimilate_storage(&mut t)

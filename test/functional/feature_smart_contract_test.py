@@ -77,17 +77,23 @@ class ExampleTest(MintlayerTestFramework):
             outputs=[
                 utxo.Output(
                     value=50,
-                    header=0,
-                    destination=utxo.DestPubkey(alice.public_key)
+                    destination=utxo.DestPubkey(alice.public_key),
+                    data=None
                 ),
                 utxo.Output(
                     value=10,
-                    header=0,
                     destination=utxo.DestCreatePP(
                         code=os.path.join(os.path.dirname(__file__), "code.wasm"),
                         data=[0xed, 0x4b, 0x9d, 0x1b],  # default() constructor selector
-                    )
+                    ),
+                    data=None
                 ),
+                # This output prevent reward overflow
+                utxo.Output(
+                    value=3981553255926290448385, # = genesis amount - u64::MAX
+                    destination=utxo.DestPubkey(alice.public_key),
+                    data=None
+                )
             ]
         ).sign(alice, [initial_utxo[1]])
 
@@ -122,17 +128,17 @@ class ExampleTest(MintlayerTestFramework):
             outputs=[
                 utxo.Output(
                     value=49,
-                    header=0,
-                    destination=utxo.DestPubkey(alice.public_key)
+                    destination=utxo.DestPubkey(alice.public_key),
+                    data=None
                 ),
                 utxo.Output(
                     value=1,
-                    header=0,
                     destination=utxo.DestCallPP(
                         dest_account=acc_id,
                         fund=False,
                         input_data=bytes.fromhex(msg_data.to_hex()[2:]),
-                    )
+                    ),
+                    data=None
                 ),
             ]
         ).sign(alice, [tx0.outputs[0]], [0])

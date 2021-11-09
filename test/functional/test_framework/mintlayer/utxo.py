@@ -242,15 +242,15 @@ class DestLockExtraForStaking(Destination):
 
 
 class Output():
-    def __init__(self, value, header, destination):
+    def __init__(self, value, destination, data):
         self.value = value
-        self.header = header
         self.destination = destination
+        self.data = data
 
     @staticmethod
     def load(obj):
         dest = Destination.load(obj['destination'])
-        return Output(obj['value'], obj['header'], dest)
+        return Output(obj['value'], dest, obj['data'])
 
     def type_string(self):
         return 'TransactionOutput'
@@ -258,8 +258,8 @@ class Output():
     def json(self):
         return {
             'value': self.value,
-            'header': self.header,
             'destination': self.destination.json(),
+            'data': self.data,
         }
 
 

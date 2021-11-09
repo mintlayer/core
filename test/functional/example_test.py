@@ -113,14 +113,20 @@ class ExampleTest(MintlayerTestFramework):
             outputs=[
                 utxo.Output(
                     value=50,
-                    header=0,
-                    destination=utxo.DestPubkey(alice.public_key)
+                    destination=utxo.DestPubkey(alice.public_key),
+                    data=None
                 ),
                 utxo.Output(
                     value=100,
-                    header=0,
-                    destination=utxo.DestPubkey(alice.public_key)
+                    destination=utxo.DestPubkey(alice.public_key),
+                    data=None
                 ),
+                # This output prevent reward overflow
+                utxo.Output(
+                    value=3981553255926290448385, # genesis amount - u64::MAX
+                    destination=utxo.DestPubkey(alice.public_key),
+                    data=None
+                )
 
             ]
         ).sign(alice, [utxos[0][1]])
@@ -135,8 +141,8 @@ class ExampleTest(MintlayerTestFramework):
             outputs=[
                 utxo.Output(
                     value=60,
-                    header=0,
-                    destination=utxo.DestPubkey(alice.public_key)
+                    destination=utxo.DestPubkey(alice.public_key),
+                    data=None
                 ),
             ]
         ).sign(alice, [tx1.outputs[1]])

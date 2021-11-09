@@ -70,7 +70,7 @@ struct MltKeysFromFile {
 }
 
 impl MltKeysFromFile {
-    fn into_mlt_keys_info(self, mlt_tokens: pallet_utxo::Value) -> MltKeysInfo {
+    fn into_mlt_keys_info(self, mlt_tokens: pallet_utxo::tokens::Value) -> MltKeysInfo {
         MltKeysInfo {
             name: self.name,
             sr25519_public_controller: sr25519::Public::from_h256(self.sr25519_public_controller),
@@ -99,7 +99,7 @@ pub fn fetch_keys(auth_keys_url: &'static str) -> Result<Vec<MltKeysInfo>, Strin
 
         let users = users["users"].as_array().ok_or("invalid json to extract user list")?;
         let share_per_user = TEST_NET_MLT_ORIG_SUPPLY
-            .checked_div(users.len() as pallet_utxo::Value)
+            .checked_div(users.len() as pallet_utxo::tokens::Value)
             .ok_or("unable to share mlt orig supply evenly.")?;
 
         for user in users {

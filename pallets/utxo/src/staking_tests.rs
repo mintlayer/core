@@ -17,11 +17,67 @@
 
 use crate::{
     mock::*, Destination, Error, LockedUtxos, StakingCount, Transaction, TransactionInput,
-    TransactionOutput, UtxoStore,
+    TransactionOutput, UtxoStore, MLT_UNIT,
 };
 use codec::Encode;
 use frame_support::{assert_err, assert_ok, sp_io::crypto};
 use sp_core::{sp_std::vec, testing::SR25519, H256};
+
+// JUST FOR SEEKING BUG IN FUNCTIONAL TEST
+// todo: Remove this
+#[test]
+fn staking_first_time() {
+    let (mut test_ext, keys_and_hashes) = multiple_keys_test_ext();
+    test_ext.execute_with(|| {
+        let (karl_pub_key, karl_genesis) = keys_and_hashes[1];
+        let (alice_pub_key, _) = keys_and_hashes[0];
+        let (greg_pub_key, _) = keys_and_hashes[2];
+
+        let utxo = UtxoStore::<Test>::get(karl_genesis).expect("tom's utxo does not exist");
+        let tx1 = Transaction {
+            inputs: vec![TransactionInput::new_empty(karl_genesis)],
+            outputs: vec![TransactionOutput::new_pubkey(100, H256::from(alice_pub_key))],
+            time_lock: Default::default(),
+        }
+        .sign(&[utxo], 0, &karl_pub_key)
+        .expect("karl's pub key not found");
+        let utxo = &tx1.outputs[0];
+        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx1.clone()));
+
+        let tx2 = Transaction {
+            inputs: vec![TransactionInput::new_empty(tx1.outpoint(0))],
+            outputs: vec![
+                // KARL (index 1) wants to be a validator. He will use GREG (index 2) as the controller account.
+                // minimum value to stake is 10,
+                TransactionOutput::new_lock_for_staking(
+                    90, // 40000 * MLT_UNIT,
+                    H256::from(greg_pub_key),
+                    H256::from(greg_pub_key),
+                    vec![2, 1],
+                ),
+                TransactionOutput::new_pubkey(
+                    10, /*9999 * MLT_UNIT*/
+                    H256::from(karl_pub_key),
+                ),
+            ],
+            time_lock: Default::default(),
+        }
+        .sign(&[utxo.clone()], 0, &alice_pub_key)
+        .expect("Alice's pub key not found");
+        let new_utxo_hash = tx2.outpoint(1);
+
+        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx2));
+        assert!(UtxoStore::<Test>::contains_key(new_utxo_hash));
+        assert!(StakingCount::<Test>::contains_key(H256::from(greg_pub_key)));
+        assert!(StakingCount::<Test>::contains_key(H256::from(
+            alice_pub_key
+        )));
+        assert_eq!(
+            StakingCount::<Test>::get(H256::from(greg_pub_key)),
+            Some((1, 90))
+        );
+    })
+}
 
 #[test]
 fn simple_staking() {
@@ -100,30 +156,41 @@ fn less_than_minimum_stake() {
 
 #[test]
 fn non_mlt_staking() {
+    use crate::tokens::OutputData;
+
     let (mut test_ext, keys_and_hashes) = multiple_keys_test_ext();
     test_ext.execute_with(|| {
         let (karl_pub_key, karl_genesis) = keys_and_hashes[1];
         let (greg_pub_key, _) = keys_and_hashes[2];
-        let mut tx = Transaction {
+
+        let utxo = UtxoStore::<Test>::get(karl_genesis).expect("kar's utxo does not exist");
+
+        let tx = Transaction {
             inputs: vec![TransactionInput::new_empty(karl_genesis)],
             outputs: vec![
                 // KARL (index 1) wants to be a validator. He will use GREG (index 2) as the controller account.
                 // minimum value to stake is 10, but KARL only staked 5.
                 TransactionOutput {
-                    value: 5,
-                    header: 1, // not an MLT token
+                    value: 10,
                     destination: Destination::LockForStaking {
                         stash_account: H256::from(karl_pub_key),
                         controller_account: H256::from(greg_pub_key),
                         session_key: vec![2, 1],
                     },
+                    data: Some(OutputData::TokenIssuanceV1 {
+                        token_ticker: "Token".as_bytes().to_vec(),
+                        amount_to_issue: 5_000_000_000,
+                        // Should be not more than 18 numbers
+                        number_of_decimals: 12,
+                        metadata_uri: "mintlayer.org".as_bytes().to_vec(),
+                    }),
                 },
-                TransactionOutput::new_pubkey(90, H256::from(karl_pub_key)),
+                TransactionOutput::new_pubkey(80, H256::from(karl_pub_key)),
             ],
             time_lock: Default::default(),
-        };
-        let karl_sig = crypto::sr25519_sign(SR25519, &karl_pub_key, &tx.encode()).unwrap();
-        tx.inputs[0].witness = karl_sig.0.to_vec();
+        }
+        .sign(&[utxo], 0, &karl_pub_key)
+        .expect("karl's pub key not found");
 
         assert_err!(
             Utxo::spend(Origin::signed(H256::zero()), tx),
@@ -319,7 +386,6 @@ fn non_validator_withdrawing() {
 fn withdrawing_before_expected_period() {
     let (mut test_ext, keys_and_hashes) = multiple_keys_test_ext();
     test_ext.execute_with(|| {
-
         // ALICE (index 0) wants to stop validating.
         let (alice_pub_key, _) = keys_and_hashes[0];
 
