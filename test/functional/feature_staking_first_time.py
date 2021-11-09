@@ -76,11 +76,16 @@ class ExampleTest(MintlayerTestFramework):
             ],
             outputs=[
                 utxo.Output(
-                    #value=50000 * COIN,
-                    value=3981553255926290448385,
+                    value=50000 * COIN,
                     destination=utxo.DestPubkey(charlie_stash.public_key),
                     data=None
                 ),
+                 utxo.Output(
+                    value=39999949950 * COIN,
+                    destination=utxo.DestPubkey(alice.public_key),
+                    data=None
+                ),
+
             ]
         ).sign(alice, [utxos[0][1]])
         client.submit(alice, tx1)
@@ -92,20 +97,18 @@ class ExampleTest(MintlayerTestFramework):
             ],
             outputs=[
                 utxo.Output(
-                    # value=40000 * COIN,
-                    value=1,
+                    value=40000 * COIN,
                     destination=utxo.DestLockForStaking(charlie_stash.public_key, charlie.public_key,'0xa03bcfaac6ebdc26bb9c256c51b08f9c1c6d4569f48710a42939168d1d7e5b6086b20e145e97158f6a0b5bff2994439d3320543c8ff382d1ab3e5eafffaf1a18'),
                     data=None
                 ),
                 utxo.Output(
-                    # value=9999 * COIN,
-                    value=1,
+                    value=9999 * COIN,
                     destination=utxo.DestPubkey(charlie_stash.public_key),
                     data=None
                 ),
             ]
-        ).sign(charlie_stash, tx1.outputs)
-        (_,_,events) = client.submit(charlie_stash, tx2)
+        ).sign(charlie_stash, [tx1.outputs[0]])
+        client.submit(charlie_stash, tx2)
 
         # there should already be 3 staking, adding Charlie in the list.
         assert_equal( len(list(client.staking_count())), 3 )
