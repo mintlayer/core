@@ -34,11 +34,11 @@ const HTTP_TIMEOUT: u64 = 3000;
 
 // actual keys for the test net
 const TEST_KEYS_URL: &str =
-    "https://raw.githubusercontent.com/mintlayer/core/staking_and_rewards/assets/test_keys.json";
+    "https://raw.githubusercontent.com/mintlayer/core/staging/assets/test_keys.json";
 
 // used by 'dev' mode, in the functional tests.
 const FUNC_TEST_KEYS_URL: &str =
-    "https://raw.githubusercontent.com/mintlayer/core/staking_and_rewards/assets/functional_test_keys.json";
+    "https://raw.githubusercontent.com/mintlayer/core/staging/assets/functional_test_keys.json";
 
 /// Fetch an up-to-date list of bootnodes from Github
 fn fetch_bootnode_list() -> Result<Vec<MultiaddrWithPeerId>, Box<dyn Error>> {
@@ -141,7 +141,7 @@ impl SubstrateCli for Cli {
 
     fn load_spec(&self, id: &str) -> Result<Box<dyn sc_service::ChainSpec>, String> {
         Ok(match id {
-            "release" => Box::new(chain_spec::release_config(fetch_keys(TEST_KEYS_URL)?)?),
+            "testnet" => Box::new(chain_spec::testnet_config(fetch_keys(TEST_KEYS_URL)?)?),
             "dev" => Box::new(chain_spec::development_config(fetch_keys(
                 FUNC_TEST_KEYS_URL,
             )?)?),
@@ -254,9 +254,10 @@ pub fn run() -> sc_cli::Result<()> {
                     },
                 }
 
-                if cli.release {
-                    let chain_spec = cli.load_spec("release")?;
-                    config.chain_spec = chain_spec;
+                if cli.testnet {
+                    // for testnet, specify chain_spec to use the `testnet_config()`
+                    // from the `chain_spec.rs`
+                    config.chain_spec = cli.load_spec("testnet")?;
                 }
 
                 match config.role {

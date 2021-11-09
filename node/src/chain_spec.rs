@@ -53,7 +53,7 @@ fn get_bootnodes() -> Vec<MultiaddrWithPeerId> {
     ]
 }
 
-pub fn release_config(endowed_accounts: Vec<MltKeysInfo>) -> Result<ChainSpec, String> {
+pub fn testnet_config(endowed_accounts: Vec<MltKeysInfo>) -> Result<ChainSpec, String> {
     let wasm_binary = WASM_BINARY.ok_or_else(|| "Development wasm not available".to_string())?;
     let bootnodes = get_bootnodes();
 
@@ -65,10 +65,10 @@ pub fn release_config(endowed_accounts: Vec<MltKeysInfo>) -> Result<ChainSpec, S
 
     Ok(ChainSpec::from_genesis(
         // Name
-        "Release",
+        "Mintlayer_TestNet",
         // ID
-        "rel",
-        ChainType::Development, //TODO: should it be custom? I'm not sure about this part.
+        "mlt_test_net",
+        ChainType::Custom("MLTTestNet".into()), //TODO: I don't think this worked at all, it still goes to local_testnet
         move || {
             testnet_genesis(
                 wasm_binary,
@@ -87,7 +87,7 @@ pub fn release_config(endowed_accounts: Vec<MltKeysInfo>) -> Result<ChainSpec, S
         // Telemetry
         None,
         // Protocol ID
-        None,
+        "MintlayerTestV0".into(),
         // Properties
         None,
         // Extensions
