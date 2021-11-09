@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Copyright (c) 2021 RBB S.r.l
 # Copyright (c) 2017 The Bitcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
@@ -97,37 +98,55 @@ class ExampleTest(MintlayerTestFramework):
 
     def run_test(self):
         """Main test logic"""
+        client = self.nodes[0].rpc_client
+
         alice = Keypair.create_from_uri('//Alice')
 
-        available_utxos = self.nodes[0].rpc_client.utxos_for(alice)
-
-        utxos = [h for (h, o) in available_utxos if o.value >= 150]
+        # Find an utxo with enough funds
+        utxos = [u for u in client.utxos_for(alice) if u[1].value >= 150]
 
         tx1 = utxo.Transaction(
-            self.nodes[0].rpc_client,
+            client,
             inputs=[
-                utxo.Input(utxos[0]),
+                utxo.Input(utxos[0][0]),
             ],
             outputs=[
                 utxo.Output(
                     value=50,
-                    header=0,
-                    destination=utxo.DestPubkey(alice.public_key)
+                    destination=utxo.DestPubkey(alice.public_key),
+                    data=None
                 ),
                 utxo.Output(
                     value=100,
-                    header=0,
-                    destination=utxo.DestPubkey(alice.public_key)
+                    destination=utxo.DestPubkey(alice.public_key),
+                    data=None
                 ),
+                # This output prevent reward overflow
+                utxo.Output(
+                    value=3981553255926290448385, # genesis amount - u64::MAX
+                    destination=utxo.DestPubkey(alice.public_key),
+                    data=None
+                )
 
             ]
-        ).sign(alice)
-        extrinsic = self.nodes[0].rpc_client.submit(alice, tx1)
-        self.log.info("extrinsic submitted... '{}'".format(extrinsic))
+        ).sign(alice, [utxos[0][1]])
+        res = client.submit(alice, tx1)
 
-        receipt = self.nodes[0].rpc_client.get_receipt(extrinsic, True)
-        self.log.info("Extrinsic '{}' sent and included in block '{}'".format(receipt[0], receipt[1]))
-        assert_equal(receipt[0].replace("0x", ""), extrinsic.extrinsic_hash.replace("0x", ""))
+        tx2 = utxo.Transaction(
+            client,
+            inputs=[
+                # spend the 100 utxo output (index 1)
+                utxo.Input(tx1.outpoint(1)),
+            ],
+            outputs=[
+                utxo.Output(
+                    value=60,
+                    destination=utxo.DestPubkey(alice.public_key),
+                    data=None
+                ),
+            ]
+        ).sign(alice, [tx1.outputs[1]])
+        client.submit(alice, tx2)
 
 
 if __name__ == '__main__':

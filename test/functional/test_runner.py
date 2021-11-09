@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Copyright (c) 2021 RBB S.r.l
 # Copyright (c) 2014-2017 The Bitcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
@@ -55,6 +56,17 @@ TEST_EXIT_SKIPPED = 77
 BASE_SCRIPTS= [
     'example_test.py',
     'feature_alice_bob_test.py',
+    'feature_staking_extra.py',
+    'feature_staking_extra_not_validator.py',
+    'feature_staking_extra_wrong_controller.py',
+    'feature_staking_first_time.py',
+    'feature_staking_less_than_minimum.py',
+    'feature_staking_diff_addresses.py',
+    'feature_staking_unlock_not_validator.py',
+    'feature_staking_withdraw_no_unlock.py',
+    'feature_staking_withdraw_not_validator.py'
+#     'feature_staking_unlock_and_withdraw.py' ## should be ran on 20 secs
+    # 'feature_smart_contract_test.py',
     # Don't append tests at the end to avoid merge conflicts
     # Put them in a random line within the section that fits their approximate run-time
 ]

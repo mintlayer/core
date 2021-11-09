@@ -27,10 +27,6 @@ use std::sync::Arc;
 pub trait UtxoApi<BlockHash> {
     #[rpc(name = "utxo_send")]
     fn send(&self, at: Option<BlockHash>) -> Result<u32>;
-
-    // What means Vec<(u64, Vec<u8>)> ? Have a look at utxo/rpc/runtime-api/src/lib.rs
-    #[rpc(name = "tokens_list")]
-    fn tokens_list(&self, at: Option<BlockHash>) -> Result<Vec<(u64, Vec<u8>)>>;
 }
 
 /// A struct that implements the [`UtxoApi`].
@@ -76,20 +72,6 @@ where
         api.send(&at).map_err(|e| RpcError {
             code: ErrorCode::ServerError(Error::RuntimeError as i64),
             message: "Unable to query dispatch info.".into(),
-            data: Some(format!("{:?}", e).into()),
-        })
-    }
-
-    fn tokens_list(&self, at: Option<<Block as BlockT>::Hash>) -> Result<Vec<(u64, Vec<u8>)>> {
-        let api = self.client.runtime_api();
-        let at = BlockId::hash(at.unwrap_or_else(||
-            // If the block hash is not supplied assume the best block.
-            self.client.info().best_hash));
-
-        let runtime_api_result = api.tokens_list(&at);
-        runtime_api_result.map_err(|e| RpcError {
-            code: ErrorCode::ServerError(Error::StorageError as i64),
-            message: "Something wrong".into(),
             data: Some(format!("{:?}", e).into()),
         })
     }

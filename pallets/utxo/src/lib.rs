@@ -17,42 +17,57 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
-pub use header::*;
 pub use pallet::*;
-
-#[cfg(test)]
-mod mock;
-
-#[cfg(test)]
-mod tests;
 
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
-
-mod header;
+#[cfg(test)]
+mod mock;
+mod rewards;
 mod script;
 mod sign;
+pub mod staking;
+#[cfg(test)]
+mod staking_tests;
+#[cfg(test)]
+mod tests;
+pub mod tokens;
 pub mod weights;
+
+use chainscript::Builder;
+use codec::Encode;
+use core::convert::TryInto;
+use frame_support::{
+    inherent::Vec,
+    pallet_prelude::{DispatchError, DispatchResultWithPostInfo},
+};
+use sp_core::{crypto::UncheckedFrom, H256, H512};
+use sp_runtime::sp_std::vec;
+use utxo_api::UtxoApi;
 
 #[frame_support::pallet]
 pub mod pallet {
+    use crate::rewards::reward_block_author;
+    pub use crate::script::{BlockTime, RawBlockTime};
     use crate::sign::{self, Scheme};
-    use crate::{OutputHeaderData, OutputHeaderHelper, TXOutputHeader, TokenID, TokenType};
+    // todo: This part isn't fully tested, left for the next PR
+    // use crate::tokens::{NftDataHash};
+    use crate::staking::{self, StakingHelper};
+    use crate::tokens::{OutputData, TokenId, Value};
     use bech32;
     use chainscript::Script;
     use codec::{Decode, Encode};
     use core::marker::PhantomData;
-    use frame_support::weights::PostDispatchInfo;
     use frame_support::{
         dispatch::{DispatchResultWithPostInfo, Vec},
         pallet_prelude::*,
         sp_io::crypto,
-        sp_runtime::traits::{BlakeTwo256, Dispatchable, Hash, SaturatedConversion},
-        traits::IsSubType,
+        sp_runtime::traits::{BlakeTwo256, Dispatchable, Hash},
+        sp_runtime::Percent,
+        traits::{IsSubType, UnixTime},
     };
     use frame_system::pallet_prelude::*;
     use hex_literal::hex;
-    use pallet_utxo_tokens::TokenListData;
     use pp_api::ProgrammablePoolApi;
     #[cfg(feature = "std")]
     use serde::{Deserialize, Serialize};
@@ -63,20 +78,7 @@ pub mod pallet {
         testing::SR25519,
         H256, H512,
     };
-    use sp_runtime::traits::{
-        AtLeast32Bit, Zero, /*, StaticLookup , AtLeast32BitUnsigned, Member, One */
-    };
-    use sp_runtime::DispatchErrorWithPostInfo;
-
-    pub type Value = u128;
-    pub type String = Vec<u8>;
-
-    pub struct Mlt(Value);
-    impl Mlt {
-        pub fn to_munit(&self) -> Value {
-            self.0 * 1_000 * 100_000_000
-        }
-    }
+    pub const MLT_UNIT: Value = 1_000 * 100_000_000;
 
     #[pallet::error]
     pub enum Error<T> {
@@ -104,6 +106,35 @@ pub mod pallet {
         Unapproved,
         /// The source account would not survive the transfer and it needs to stay alive.
         WouldDie,
+        /// Thrown when there is an attempt to mint a duplicate collection.
+        NftCollectionExists,
+
+        /// When occurs during LockExtraForStaking, use Destination::LockForStaking for first time staking.
+        /// When occurs during unstaking, it means there's no coordination with pallet-staking
+        ControllerAccountNotFound,
+
+        /// Occurs during `unlock_request_for_withdrawal` and `withdraw_stake`,
+        /// when the given stash account does not exist.
+        StashAccountNotFound,
+
+        /// Use Destination::LockExtraForStaking for additional funds to stake.
+        StashAccountAlreadyRegistered,
+
+        /// An action not opted to be performed.
+        InvalidOperation,
+
+        /// Problem signing a transaction with the public key
+        FailedSigningTransaction,
+
+        /// The hash outpoint key does not exist in the storage where it expects to be.
+        OutpointDoesNotExist,
+
+        /// The hash outpoint key already exists in the storage where it expects to be.
+        OutpointAlreadyExists,
+
+        /// Funds are waiting for the bonding duration to end,
+        /// before withdrawal is allowed.
+        FundsAtUnlockedState,
     }
 
     #[pallet::pallet]
@@ -112,10 +143,8 @@ pub mod pallet {
 
     /// runtime configuration
     #[pallet::config]
-    pub trait Config: frame_system::Config {
+    pub trait Config: frame_system::Config + pallet_timestamp::Config {
         type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
-
-        type AssetId: Parameter + AtLeast32Bit + Default + Copy;
 
         /// The overarching call type.
         type Call: Dispatchable + From<Call<Self>> + IsSubType<Call<Self>> + Clone;
@@ -124,6 +153,35 @@ pub mod pallet {
 
         type ProgrammablePool: ProgrammablePoolApi<AccountId = Self::AccountId>;
 
+        /// the rate of diminishing reward
+        #[pallet::constant]
+        type InitialReward: Get<Value>;
+
+        /// the rate of diminishing reward
+        #[pallet::constant]
+        type DefaultMinimumReward: Get<Value>;
+
+        /// the rate of diminishing reward
+        #[pallet::constant]
+        type RewardReductionFraction: Get<Percent>;
+
+        /// duration of unchanged rewards, before applying the RewardReductionFraction
+        #[pallet::constant]
+        type RewardReductionPeriod: Get<Self::BlockNumber>;
+
+        /// the minimum value for initial staking.
+        #[pallet::constant]
+        type MinimumStake: Get<Value>;
+
+        /// how much are we charging for withdrawing the unlocked stake.
+        #[pallet::constant]
+        type StakeWithdrawalFee: Get<Value>;
+
+        /// helps in dealing with staking, using the logic outside of this pallet.
+        /// An example is the `pallet-staking`, where it deals with multiple operations
+        /// that utxo will convert with only a few. see the trait at pallet-utxo's `staking.rs`.
+        type StakingHelper: StakingHelper<Self::AccountId>;
+
         fn authorities() -> Vec<H256>;
     }
 
@@ -131,6 +189,8 @@ pub mod pallet {
         fn spend(u: u32) -> Weight;
         fn token_create(u: u32) -> Weight;
         fn send_to_address(u: u32) -> Weight;
+        fn unlock_request_for_withdrawal(u: u32) -> Weight;
+        fn withdraw_stake(u: u32) -> Weight;
     }
 
     /// Transaction input
@@ -205,10 +265,25 @@ pub mod pallet {
         Pubkey(sr25519::Public),
         /// Pay to fund a new programmable pool. Takes code and data.
         CreatePP(Vec<u8>, Vec<u8>),
-        /// Pay to an existing contract. Takes a destination account and input data.
-        CallPP(AccountId, Vec<u8>),
+        /// Pay to an existing contract. Takes a destination account,
+        /// whether the call funds the contract, and input data.
+        CallPP(AccountId, bool, Vec<u8>),
         /// Pay to script hash
         ScriptHash(H256),
+        /// First attempt of staking.
+        /// Must assign a controller, in order to bond and validate. see pallet-staking
+        LockForStaking {
+            stash_account: AccountId,
+            controller_account: AccountId,
+            session_key: Vec<u8>,
+        },
+        /// lock more funds
+        /// The controller_account should be the EXACT one for the stash_account,
+        /// as done in the `LockForStaking`
+        LockExtraForStaking {
+            stash_account: AccountId,
+            controller_account: AccountId,
+        },
     }
 
     impl<AccountId> Destination<AccountId> {
@@ -233,21 +308,62 @@ pub mod pallet {
     #[derive(Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, RuntimeDebug)]
     pub struct TransactionOutput<AccountId> {
         pub(crate) value: Value,
-        pub(crate) header: TXOutputHeader,
         pub(crate) destination: Destination<AccountId>,
+        pub(crate) data: Option<OutputData>,
     }
 
     impl<AccountId> TransactionOutput<AccountId> {
-        /// By default the header is 0:
+        /// By default the data is None:
         /// token type for both the value and fee is MLT,
         /// and the signature method is BLS.
-        /// functions are available in TXOutputHeaderImpls to update the header.
         pub fn new_pubkey(value: Value, pubkey: H256) -> Self {
             let pubkey = sp_core::sr25519::Public::from_h256(pubkey);
             Self {
                 value,
-                header: 0,
                 destination: Destination::Pubkey(pubkey.into()),
+                data: None,
+            }
+        }
+
+        /// Create a new stake for the first time.
+        /// This is assumed, that an entity staking its funds also means playing the role of a `Validator`.
+        /// # Arguments
+        /// * `value` - This is assuming that the value is received in a format that's already `x * 1_000, * 1_000_000`
+        /// * `stash_acount` - This is considered as the "bank", which holds the funds. The full meaning is found in `pallet-staking`.
+        /// * `controller_account` = can be considered as the "manager". The full meaning is found in `pallet-staking`.
+        /// * `session_key` - for every new validator candidate, you want to link it to a session key.
+        /// Generation of `session_key` is done through an rpc call `author_rotateKeys`.
+        /// See https://docs.substrate.io/v3/concepts/session-keys/
+        pub fn new_lock_for_staking(
+            value: Value,
+            stash_account: AccountId,
+            controller_account: AccountId,
+            session_key: Vec<u8>,
+        ) -> Self {
+            Self {
+                value,
+                destination: Destination::LockForStaking {
+                    stash_account,
+                    controller_account,
+                    session_key,
+                },
+                data: None,
+            }
+        }
+
+        /// Create a staking extra of an existing validator.
+        pub fn new_lock_extra_for_staking(
+            value: Value,
+            stash_account: AccountId,
+            controller_account: AccountId,
+        ) -> Self {
+            Self {
+                value,
+                destination: Destination::LockExtraForStaking {
+                    stash_account,
+                    controller_account,
+                },
+                data: None,
             }
         }
 
@@ -255,29 +371,22 @@ pub mod pallet {
         pub fn new_create_pp(value: Value, code: Vec<u8>, data: Vec<u8>) -> Self {
             Self {
                 value,
-                header: 0,
                 destination: Destination::CreatePP(code, data),
+                data: None,
             }
         }
 
         /// Create a new output to call a smart contract routine.
-        pub fn new_call_pp(value: Value, dest_account: AccountId, input: Vec<u8>) -> Self {
+        pub fn new_call_pp(
+            value: Value,
+            dest_account: AccountId,
+            fund: bool,
+            input: Vec<u8>,
+        ) -> Self {
             Self {
                 value,
-                header: 0,
-                destination: Destination::CallPP(dest_account, input),
-            }
-        }
-
-        pub fn new_token(token_id: TokenID, value: Value, pub_key: H256) -> Self {
-            let pub_key = sp_core::sr25519::Public::from_h256(pub_key);
-            let mut header = OutputHeaderData::new(0);
-            header.set_token_id(token_id);
-            let header = header.as_u128();
-            Self {
-                value,
-                header,
-                destination: Destination::Pubkey(pub_key.into()),
+                destination: Destination::CallPP(dest_account, fund, input),
+                data: None,
             }
         }
 
@@ -285,21 +394,29 @@ pub mod pallet {
         pub fn new_script_hash(value: Value, hash: H256) -> Self {
             Self {
                 value,
-                header: 0,
                 destination: Destination::ScriptHash(hash),
+                data: None,
+            }
+        }
+
+        /// Create a new output with the data field. This is going to be paid to a public key.
+        pub fn new_p2pk_with_data(value: Value, pubkey: H256, data: OutputData) -> Self {
+            let pubkey = sp_core::sr25519::Public::from_h256(pubkey);
+            Self {
+                value,
+                destination: Destination::Pubkey(pubkey.into()),
+                data: Some(data),
             }
         }
     }
 
-    impl<AccountId> TransactionOutput<AccountId> {
-        fn validate_header(&self) -> Result<(), &'static str> {
-            // Check signature and token id
-            self.header
-                .as_tx_output_header()
-                .validate()
-                .then(|| ())
-                .ok_or("Incorrect header")
-        }
+    pub fn convert_to_h256<T: Config>(account: &T::AccountId) -> Result<H256, DispatchError> {
+        let pubkey_raw: [u8; 32] = account
+            .encode()
+            .try_into()
+            .map_err(|_| DispatchError::Other("Failed to get account's public key"))?;
+
+        Ok(H256::from(pubkey_raw))
     }
 
     #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
@@ -307,6 +424,7 @@ pub mod pallet {
     pub struct Transaction<AccountId> {
         pub(crate) inputs: Vec<TransactionInput>,
         pub(crate) outputs: Vec<TransactionOutput<AccountId>>,
+        pub(crate) time_lock: RawBlockTime,
     }
 
     impl<AccountId: Encode> Transaction<AccountId> {
@@ -333,6 +451,17 @@ pub mod pallet {
                 crypto::sr25519_sign(SR25519, pk, &msg.encode())?.0.to_vec();
             Some(self)
         }
+
+        pub fn check_time_lock<T: Config>(&self) -> bool {
+            match self.time_lock.time() {
+                BlockTime::Blocks(lock_block_num) => {
+                    <frame_system::Pallet<T>>::block_number() >= lock_block_num.into()
+                }
+                BlockTime::Timestamp(lock_time) => {
+                    <pallet_timestamp::Pallet<T> as UnixTime>::now() >= lock_time
+                }
+            }
+        }
     }
 
     // Transaction output type associated with given Config.
@@ -344,36 +473,81 @@ pub mod pallet {
     pub type TransactionFor<T: Config> = Transaction<T::AccountId>;
 
     #[pallet::storage]
-    #[pallet::getter(fn token_list)]
-    pub(super) type TokenList<T> = StorageValue<_, TokenListData, ValueQuery>;
-
-    #[pallet::storage]
-    #[pallet::getter(fn tokens_higher_id)]
-    pub(super) type TokensHigherID<T> = StorageValue<_, TokenID, ValueQuery>;
-
-    #[pallet::storage]
     #[pallet::getter(fn reward_total)]
     pub(super) type RewardTotal<T> = StorageValue<_, Value, ValueQuery>;
 
     #[pallet::storage]
+    #[pallet::getter(fn current_block_author)]
+    pub(super) type BlockAuthor<T> = StorageValue<_, H256, OptionQuery>;
+
+    #[pallet::storage]
     #[pallet::getter(fn utxo_store)]
-    pub(super) type UtxoStore<T: Config> =
-        StorageMap<_, Identity, H256, Option<TransactionOutputFor<T>>, ValueQuery>;
+    pub(super) type UtxoStore<T: Config> = StorageMap<_, Identity, H256, TransactionOutputFor<T>>;
+
+    #[pallet::storage]
+    #[pallet::getter(fn token_issuance_transactions)]
+    pub(super) type TokenIssuanceTransactions<T: Config> =
+        StorageMap<_, Identity, TokenId, TransactionFor<T>, OptionQuery>;
+
+    // When someone wants to issue a token we should calculate token_id and use it when the owner
+    // in other transactions will transfer the token.
+    #[pallet::storage]
+    #[pallet::getter(fn token_id_issuance)]
+    pub(super) type TokenIssuanceId<T: Config> =
+        StorageMap<_, Identity, /* outpoint */ H256, TokenId, OptionQuery>;
+
+    // todo: This part isn't fully tested, left for the next PR
+    // #[pallet::storage]
+    // #[pallet::getter(fn nft_unique_data_hash)]
+    // pub(super) type NftUniqueDataHash<T: Config> =
+    //     StorageMap<_, Identity, NftDataHash, /* UTXO */ H256, OptionQuery>;
+
+    /// Represents the validators' stakes. When a validator chooses to stop validating,
+    /// the utxo here is transferred back to `UtxoStore`.
+    #[pallet::storage]
+    #[pallet::getter(fn locked_utxos)]
+    pub(super) type LockedUtxos<T: Config> =
+        StorageMap<_, Identity, H256, TransactionOutputFor<T>, OptionQuery>;
+
+    /// this is to count how many stakings done for that stash account.
+    #[pallet::storage]
+    #[pallet::getter(fn staking_count)]
+    pub(super) type StakingCount<T: Config> =
+        StorageMap<_, Identity, T::AccountId, (u64, Value), OptionQuery>;
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     #[pallet::metadata(T::AccountId = "AccountId")]
     pub enum Event<T: Config> {
-        TokenCreated(u64, T::AccountId),
         TransactionSuccess(TransactionFor<T>),
+
+        /// The block author has been rewarded with MLT Coins.
+        /// \[utxo_for_block_author\]
+        BlockAuthorRewarded(TransactionOutput<T::AccountId>),
+
+        /// Unstaking is enabled after the end of bonding duration, as set in pallet-staking.
+        /// \[stash_account\]
+        StakeUnlocked(T::AccountId),
+
+        /// Unlocked stake has been withdrawn.
+        /// \[total_stake, stash_account\]
+        StakeWithdrawn(Value, T::AccountId),
     }
 
     #[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
         fn on_finalize(block_num: T::BlockNumber) {
-            disperse_reward::<T>(&T::authorities(), block_num)
+            reward_block_author::<T>(block_num);
         }
     }
+
+    // todo: This part isn't fully tested, left for the next PR
+    // pub(crate) fn get_output_by_token_id<T: Config>(
+    //     token_id: TokenId,
+    // ) -> Option<TransactionOutputFor<T>> {
+    //     let utxo_id = TokenIssuanceTransactions::<T>::get(token_id)?;
+    //     UtxoStore::<T>::get(utxo_id)
+    // }
 
     // Strips a transaction of its Signature fields by replacing value with ZERO-initialized fixed hash.
     pub fn get_simple_transaction<AccountId: Encode + Clone>(
@@ -386,56 +560,43 @@ pub mod pallet {
         trx.encode()
     }
 
-    fn disperse_reward<T: Config>(auths: &[H256], block_number: T::BlockNumber) {
-        let reward = <RewardTotal<T>>::take();
-        let share_value: Value =
-            reward.checked_div(auths.len() as Value).ok_or("No authorities").unwrap();
-        if share_value == 0 {
-            //put reward back if it can't be split nicely
-            <RewardTotal<T>>::put(reward as Value);
-            return;
-        }
+    pub fn create<T: Config>(
+        _caller: &T::AccountId,
+        _code: &Vec<u8>,
+        _utxo_hash: H256,
+        _utxo_value: u128,
+        _data: &Vec<u8>,
+    ) {
+        // let weight: Weight = 6000000000;
 
-        let remainder = reward
-            .checked_sub(share_value * auths.len() as Value)
-            .ok_or("Sub underflow")
-            .unwrap();
-
-        log::debug!("disperse_reward:: reward total: {:?}", remainder);
-        <RewardTotal<T>>::put(remainder as Value);
-
-        for authority in auths {
-            // TODO: where do we get the header info?
-            // TODO: are the rewards always of MLT token type?
-            let utxo = TransactionOutput::new_pubkey(share_value, *authority);
-
-            let hash = {
-                let b_num = block_number.saturated_into::<u64>();
-                BlakeTwo256::hash_of(&(&utxo, b_num))
-            };
-
-            if !<UtxoStore<T>>::contains_key(hash) {
-                <UtxoStore<T>>::insert(hash, Some(utxo));
-            }
-        }
+        // match T::ProgrammablePool::create(caller, weight, code, utxo_hash, utxo_value, data) {
+        //     Ok(_) => log::info!("success!"),
+        //     Err(e) => log::error!("failure: {:#?}", e),
+        // }
     }
 
-    pub fn create<T: Config>(caller: &T::AccountId, code: &Vec<u8>, data: &Vec<u8>) {
-        let weight: Weight = 6000000000;
+    pub fn call<T: Config>(
+        _caller: &T::AccountId,
+        _dest: &T::AccountId,
+        _utxo_hash: H256,
+        _utxo_value: u128,
+        _fund_contract: bool,
+        _data: &Vec<u8>,
+    ) {
+        // let weight: Weight = 6000000000;
 
-        match T::ProgrammablePool::create(caller, weight, code, data) {
-            Ok(_) => log::info!("success!"),
-            Err(e) => log::error!("failure: {:#?}", e),
-        }
-    }
-
-    pub fn call<T: Config>(caller: &T::AccountId, dest: &T::AccountId, data: &Vec<u8>) {
-        let weight: Weight = 6000000000;
-
-        match T::ProgrammablePool::call(caller, dest, weight, data) {
-            Ok(_) => log::info!("success!"),
-            Err(e) => log::error!("failure: {:#?}", e),
-        }
+        // match T::ProgrammablePool::call(
+        //     caller,
+        //     dest,
+        //     weight,
+        //     utxo_hash,
+        //     utxo_value,
+        //     fund_contract,
+        //     data,
+        // ) {
+        //     Ok(_) => log::info!("success!"),
+        //     Err(e) => log::error!("failure: {:#?}", e),
+        // }
     }
 
     pub fn validate_transaction<T: Config>(
@@ -477,6 +638,11 @@ pub mod pallet {
             );
         }
 
+        // Verify absolute time lock
+        ensure!(
+            tx.check_time_lock::<T>(),
+            "Time lock restrictions not satisfied"
+        );
         // In order to avoid race condition in network we maintain a list of required utxos for a tx
         // Example of race condition:
         // Assume both alice and bob have 10 coins each and bob owes charlie 20 coins
@@ -510,38 +676,243 @@ pub mod pallet {
             missing.is_empty().then(|| resolved).ok_or(missing)
         };
 
-        let full_inputs: Vec<(crate::TokenID, TransactionOutputFor<T>)> = tx
+        let full_inputs: Vec<(TokenId, TransactionOutputFor<T>)> = tx
             .inputs
             .iter()
-            .filter_map(|input| <UtxoStore<T>>::get(&input.outpoint))
-            .map(|output| (OutputHeaderData::new(output.header).token_id(), output))
-            .collect();
-
-        let input_vec: Vec<(crate::TokenID, Value)> =
-            full_inputs.iter().map(|output| (output.0, output.1.value)).collect();
-
-        let out_vec: Vec<(crate::TokenID, Value)> = tx
-            .outputs
-            .iter()
-            .map(|output| {
-                (
-                    OutputHeaderData::new(output.header).token_id(),
-                    output.value,
-                )
+            .filter_map(|input| Some((input.outpoint, <UtxoStore<T>>::get(&input.outpoint)?)))
+            .filter_map(|(outpoint, output)| match output.data {
+                Some(ref data) => match data {
+                    OutputData::TokenTransferV1 { token_id, .. } => {
+                        Some((token_id.clone(), output))
+                    }
+                    OutputData::TokenIssuanceV1 { .. } => {
+                        let token_id = <TokenIssuanceId<T>>::get(outpoint)?;
+                        Some((token_id, output))
+                    }
+                    // todo: This part isn't fully tested, left for the next PR
+                    // | OutputData::NftMintV1 { token_id, .. }
+                    // OutputData::TokenBurnV1 { .. } => None,
+                },
+                None => {
+                    // We do not calculate MLT here
+                    None
+                }
             })
             .collect();
 
+        //
+        let mut total_value_of_input_tokens: BTreeMap<TokenId, Value> = BTreeMap::new();
+        let mut mlt_amount_in_inputs: Value = 0;
+        for input in &tx.inputs {
+            let output = <UtxoStore<T>>::get(&input.outpoint).ok_or("missing inputs")?;
+            match &output.data {
+                Some(OutputData::TokenIssuanceV1 {
+                    token_ticker,
+                    amount_to_issue,
+                    number_of_decimals,
+                    metadata_uri,
+                }) => {
+                    // We have to check is this token already issued?
+                    let token_id = TokenIssuanceId::<T>::get(input.outpoint)
+                        .ok_or("token has never been issued")?;
+                    ensure!(
+                        token_ticker.is_ascii(),
+                        "token ticker has none ascii characters"
+                    );
+                    ensure!(
+                        metadata_uri.is_ascii(),
+                        "metadata uri has none ascii characters"
+                    );
+                    ensure!(token_ticker.len() <= 5, "token ticker is too long");
+                    ensure!(!token_ticker.is_empty(), "token ticker can't be empty");
+                    ensure!(metadata_uri.len() <= 100, "token metadata uri is too long");
+                    ensure!(amount_to_issue > &0u128, "output value must be nonzero");
+                    ensure!(number_of_decimals <= &18, "too long decimals");
+                    // If token has just created we can't meet another amount here.
+                    ensure!(
+                        !total_value_of_input_tokens.contains_key(&token_id),
+                        "this id can't be used for a token"
+                    );
+                    total_value_of_input_tokens.insert(token_id.clone(), *amount_to_issue);
+                    // But probably in this input we have a fee
+                    mlt_amount_in_inputs = mlt_amount_in_inputs
+                        .checked_add(output.value)
+                        .ok_or("input value overflow")?;
+                }
+                Some(OutputData::TokenTransferV1 {
+                    ref token_id,
+                    amount,
+                    ..
+                }) => {
+                    ensure!(
+                        TokenIssuanceTransactions::<T>::contains_key(token_id),
+                        "token has never been issued"
+                    );
+                    total_value_of_input_tokens.insert(
+                        token_id.clone(),
+                        total_value_of_input_tokens
+                            .get(token_id)
+                            .unwrap_or(&0)
+                            .checked_add(*amount)
+                            .ok_or("input value overflow")?,
+                    );
+                    // But probably in this input we have a fee
+                    mlt_amount_in_inputs = mlt_amount_in_inputs
+                        .checked_add(output.value)
+                        .ok_or("input value overflow")?;
+                }
+
+                // todo: This part isn't fully tested, left for the next PR
+                // Some(OutputData::TokenBurnV1 { .. }) => {
+                //     // Nothing to do here because tokens no longer exist.
+                // }
+                // Some(OutputData::NftMintV1 {
+                //     ref token_id,
+                //     data_hash,
+                //     metadata_uri,
+                // }) => {
+                //     // We have to check is this token already issued?
+                //     ensure!(
+                //         TokenIssuanceTransactions::<T>::contains_key(token_id),
+                //         "unable to use an input where NFT has not minted yet"
+                //     );
+                //     // Check is this digital data unique?
+                //     ensure!(
+                //         NftUniqueDataHash::<T>::contains_key(data_hash),
+                //         "unable to use an input where NFT digital data was changed"
+                //     );
+                //     ensure!(
+                //         metadata_uri.is_ascii(),
+                //         "metadata uri has none ascii characters"
+                //     );
+                //     // If NFT has just created we can't meet another NFT part here.
+                //     total_value_of_input_tokens.insert(token_id.clone(), 1);
+                // }
+                None => {
+                    mlt_amount_in_inputs = mlt_amount_in_inputs
+                        .checked_add(output.value)
+                        .ok_or("input value overflow")?;
+                }
+            }
+        }
+
+        let mut total_value_of_output_tokens: BTreeMap<TokenId, Value> = BTreeMap::new();
+        let mut mlt_amount_in_outputs: Value = 0;
+        for output in &tx.outputs {
+            match &output.data {
+                Some(OutputData::TokenIssuanceV1 {
+                    token_ticker,
+                    amount_to_issue,
+                    number_of_decimals,
+                    metadata_uri,
+                }) => {
+                    // We have to check is this token already issued?
+                    let token_id = TokenId::new(&tx.inputs[0]);
+
+                    ensure!(
+                        !TokenIssuanceTransactions::<T>::contains_key(&token_id),
+                        "token has already been issued"
+                    );
+                    ensure!(
+                        token_ticker.is_ascii(),
+                        "token ticker has none ascii characters"
+                    );
+                    ensure!(
+                        metadata_uri.is_ascii(),
+                        "metadata uri has none ascii characters"
+                    );
+                    ensure!(token_ticker.len() <= 5, "token ticker is too long");
+                    ensure!(!token_ticker.is_empty(), "token ticker can't be empty");
+                    ensure!(metadata_uri.len() <= 100, "token metadata uri is too long");
+                    ensure!(amount_to_issue > &0u128, "output value must be nonzero");
+                    ensure!(number_of_decimals <= &18, "too long decimals");
+
+                    // If token has just created we can't meet another amount here.
+                    ensure!(
+                        !total_value_of_output_tokens.contains_key(&token_id),
+                        "this id can't be used for a new token"
+                    );
+                    total_value_of_output_tokens.insert(token_id.clone(), *amount_to_issue);
+                    // But probably in this input we have a fee
+                    mlt_amount_in_outputs = mlt_amount_in_outputs
+                        .checked_add(output.value)
+                        .ok_or("input value overflow")?;
+                }
+                Some(OutputData::TokenTransferV1 {
+                    ref token_id,
+                    amount,
+                    ..
+                }) => {
+                    ensure!(
+                        TokenIssuanceTransactions::<T>::contains_key(token_id),
+                        "input for the token not found"
+                    );
+                    total_value_of_output_tokens.insert(
+                        token_id.clone(),
+                        total_value_of_output_tokens
+                            .get(token_id)
+                            .unwrap_or(&0)
+                            .checked_add(*amount)
+                            .ok_or("output value overflow")?,
+                    );
+                    // But probably in this input we have a fee
+                    mlt_amount_in_outputs = mlt_amount_in_outputs
+                        .checked_add(output.value)
+                        .ok_or("input value overflow")?;
+                }
+                // todo: This part isn't fully tested, left for the next PR
+                // Some(OutputData::TokenBurnV1 { .. }) => {
+                //     // Nothing to do here because tokens no longer exist.
+                // }
+                // Some(OutputData::NftMintV1 {
+                //     ref token_id,
+                //     data_hash,
+                //     metadata_uri,
+                // }) => {
+                //     // We have to check is this token already issued?
+                //     ensure!(
+                //         !TokenIssuanceTransactions::<T>::contains_key(token_id),
+                //         "token has already been issued"
+                //     );
+                //
+                //     // Check is this digital data unique?
+                //     ensure!(
+                //         !<NftUniqueDataHash<T>>::contains_key(data_hash),
+                //         "digital data has already been minted"
+                //     );
+                //     ensure!(
+                //         metadata_uri.is_ascii(),
+                //         "metadata uri has none ascii characters"
+                //     );
+                //     // If NFT has just created we can't meet another NFT part here.
+                //     total_value_of_output_tokens.insert(token_id.clone(), 1);
+                // }
+                None => {
+                    mlt_amount_in_outputs = mlt_amount_in_outputs
+                        .checked_add(output.value)
+                        .ok_or("output value overflow")?;
+                }
+            }
+        }
+
         // Check for token creation
-        let tokens_list = <TokenList<T>>::get();
         for output in tx.outputs.iter() {
-            let tid = OutputHeaderData::new(output.header).token_id();
+            let tid = match output.data {
+                Some(OutputData::TokenTransferV1 { ref token_id, .. }) => token_id.clone(),
+                Some(OutputData::TokenIssuanceV1 { .. }) => TokenId::new(&tx.inputs[0]),
+                None => continue,
+                // todo: This part isn't fully tested, left for the next PR
+                // Some(OutputData::NftMintV1 { .. })
+                // | Some(OutputData::TokenBurnV1 { .. })
+                // | None => continue,
+            };
             // If we have input and output for the same token it's not a problem
             if full_inputs.iter().find(|&x| (x.0 == tid) && (x.1 != *output)).is_some() {
                 continue;
             } else {
-                // But when we don't have an input for token but token id exist in TokenList
+                // But when we don't have an input for token but token id exist
                 ensure!(
-                    tokens_list.iter().find(|&x| x.id == tid).is_none(),
+                    !<TokenIssuanceTransactions<T>>::contains_key(tid),
                     "no inputs for the token id"
                 );
             }
@@ -552,25 +923,39 @@ pub mod pallet {
 
         // Check that outputs are valid
         for (output_index, output) in tx.outputs.iter().enumerate() {
-            // Check the header is valid
-            let res = output.validate_header();
-            if let Err(e) = res {
-                log::error!("Header error: {}", e);
+            match output.data {
+                Some(OutputData::TokenIssuanceV1 {
+                    amount_to_issue, ..
+                }) => ensure!(amount_to_issue > 0, "output value must be nonzero"),
+                Some(OutputData::TokenTransferV1 { amount, .. }) => {
+                    ensure!(amount > 0, "output value must be nonzero")
+                }
+                None => ensure!(output.value > 0, "output value must be nonzero"),
+                // todo: This part isn't fully tested, left for the next PR
+                // Some(OutputData::TokenBurnV1 { amount_to_burn, .. }) => {
+                //     ensure!(amount_to_burn > 0, "output value must be nonzero")
+                // }
+                // Some(OutputData::NftMintV1 { .. }) => {
+                //     // Nothing to check
+                // }
             }
-            ensure!(res.is_ok(), "header error. Please check the logs.");
+            let hash = tx.outpoint(output_index as u64);
+            new_utxos.push(hash.as_fixed_bytes().to_vec());
 
             match output.destination {
-                Destination::Pubkey(_) | Destination::ScriptHash(_) => {
-                    ensure!(output.value > 0, "output value must be nonzero");
-                    let hash = tx.outpoint(output_index as u64);
-                    ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
-                    new_utxos.push(hash.as_fixed_bytes().to_vec());
-                }
                 Destination::CreatePP(_, _) => {
-                    log::info!("TODO validate OP_CREATE");
+                    ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
+                    log::info!("TODO validate CreatePP as output");
                 }
-                Destination::CallPP(_, _) => {
-                    log::info!("TODO validate OP_CALL");
+                Destination::CallPP(_, _, _) => {
+                    ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
+                    log::info!("TODO validate CallPP as output");
+                }
+                Destination::Pubkey(_) | Destination::ScriptHash(_) => {
+                    ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
+                }
+                Destination::LockForStaking { .. } | Destination::LockExtraForStaking { .. } => {
+                    staking::validate_staking_ops::<T>(output, hash)?;
                 }
             }
         }
@@ -578,38 +963,61 @@ pub mod pallet {
         // if all spent UTXOs are available, check the math and signatures
         if let Ok(input_utxos) = &input_utxos {
             // We have to check sum of input tokens is less or equal to output tokens.
-            let mut inputs_sum: BTreeMap<TokenID, Value> = BTreeMap::new();
-            let mut outputs_sum: BTreeMap<TokenID, Value> = BTreeMap::new();
+            ensure!(
+                mlt_amount_in_outputs <= mlt_amount_in_inputs,
+                "output value must not exceed input value"
+            );
 
-            for x in input_vec {
-                let value =
-                    x.1.checked_add(*inputs_sum.get(&x.0).unwrap_or(&0))
-                        .ok_or("input value overflow")?;
-                inputs_sum.insert(x.0, value);
-            }
-            for x in out_vec {
-                let value =
-                    x.1.checked_add(*outputs_sum.get(&x.0).unwrap_or(&0))
-                        .ok_or("output value overflow")?;
-                outputs_sum.insert(x.0, value);
-            }
-
-            let mut new_token_exist = false;
-            for output_token in &outputs_sum {
-                match inputs_sum.get(&output_token.0) {
-                    Some(input_value) => ensure!(
-                        input_value >= &output_token.1,
-                        "output value must not exceed input value"
-                    ),
+            let mut issuance_counter = 0;
+            for (token_id, token_value) in &total_value_of_output_tokens {
+                match total_value_of_input_tokens.get(&token_id) {
+                    Some(input_value) => {
+                        ensure!(
+                            input_value == token_value,
+                            "output value must not exceed input value"
+                        )
+                    }
+                    // We have an output, but we have not an input
                     None => {
-                        // If the transaction has one an output with a new token ID
-                        if new_token_exist {
-                            frame_support::fail!("input for the token not found")
-                        } else {
-                            new_token_exist = true;
+                        // find TransactionOutput for this token_id
+                        let output = &tx.outputs.iter().find(|x| match x.data {
+                            Some(ref output_data) => {
+                                output_data.id(&tx.inputs[0]).as_ref() == Some(token_id)
+                            }
+                            None => false,
+                        });
+
+                        match output {
+                            Some(output) => match output.data {
+                                // todo: This part isn't fully tested, left for the next PR
+                                // | Some(OutputData::TokenBurnV1 { .. }) =>
+                                // Some(OutputData::NftMintV1 { .. })
+                                Some(OutputData::TokenIssuanceV1 { .. }) => {
+                                    // If we make a new token then okay, this is not a problem
+                                    issuance_counter += 1;
+                                    continue;
+                                }
+                                None | Some(OutputData::TokenTransferV1 { .. }) => {
+                                    // But we can't send a token without input
+                                    frame_support::fail!("input for the token not found2")
+                                }
+                            },
+                            // This situation should never happen, but let's cover it
+                            None => frame_support::fail!("corrupted output data"),
                         }
                     }
                 }
+            }
+            ensure!(
+                issuance_counter <= 1,
+                "too many issuance in one transaction"
+            );
+            if issuance_counter == 1 {
+                // The sender should pay not less than 100 MLT for issuance
+                ensure!(
+                    mlt_amount_in_inputs >= crate::tokens::Mlt(100).to_munit(),
+                    "insufficient fee"
+                );
             }
 
             for (index, (input, input_utxo)) in tx.inputs.iter().zip(input_utxos).enumerate() {
@@ -631,8 +1039,14 @@ pub mod pallet {
                     Destination::CreatePP(_, _) => {
                         log::info!("TODO validate spending of OP_CREATE");
                     }
-                    Destination::CallPP(_, _) => {
-                        log::info!("TODO validate spending of OP_CALL");
+                    Destination::CallPP(_, _, _) => {
+                        let spend =
+                            u16::from_le_bytes(input.witness[1..].try_into().or_else(|_| {
+                                Err(DispatchError::Other(
+                                    "Failed to convert witness to an opcode",
+                                ))
+                            })?);
+                        ensure!(spend == 0x1337, "OP_SPEND not found");
                     }
                     Destination::ScriptHash(_hash) => {
                         let witness = input.witness.clone();
@@ -640,18 +1054,19 @@ pub mod pallet {
                         crate::script::verify(&tx, &input_utxos, index as u64, witness, lock)
                             .map_err(|_| "script verification failed")?;
                     }
+                    Destination::LockForStaking { .. }
+                    | Destination::LockExtraForStaking { .. } => {
+                        return Err("cannot spend a staking utxo.");
+                    }
                 }
             }
 
             // Reward at the moment only in MLT
-            reward = if inputs_sum.contains_key(&(TokenType::MLT as TokenID))
-                && outputs_sum.contains_key(&(TokenType::MLT as TokenID))
-            {
-                inputs_sum[&(TokenType::MLT as TokenID)]
-                    .checked_sub(outputs_sum[&(TokenType::MLT as TokenID)])
-                    .ok_or("reward underflow")?
-            } else {
-                *inputs_sum.get(&(TokenType::MLT as TokenID)).ok_or("fee doesn't exist")?
+            reward = mlt_amount_in_inputs
+                .checked_sub(mlt_amount_in_outputs)
+                .ok_or("reward underflow")?;
+            if reward >= u64::MAX.into() {
+                frame_support::fail!("reward exceed allowed amount");
             }
         }
 
@@ -684,17 +1099,58 @@ pub mod pallet {
         }
 
         for (index, output) in tx.outputs.iter().enumerate() {
+            let hash = tx.outpoint(index as u64);
+
             match &output.destination {
                 Destination::Pubkey(_) | Destination::ScriptHash(_) => {
                     let hash = tx.outpoint(index as u64);
                     log::debug!("inserting to UtxoStore {:?} as key {:?}", output, hash);
-                    <UtxoStore<T>>::insert(hash, Some(output));
+                    <UtxoStore<T>>::insert(hash, output);
+                    match &output.data {
+                        // todo: This part isn't fully tested, left for the next PR
+                        // Some(OutputData::NftMintV1 {
+                        //     token_id,
+                        //     data_hash,
+                        //     ..
+                        // }) => {
+                        //     // We have to control that digital data of NFT is unique.
+                        //     // Otherwise, anybody else might make a new NFT with exactly the same hash.
+                        //     <NftUniqueDataHash<T>>::insert(data_hash, hash);
+                        //     // Also, we should provide possibility of find an output that by token_id.
+                        //     // This output is a place where token was created. It allow us to check that a token or
+                        //     // a NFT have not created yet.
+                        //     <TokenIssuanceTransactions<T>>::insert(token_id, hash);
+                        // }
+                        Some(OutputData::TokenIssuanceV1 { .. }) => {
+                            let token_id = TokenId::new(&tx.inputs[0]);
+                            // Link output hash
+                            <TokenIssuanceId<T>>::insert(hash, &token_id);
+                            // For MLS-01 we save a relation between token_id and the tx where
+                            // token was created.
+                            <TokenIssuanceTransactions<T>>::insert(&token_id, &tx);
+                        }
+                        // For the security reason we are implementing all cases
+                        // todo: This part isn't fully tested, left for the next PR
+                        // Some(OutputData::TokenBurnV1 { .. })
+                        // |
+                        Some(OutputData::TokenTransferV1 { .. }) | None => continue,
+                    }
                 }
                 Destination::CreatePP(script, data) => {
-                    create::<T>(caller, script, &data);
+                    log::debug!("inserting to UtxoStore {:?} as key {:?}", output, hash);
+                    <UtxoStore<T>>::insert(hash, output);
+                    create::<T>(caller, script, hash, output.value, &data);
                 }
-                Destination::CallPP(acct_id, data) => {
-                    call::<T>(caller, acct_id, data);
+                Destination::CallPP(acct_id, fund, data) => {
+                    log::debug!("inserting to UtxoStore {:?} as key {:?}", output, hash);
+                    <UtxoStore<T>>::insert(hash, output);
+                    call::<T>(caller, acct_id, hash, output.value, *fund, data);
+                }
+                Destination::LockForStaking { .. } => {
+                    staking::lock_for_staking::<T>(hash, output)?;
+                }
+                Destination::LockExtraForStaking { .. } => {
+                    staking::lock_extra_for_staking::<T>(hash, output)?;
                 }
             }
         }
@@ -712,62 +1168,7 @@ pub mod pallet {
         Ok(().into())
     }
 
-    pub fn token_create<T: Config>(
-        caller: &T::AccountId,
-        public: H256,
-        input_for_fee: TransactionInput,
-        token_name: String,
-        token_ticker: String,
-        supply: Value,
-    ) -> Result<u64, DispatchErrorWithPostInfo<PostDispatchInfo>> {
-        ensure!(token_name.len() <= 25, Error::<T>::Unapproved);
-        ensure!(token_ticker.len() <= 5, Error::<T>::Unapproved);
-        ensure!(!supply.is_zero(), Error::<T>::MinBalanceZero);
-
-        // Take a free TokenID
-        let token_id =
-            <TokensHigherID<T>>::get().checked_add(1).ok_or("All tokens IDs has taken")?;
-
-        // Input with MLT FEE
-        let fee = UtxoStore::<T>::get(input_for_fee.outpoint).ok_or(Error::<T>::Unapproved)?.value;
-        ensure!(fee >= Mlt(100).to_munit(), Error::<T>::Unapproved);
-
-        // Save in UTXO
-        let instance = crate::TokenInstance::new(token_id, token_name, token_ticker, supply);
-        let mut tx = Transaction {
-            inputs: crate::vec![
-                // Fee an input equal 100 MLT
-                input_for_fee,
-            ],
-            outputs: crate::vec![
-                // Output a new tokens
-                TransactionOutput::new_token(token_id, supply, public),
-            ],
-        };
-
-        // We shall make an output to return odd funds
-        if fee > Mlt(100).to_munit() {
-            tx.outputs.push(TransactionOutput::new_pubkey(
-                fee - Mlt(100).to_munit(),
-                public,
-            ));
-        }
-
-        // Save in Store
-        <TokenList<T>>::mutate(|x| {
-            if x.iter().find(|&x| x.id == token_id).is_none() {
-                x.push(instance.clone())
-            } else {
-                panic!("the token has already existed with the same id")
-            }
-        });
-
-        // Success
-        spend::<T>(caller, &tx)?;
-        Ok(token_id)
-    }
-
-    /// Pick the UTXOs of `caller` from UtxoStore that satify request `value`
+    /// Pick the UTXOs of `caller` from UtxoStore that satisfy request `value`
     ///
     /// Return a list of UTXOs that satisfy the request
     /// Return empty vector if caller doesn't have enough UTXO
@@ -784,8 +1185,6 @@ pub mod pallet {
         let mut total = 0;
 
         for (hash, utxo) in UtxoStore::<T>::iter() {
-            let utxo = utxo.unwrap();
-
             match utxo.destination {
                 Destination::Pubkey(pubkey) => {
                     if caller.encode() == pubkey.encode() {
@@ -807,7 +1206,7 @@ pub mod pallet {
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
-        #[pallet::weight(T::WeightInfo::spend(tx.inputs.len().saturating_add(tx.outputs.len()) as u32))]
+        #[pallet::weight(<T as Config>::WeightInfo::spend(tx.inputs.len().saturating_add(tx.outputs.len()) as u32))]
         pub fn spend(
             origin: OriginFor<T>,
             tx: Transaction<T::AccountId>,
@@ -817,29 +1216,7 @@ pub mod pallet {
             Ok(().into())
         }
 
-        #[pallet::weight(T::WeightInfo::token_create(768_usize.saturating_add(token_name.len()) as u32))]
-        pub fn token_create(
-            origin: OriginFor<T>,
-            public: H256,
-            input_for_fee: TransactionInput,
-            token_name: String,
-            token_ticker: String,
-            supply: Value,
-        ) -> DispatchResultWithPostInfo {
-            let caller = &ensure_signed(origin)?;
-            let token_id = token_create::<T>(
-                caller,
-                public,
-                input_for_fee,
-                token_name,
-                token_ticker,
-                supply,
-            )?;
-            Self::deposit_event(Event::<T>::TokenCreated(token_id, caller.clone()));
-            Ok(().into())
-        }
-
-        #[pallet::weight(T::WeightInfo::send_to_address(16_u32.saturating_add(address.len() as u32)))]
+        #[pallet::weight(<T as Config>::WeightInfo::send_to_address(16_u32.saturating_add(address.len() as u32)))]
         pub fn send_to_address(
             origin: OriginFor<T>,
             value: Value,
@@ -889,10 +1266,12 @@ pub mod pallet {
                     TransactionOutput {
                         value,
                         destination: dest,
-                        header: Default::default(),
+                        // todo: We need to check what kind of token over here
+                        data: None,
                     },
                     TransactionOutput::new_pubkey(total - value, H256::from(pubkey_raw)),
                 ],
+                time_lock: Default::default(),
             };
 
             for i in 0..tx.inputs.len() {
@@ -903,12 +1282,34 @@ pub mod pallet {
 
             spend::<T>(&signer, &tx)
         }
+
+        /// unlock the stake using the STASH ACCOUNT. Stops validating, and allow access to withdraw.
+        /// If used with `pallet-staking`, it uses the `BondingDuration`
+        /// to set the period/era on when to withdraw.
+        #[pallet::weight(<T as Config>::WeightInfo::unlock_request_for_withdrawal(1 as u32))]
+        pub fn unlock_request_for_withdrawal(
+            stash_origin: OriginFor<T>,
+        ) -> DispatchResultWithPostInfo {
+            staking::unlock_request_for_withdrawal::<T>(ensure_signed(stash_origin)?)
+        }
+
+        /// withdraw unlocked stake using the STASH ACCOUNT. Make sure the era for withdrawal has passed.
+        /// If used with `pallet-staking`,it can be found in the ledger of datatype `StakingLedger`,
+        /// the field `unlocking` of datatype `UnlockChunk`,
+        /// and at field `era`.
+        #[pallet::weight(<T as Config>::WeightInfo::withdraw_stake(1 as u32))]
+        pub fn withdraw_stake(stash_origin: OriginFor<T>) -> DispatchResultWithPostInfo {
+            staking::withdraw::<T>(ensure_signed(stash_origin)?)
+        }
     }
 
     #[pallet::genesis_config]
     pub struct GenesisConfig<T: Config> {
         pub genesis_utxos: Vec<TransactionOutputFor<T>>,
-        pub _marker: PhantomData<T>,
+        /// initially staked utxos of the initial validators.
+        pub locked_utxos: Vec<TransactionOutputFor<T>>,
+        // /// the amount to reward block authors/producers.
+        // pub initial_reward_amount:Value
     }
 
     #[cfg(feature = "std")]
@@ -916,7 +1317,7 @@ pub mod pallet {
         fn default() -> Self {
             Self {
                 genesis_utxos: vec![],
-                _marker: Default::default(),
+                locked_utxos: vec![],
             }
         }
     }
@@ -924,32 +1325,77 @@ pub mod pallet {
     #[pallet::genesis_build]
     impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
         fn build(&self) {
-            self.genesis_utxos.iter().cloned().for_each(|u| {
-                UtxoStore::<T>::insert(BlakeTwo256::hash_of(&u), Some(u));
+            self.genesis_utxos.iter().cloned().enumerate().for_each(|(index, u)| {
+                // added the index and the `genesis` on the hashing, to indicate that these utxos are from the beginning of the chain.
+                UtxoStore::<T>::insert(BlakeTwo256::hash_of(&(&u, index as u64, "genesis")), u);
+            });
+
+            self.locked_utxos.iter().cloned().enumerate().for_each(|(index, u)| {
+                if let Destination::LockForStaking {
+                    stash_account,
+                    controller_account: _,
+                    session_key: _,
+                } = &u.destination
+                {
+                    <StakingCount<T>>::insert(stash_account.clone(), (1, u.value));
+                }
+
+                // added the index and the `genesis` on the hashing, to indicate that these utxos are from the beginning of the chain.
+                LockedUtxos::<T>::insert(BlakeTwo256::hash_of(&(&u, index as u64, "genesis")), u);
             });
         }
     }
 }
-
-use pallet_utxo_tokens::{TokenInstance, TokenListData};
 
 impl<T: Config> crate::Pallet<T> {
     pub fn send() -> u32 {
         1337
     }
 
-    pub fn tokens_list() -> TokenListData {
-        <TokenList<T>>::get()
-    }
+    // todo: This part isn't fully tested, left for the next PR
+    // pub fn nft_read(
+    //     nft_id: &core::primitive::str,
+    // ) -> Option<(/* Data url */ Vec<u8>, /* Data hash */ Vec<u8>)> {
+    //     match crate::pallet::get_output_by_token_id::<T>(
+    //         crate::tokens::TokenId::from_string(&nft_id).ok()?,
+    //     )?
+    //     .data
+    //     {
+    //         Some(crate::tokens::OutputData::NftMintV1 {
+    //             data_hash,
+    //             metadata_uri,
+    //             ..
+    //         }) => Some((metadata_uri, data_hash.encode())),
+    //         _ => None,
+    //     }
+    // }
 }
 
-use frame_support::pallet_prelude::DispatchResultWithPostInfo;
-use sp_core::{
-    crypto::UncheckedFrom,
-    {H256, H512},
-};
-use sp_runtime::sp_std::vec;
-use utxo_api::UtxoApi;
+fn coin_picker<T: Config>(outpoints: &Vec<H256>) -> Result<Vec<TransactionInput>, DispatchError> {
+    let mut inputs: Vec<TransactionInput> = Vec::new();
+
+    // consensus-critical sorting function...
+    let mut outpoints = outpoints.clone();
+    outpoints.sort();
+
+    for outpoint in outpoints.iter() {
+        let tx = <UtxoStore<T>>::get(&outpoint).ok_or("UTXO doesn't exist!")?;
+        match tx.destination {
+            Destination::CallPP(_, _, _) => {
+                inputs.push(TransactionInput::new_script(
+                    *outpoint,
+                    Builder::new().into_script(),
+                    Builder::new().push_int(0x1337).into_script(),
+                ));
+            }
+            _ => {
+                return Err(DispatchError::Other("Only CallPP vouts can be spent!"));
+            }
+        }
+    }
+
+    Ok(inputs)
+}
 
 impl<T: Config> UtxoApi for Pallet<T>
 where
@@ -969,7 +1415,63 @@ where
             &Transaction {
                 inputs: vec![TransactionInput::new_with_signature(utxo, sig)],
                 outputs: vec![TransactionOutputFor::<T>::new_pubkey(value, address)],
+                time_lock: Default::default(),
             },
         )
+    }
+
+    fn unlock_request_for_withdrawal(
+        stash_account_caller: &T::AccountId,
+    ) -> DispatchResultWithPostInfo {
+        staking::unlock_request_for_withdrawal::<T>(stash_account_caller.clone())
+    }
+
+    fn withdraw_stake(stash_account_caller: &T::AccountId) -> DispatchResultWithPostInfo {
+        staking::withdraw::<T>(stash_account_caller.clone())
+    }
+
+    fn send_conscrit_p2pk(
+        caller: &T::AccountId,
+        dest: &T::AccountId,
+        value: u128,
+        outpoints: &Vec<H256>,
+    ) -> Result<(), DispatchError> {
+        let pubkey_raw: [u8; 32] =
+            dest.encode().try_into().map_err(|_| "Failed to get caller's public key")?;
+
+        spend::<T>(
+            caller,
+            &Transaction {
+                inputs: coin_picker::<T>(outpoints)?,
+                outputs: vec![TransactionOutput::new_pubkey(value, H256::from(pubkey_raw))],
+                time_lock: Default::default(),
+            },
+        )
+        .map_err(|_| "Failed to spend the transaction!")?;
+        Ok(())
+    }
+
+    fn send_conscrit_c2c(
+        caller: &Self::AccountId,
+        dest: &Self::AccountId,
+        value: u128,
+        data: &Vec<u8>,
+        outpoints: &Vec<H256>,
+    ) -> Result<(), DispatchError> {
+        spend::<T>(
+            caller,
+            &Transaction {
+                inputs: coin_picker::<T>(outpoints)?,
+                outputs: vec![TransactionOutput::new_call_pp(
+                    value,
+                    dest.clone(),
+                    true,
+                    data.clone(),
+                )],
+                time_lock: Default::default(),
+            },
+        )
+        .map_err(|_| "Failed to spend the transaction!")?;
+        Ok(())
     }
 }

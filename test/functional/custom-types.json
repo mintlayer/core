@@ -1,67 +1,175 @@
 {
-    "runtime_id": 2,
-    "types": {
-        "DestinationCreatePP": {
-            "type": "struct",
-            "type_mapping": [
-                [ "code", "Vec<u8>" ],
-                [ "data", "Vec<u8>" ]
-            ]
-        },
-        "DestinationCallPP": {
-            "type": "struct",
-            "type_mapping": [
-                [ "dest_account", "AccountId" ],
-                [ "input_data", "Vec<u8>" ]
-            ]
-        },
-        "Destination": {
-            "type": "enum",
-            "type_mapping": [
-                [ "Pubkey", "H256" ],
-                [ "CreatePP", "DestinationCreatePP" ],
-                [ "CallPP", "DestinationCallPP" ],
-                [ "ScriptHash", "H256" ],
-                [ "PubkeyHash", "Vec<u8>" ]
-            ]
-        },
-        "TransactionInput": {
-            "type": "struct",
-            "type_mapping": [
-                [ "outpoint", "H256" ],
-                [ "lock", "Vec<u8>" ],
-                [ "witness", "Vec<u8>" ]
-            ]
-        },
-        "TransactionOutput": {
-            "type": "struct",
-            "type_mapping": [
-                [ "value", "Value" ],
-                [ "header", "TXOutputHeader"],
-                [ "destination", "Destination" ]
-            ]
-        },
-        "Transaction": {
-            "type": "struct",
-            "type_mapping": [
-                [ "inputs", "Vec<TransactionInput>" ],
-                [ "outputs", "Vec<TransactionOutput<AccountId>>" ]
-            ]
-        },
-        "Outpoint": {
-            "type": "struct",
-            "type_mapping": [
-                [ "transaction", "Transaction" ],
-                [ "index", "u64" ]
-            ]
-        },
-        "TransactionOutputFor": "TransactionOutput<AccountId>",
-        "TransactionFor": "Transaction",
-        "Address": "MultiAddress",
-        "Value": "u128",
-        "TXOutputHeader": "u128",
-        "header": "TXOutputHeader",
-        "Public": "H256"
-    },
-    "versioning": [ ]
+	"runtime_id": 2,
+	"types": {
+		"Value": "u128",
+		"DestinationCreatePP": {
+			"type": "struct",
+			"type_mapping": [
+				[ "code", "Vec<u8>" ],
+				[ "data", "Vec<u8>" ]
+			]
+		},
+		"DestinationCallPP": {
+			"type": "struct",
+			"type_mapping": [
+				[ "dest_account", "AccountId" ],
+				[ "fund", "bool" ],
+				[ "input_data", "Vec<u8>" ]
+			]
+		},
+		"DestinationStake": {
+			"type": "struct",
+			"type_mapping": [
+				[ "stash_account", "AccountId" ],
+				[ "controller_account", "AccountId" ],
+				[ "session_key", "Vec<u8>" ]
+			]
+		},
+		"DestinationStakeExtra": {
+			"type": "struct",
+			"type_mapping": [
+				[ "stash_account", "AccountId" ],
+				[ "controller_account", "AccountId" ]
+			]
+		},
+		"Destination": {
+			"type": "enum",
+			"type_mapping": [
+				[ "Pubkey", "Pubkey" ],
+				[ "CreatePP", "DestinationCreatePP" ],
+				[ "CallPP", "DestinationCallPP" ],
+				[ "ScriptHash", "H256"],
+				[ "LockForStaking", "DestinationStake" ],
+				[ "LockExtraForStaking", "DestinationStakeExtra" ]
+			]
+		},
+		"NftDataHash": {
+			"type": "struct",
+			"type_mapping": [
+				[ "Hash32", "[u8; 32]" ],
+				[ "Raw", "Vec<u8>" ]
+			]
+		},
+		"TokenId": {
+			"type": "struct",
+			"type_mapping": [
+				[ "inner", "H160" ]
+			]
+		},
+		"TokenTransferV1": {
+			"type": "struct",
+			"type_mapping": [
+				[ "token_id", "TokenId" ],
+				[ "amount", "Value" ]
+			]
+		},
+		"TokenIssuanceV1": {
+			"type": "struct",
+			"type_mapping": [
+				[ "token_ticker", "Vec<u8>" ],
+				[ "amount_to_issue", "Value" ],
+				[ "number_of_decimals", "u8" ],
+				[ "metadata_uri", "Vec<u8>" ]
+			]
+		},
+		"TokenBurnV1": {
+			"type": "struct",
+			"type_mapping": [
+				[ "token_id", "TokenId" ],
+				[ "amount_to_burn", "Value" ]
+			]
+		},
+		"NftMintV1": {
+			"type": "struct",
+			"type_mapping": [
+				[ "token_id", "TokenId" ],
+				[ "data_hash", "NftDataHash" ],
+				[ "metadata_uri", "Vec<u8>" ]
+			]
+		},
+		"OutputData": {
+			"type": "enum",
+			"type_mapping": [
+				[ "TokenTransfer", "TokenTransferV1" ],
+				[ "TokenIssuance", "TokenIssuanceV1" ],
+				[ "TokenBurn", "TokenBurnV1" ],
+				[ "NftMint", "NftMintV1" ]
+			]
+		},
+		"TransactionInput": {
+			"type": "struct",
+			"type_mapping": [
+				[ "outpoint", "Hash" ],
+				[ "lock", "Vec<u8>" ],
+				[ "witness", "Vec<u8>" ]
+			]
+		},
+		"TransactionOutput": {
+			"type": "struct",
+			"type_mapping": [
+				[ "value", "Value" ],
+				[ "destination", "Destination" ],
+				[ "data", "Option<OutputData>"]
+			]
+		},
+		"Transaction": {
+			"type": "struct",
+			"type_mapping": [
+				[ "inputs", "Vec<TransactionInput>" ],
+				[ "outputs", "Vec<TransactionOutput>" ],
+				[ "time_lock", "Compact<u64>" ]
+			]
+		},
+		"Outpoint": {
+			"type": "struct",
+			"type_mapping": [
+				[ "transaction", "Transaction" ],
+				[ "index", "u64" ]
+			]
+		},
+		"TransactionOutputFor": "TransactionOutput",
+		"TransactionFor": "Transaction",
+		"Address": "MultiAddress",
+		"LookupSource": "MultiAddress",
+		"Value": "u128",
+		"value": "Value",
+		"pub_key": "H256",
+		"Difficulty": "U256",
+		"DifficultyAndTimestamp": {
+			"type": "struct",
+			"type_mapping": [
+				["difficulty", "Difficulty"],
+				["timestamp", "Moment"]
+			]
+		},
+		"Pubkey": "H256",
+		"Public": "H256",
+		"SignatureData": {
+			"type": "struct",
+			"type_mapping": [
+				[ "sighash", "u8" ],
+				[ "inputs", "SignatureDataInputs" ],
+				[ "outputs", "SignatureDataOutputs" ],
+				[ "time_lock", "u64" ],
+				[ "codesep_pos", "u32" ]
+			]
+		},
+		"SignatureDataInputs": {
+			"type": "enum",
+			"type_mapping": [
+				[ "SpecifiedPay", "(H256, H256, u64)" ],
+				[ "AnyoneCanPay", "(H256, H256)" ]
+			]
+		},
+		"SignatureDataOutputs": {
+			"type": "enum",
+			"type_mapping": [
+				[ "Unused", "()" ],
+				[ "All", "H256" ],
+				[ "None", "()" ],
+				[ "Single", "H256" ]
+			]
+		}
+	},
+	"versioning": [ ]
 }

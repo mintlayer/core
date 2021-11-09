@@ -50,6 +50,9 @@ Given:
   * position is in number of decoded instructions (executed or not)
   * or `0xffffffff` if no `OP_CODESEPARATOR` has been seen so far
     or we are outside of a script context (e.g. plain pay to pubkey, no script involved)
+* `time_lock`: time lock (8 bytes unsigned number)
+  * Number of blocks if `time_lock` < 500,000,000
+  * Unix timestamp in seconds otherwise
 
 The message is a concatenation of:
 
@@ -77,6 +80,7 @@ The message is a concatenation of:
         * [32B] hash of output matching current input index `hash(tx.outputs[index])`
       * false:
         * [32B] constant hash `0x0000...00000`
+* [8B] `time_lock`
 * [4B] `codesep_pos`
 
 ## Notes
@@ -90,7 +94,7 @@ by requiring it to conform to a particular hash (e.g. like in P2SH or requiring 
 Many of the hashes included in the resultant message will be the same for many signatures
 and can be cached or pre-calculated.
 
-The message is at most 111 bytes long.
+The message is at most 119 bytes long.
 
 ## References
 

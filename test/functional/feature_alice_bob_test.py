@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Copyright (c) 2021 RBB S.r.l
 # Copyright (c) 2017 The Bitcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
@@ -62,42 +63,42 @@ class ExampleTest(MintlayerTestFramework):
         bob = Keypair.create_from_uri('//Bob')
 
         # fetch the genesis utxo from storage
-        utxos = [h for (h, o) in client.utxos_for(alice)]
+        utxos = list(client.utxos_for(alice))
 
-        tx = utxo.Transaction(
+        tx1 = utxo.Transaction(
             client,
             inputs=[
-                utxo.Input(utxos[0]),
+                utxo.Input(utxos[0][0]),
             ],
             outputs=[
                 utxo.Output(
                     value=50,
-                    header=0,
-                    destination=utxo.DestPubkey(bob.public_key)
+                    destination=utxo.DestPubkey(bob.public_key),
+                    data=None
                 ),
             ]
-        ).sign(alice)
-        client.submit(alice, tx)
+        ).sign(alice, [utxos[0][1]])
+        client.submit(alice, tx1)
 
-        tx = utxo.Transaction(
+        tx2 = utxo.Transaction(
             client,
             inputs=[
-                utxo.Input(tx.outpoint(0)),
+                utxo.Input(tx1.outpoint(0)),
             ],
             outputs=[
                 utxo.Output(
                     value=30,
-                    header=0,
-                    destination=utxo.DestPubkey(alice.public_key)
+                    destination=utxo.DestPubkey(alice.public_key),
+                    data=None
                 ),
                 utxo.Output(
                     value=20,
-                    header=0,
-                    destination=utxo.DestPubkey(bob.public_key)
+                    destination=utxo.DestPubkey(bob.public_key),
+                    data=None
                 ),
             ]
-        ).sign(bob)
-        client.submit(bob, tx)
+        ).sign(bob, tx1.outputs)
+        client.submit(bob, tx2)
 
 
 if __name__ == '__main__':

@@ -6,7 +6,6 @@ edition = "2018"
 
 [dependencies]
 pallet-utxo-rpc-runtime-api = { path = "./runtime-api" }
-pallet-utxo-tokens = {path = "../tokens"}
 jsonrpc-core = "18.0.0"
 jsonrpc-core-client = "18.0.0"
 jsonrpc-derive = "18.0.0"
@@ -40,6 +39,12 @@ version = '4.0.0-dev'
 branch = "master"
 
 [dependencies.frame-support]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+version = '4.0.0-dev'
+branch = "master"
+
+[dependencies.sp-core]
 default-features = false
 git = 'https://github.com/paritytech/substrate.git'
 version = '4.0.0-dev'

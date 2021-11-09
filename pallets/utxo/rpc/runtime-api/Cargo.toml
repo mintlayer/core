@@ -4,9 +4,6 @@ version = "0.1.0"
 authors = ["RBB Lab"]
 edition = "2018"
 
-[dependencies]
-pallet-utxo-tokens = { path = "../../tokens" }
-
 [dependencies.serde]
 version = "1.0.104"
 optional = true
@@ -31,6 +28,12 @@ version = '4.0.0-dev'
 branch = "master"
 
 [dependencies.frame-support]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+version = '4.0.0-dev'
+branch = "master"
+
+[dependencies.sp-core]
 default-features = false
 git = 'https://github.com/paritytech/substrate.git'
 version = '4.0.0-dev'

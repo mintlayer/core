@@ -9,11 +9,19 @@
 # Intellij IDEA
 .idea/
 *.iml
+/customSpec.json
+
+# VSCode
+.vscode/
+
+# Test Python cache
+test/**/__pycache__
+
+# Files generated for the testing system
+test/config.ini
 
 # The cache for docker container dependency
 .cargo
-
-Cargo.lock
 
 # The cache for chain data in container
 .local
@@ -21,4 +29,5 @@ Cargo.lock
 # direnv cache
 .direnv
 
-
+# Python compiled files
+*.pyc

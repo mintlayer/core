@@ -140,7 +140,7 @@ class TestNode():
                 url = "ws://127.0.0.1"  # TODO: move this to a parameter in the constructor
                 rpc_client = mintlayer.utxo.Client(url, port)
                 # let's run some functions that show that the node is running
-                rpc_client.utxos()
+                rpc_client.utxos('UtxoStore')
                 rpc_client.substrate.get_block_hash(0)
                 node_id_response = rpc_client.substrate.rpc_request("system_localPeerId", [])
                 self.peer_id = node_id_response["result"]
