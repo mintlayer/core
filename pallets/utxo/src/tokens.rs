@@ -24,7 +24,7 @@ impl Mlt {
 }
 
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-#[derive(Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, RuntimeDebug)]
+#[derive(Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, Hash, RuntimeDebug)]
 pub struct TokenId {
     inner: H160,
 }

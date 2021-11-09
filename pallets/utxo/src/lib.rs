@@ -133,9 +133,9 @@ pub mod pallet {
         Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, RuntimeDebug, Hash, Default,
     )]
     pub struct RpcBalanceRecord {
-        pub token_id: Some<TokenId>,
+        pub token_id: Option<crate::tokens::TokenId>,
         pub token_ticker: Vec<u8>,
-        pub amount: Value,
+        pub amount: crate::tokens::Value,
         pub decimals: u8,
     }
 
@@ -1196,69 +1196,83 @@ impl<T: Config> crate::Pallet<T> {
     //     }
     // }
 
-    pub fn utxo_balance(sender: sp_core::sr25519::Public) -> Result<Vec<RpcBalanceRecord>> {
+    pub fn utxo_balance(
+        sender: sp_core::sr25519::Public,
+    ) -> Result<BTreeMap<Option<crate::tokens::TokenId>, RpcBalanceRecord>, &'static str> {
         let mut balances: BTreeMap<Option<crate::tokens::TokenId>, RpcBalanceRecord> =
             BTreeMap::new();
 
         for (hash, utxo) in UtxoStore::<T>::iter() {
             match &utxo.destination {
                 Destination::Pubkey(pubkey) => {
-                    if sender == pubkey {
-                        match balances.get(&None) {
+                    if &sender == pubkey {
+                        // Let's check MLT balance
+                        match balances.get_mut(&None) {
                             Some(ref mut rec) => {
-                                rec.amount = utxo.value.checked_add(rec.amount)?;
-                                balances.insert(None, rec);
-                            },
-                            None => balances.insert(
-                                None,
-                                RpcBalanceRecord {
-                                    token_ticker: b"MLT".as_bytes().to_vec(),
-                                    amount: utxo.value,
-                                    decimals: 0,
-                                },
-                            ),
-                        }
-                        match utxo.data {
-                            crate::tokens::OutputData::TokenTransferV1 {
-                                ref token_id, amount
-                            } => {
-                                match balances.get(token_id) {
-                                    Some(rec) => {},
-                                    None => {
-                                        let token_ticker;
-                                        let decimals;
-                                        let rec = RpcBalanceRecord {
-                                            token_id: token_id.clone(),
-                                            token_ticker,
-                                            amount,
-                                            decimals,
-                                        };
-                                        balances.insert(token_id, rec);
+                                rec.amount = utxo
+                                    .value
+                                    .checked_add(rec.amount)
+                                    .ok_or("balance overflowed")?;
+                            }
+                            None => {
+                                balances.insert(
+                                    None,
+                                    RpcBalanceRecord {
+                                        token_id: None,
+                                        token_ticker: b"MLT".to_vec(),
+                                        amount: utxo.value,
+                                        decimals: 0,
                                     },
+                                );
+                            }
+                        }
+                        // Let's check token balance
+                        match utxo.data {
+                            Some(crate::tokens::OutputData::TokenTransferV1 {
+                                ref token_id,
+                                amount,
+                            }) => match balances.get_mut(&Some(token_id.clone())) {
+                                Some(ref mut rec) => {
+                                    rec.amount = amount
+                                        .checked_add(rec.amount)
+                                        .ok_or("balance overflowed")?;
+                                }
+                                None => {
+                                    let token_ticker = vec![1];
+                                    let decimals = 2;
+                                    let rec = RpcBalanceRecord {
+                                        token_id: Some(token_id.clone()),
+                                        token_ticker,
+                                        amount,
+                                        decimals,
+                                    };
+                                    balances.insert(Some(token_id.clone()), rec);
                                 }
                             },
-                            crate::tokens::OutputData::TokenIssuanceV1 {
-
-                            },
+                            Some(crate::tokens::OutputData::TokenIssuanceV1 {
+                                token_ticker,
+                                amount_to_issue,
+                                number_of_decimals,
+                                ..
+                            }) => {
+                                let token_id =
+                                    <TokenIssuanceId<T>>::get(hash).ok_or("token not found")?;
+                                let rec = RpcBalanceRecord {
+                                    token_id: Some(token_id.clone()),
+                                    token_ticker,
+                                    amount: amount_to_issue,
+                                    decimals: number_of_decimals,
+                                };
+                                balances.insert(Some(token_id), rec);
+                            }
+                            None => continue,
                         }
                     }
                 }
                 _ => continue,
             }
         }
-
-        pub fn pick_utxo<T: Config>(
-            caller: &T::AccountId,
-            value: Value,
-        ) -> (Value, Vec<H256>, Vec<TransactionOutputFor<T>>) {
-            let mut utxos = Vec::new();
-            let mut hashes = Vec::new();
-            let mut total = 0;
-
-            (total, hashes, utxos)
-        }
-
-        vec![]
+        Ok(balances)
     }
 }
 
