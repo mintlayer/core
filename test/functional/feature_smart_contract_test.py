@@ -88,11 +88,17 @@ class ExampleTest(MintlayerTestFramework):
                     ),
                     data=None
                 ),
+                # This output prevent reward overflow
+                utxo.Output(
+                    value=3981553255926290448385, # = genesis amount - u64::MAX
+                    destination=utxo.DestPubkey(alice.public_key),
+                    data=None
+                )
             ]
         ).sign(alice, [initial_utxo[1]])
 
         # submit transaction and get the extrinsic and block hashes
-        (ext, blk) = client.submit(alice, tx0)
+        (ext, blk,_) = client.submit(alice, tx0)
 
         # each new smart contract instantiation creates a new account
         # fetch this SS58-formatted account address and return it
@@ -136,7 +142,7 @@ class ExampleTest(MintlayerTestFramework):
                 ),
             ]
         ).sign(alice, [tx0.outputs[0]], [0])
-        (ext_hash, blk_hash) = client.submit(alice, tx1)
+        (ext_hash, blk_hash,_) = client.submit(alice, tx1)
 
         result = contractInstance.read(alice, "get")
         assert_equal(result.contract_result_data.value, True)

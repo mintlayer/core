@@ -41,7 +41,7 @@ fn execute_with_alice<F, R>(mut execute: F) -> R
 where
     F: FnMut(Public) -> R,
 {
-    new_test_ext().execute_with(|| {
+    alice_test_ext().execute_with(|| {
         let alice_pub_key = crypto::sr25519_public_keys(SR25519)[0];
         execute(alice_pub_key)
     })
@@ -82,14 +82,20 @@ fn test_script_preimage() {
         let (utxo0, input0) = tx_input_gen_no_signature();
         let tx1 = Transaction {
             inputs: vec![input0],
-            outputs: vec![TransactionOutput::new_script_hash(50, script_hash)],
+            outputs: vec![TransactionOutput::new_script_hash(
+                ALICE_GENESIS_BALANCE - 50,
+                script_hash,
+            )],
             time_lock: Default::default(),
         }
         .sign_unchecked(&[utxo0], 0, &alice_pub_key);
 
         let tx2 = Transaction {
             inputs: vec![TransactionInput::new_script(tx1.outpoint(0), script, witness_script)],
-            outputs: vec![TransactionOutput::new_script_hash(20, H256::zero())],
+            outputs: vec![TransactionOutput::new_script_hash(
+                ALICE_GENESIS_BALANCE - 120,
+                H256::zero(),
+            )],
             time_lock: Default::default(),
         };
 
@@ -106,8 +112,14 @@ fn test_unchecked_2nd_output() {
         let tx1 = Transaction {
             inputs: vec![input0],
             outputs: vec![
-                TransactionOutput::new_pubkey(30, H256::from(alice_pub_key)),
-                TransactionOutput::new_pubkey(50, H256::from(alice_pub_key)),
+                TransactionOutput::new_pubkey(
+                    ALICE_GENESIS_BALANCE - 30,
+                    H256::from(alice_pub_key),
+                ),
+                TransactionOutput::new_pubkey(
+                    ALICE_GENESIS_BALANCE - 50,
+                    H256::from(alice_pub_key),
+                ),
             ],
             time_lock: Default::default(),
         }
@@ -132,7 +144,10 @@ fn test_simple_tx() {
         let (utxo0, input0) = tx_input_gen_no_signature();
         let tx = Transaction {
             inputs: vec![input0],
-            outputs: vec![TransactionOutput::new_pubkey(50, H256::from(alice_pub_key))],
+            outputs: vec![TransactionOutput::new_pubkey(
+                ALICE_GENESIS_BALANCE - 50,
+                H256::from(alice_pub_key),
+            )],
             time_lock: Default::default(),
         }
         .sign_unchecked(&[utxo0], 0, &alice_pub_key);
@@ -144,13 +159,16 @@ fn test_simple_tx() {
         assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx));
         assert!(!UtxoStore::<Test>::contains_key(H256::from(init_utxo)));
         assert!(UtxoStore::<Test>::contains_key(new_utxo_hash));
-        assert_eq!(50, UtxoStore::<Test>::get(new_utxo_hash).unwrap().value);
+        assert_eq!(
+            ALICE_GENESIS_BALANCE - 50,
+            UtxoStore::<Test>::get(new_utxo_hash).unwrap().value
+        );
     })
 }
 
 #[test]
 fn attack_with_sending_to_own_account() {
-    let (mut test_ext, _alice, karl_pub_key) = new_test_ext_and_keys();
+    let (mut test_ext, _alice, karl_pub_key) = alice_test_ext_and_keys();
     test_ext.execute_with(|| {
         // Karl wants to send himself a new utxo of value 50 out of thin air.
         let mut tx = Transaction {
@@ -171,7 +189,7 @@ fn attack_with_sending_to_own_account() {
 
 #[test]
 fn attack_with_empty_transactions() {
-    new_test_ext().execute_with(|| {
+    alice_test_ext().execute_with(|| {
         // We should use the real input because. Otherwise, appears another error
         let (_, input) = tx_input_gen_no_signature();
         assert_err!(
@@ -299,7 +317,7 @@ fn attack_by_overspending() {
 // then send the rest of the tokens to karl
 #[test]
 fn tx_from_alice_to_karl() {
-    let (mut test_ext, alice_pub_key, karl_pub_key) = new_test_ext_and_keys();
+    let (mut test_ext, alice_pub_key, karl_pub_key) = alice_test_ext_and_keys();
     test_ext.execute_with(|| {
         // alice sends 10 tokens to karl and the rest back to herself
         let (utxo0, input0) = tx_input_gen_no_signature();
@@ -307,7 +325,10 @@ fn tx_from_alice_to_karl() {
             inputs: vec![input0],
             outputs: vec![
                 TransactionOutput::new_pubkey(10, H256::from(karl_pub_key)),
-                TransactionOutput::new_pubkey(90, H256::from(alice_pub_key)),
+                TransactionOutput::new_pubkey(
+                    ALICE_GENESIS_BALANCE - 90,
+                    H256::from(alice_pub_key),
+                ),
             ],
             time_lock: Default::default(),
         }
@@ -320,7 +341,10 @@ fn tx_from_alice_to_karl() {
         // then send rest of the tokens to karl (proving that the first tx was successful)
         let tx = Transaction {
             inputs: vec![TransactionInput::new_empty(new_utxo_hash)],
-            outputs: vec![TransactionOutput::new_pubkey(90, H256::from(karl_pub_key))],
+            outputs: vec![TransactionOutput::new_pubkey(
+                ALICE_GENESIS_BALANCE - 90,
+                H256::from(karl_pub_key),
+            )],
             time_lock: Default::default(),
         }
         .sign_unchecked(&[new_utxo], 0, &alice_pub_key);
@@ -334,22 +358,64 @@ fn tx_from_alice_to_karl() {
 fn test_reward() {
     execute_with_alice(|alice_pub_key| {
         let (utxo0, input0) = tx_input_gen_no_signature();
+
+        // Check the default parameters
+        let utxos = UtxoStore::<Test>::get(input0.outpoint).unwrap();
+        assert_eq!(utxos.value, ALICE_GENESIS_BALANCE);
+        let reward = RewardTotal::<Test>::get();
+        assert_eq!(reward, 0);
+
+        // Make a new transaction
         let tx = Transaction {
             inputs: vec![input0],
-            outputs: vec![TransactionOutput::new_pubkey(90, H256::from(alice_pub_key))],
+            outputs: vec![TransactionOutput::new_pubkey(
+                ALICE_GENESIS_BALANCE - 90,
+                H256::from(alice_pub_key),
+            )],
             time_lock: Default::default(),
         }
         .sign_unchecked(&[utxo0], 0, &alice_pub_key);
 
         assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx.clone()));
+        let utxo_hash = tx.outpoint(0);
 
         // if the previous spend succeeded, there should be one utxo
-        // that has a value of 90 and a reward that has a value of 10
-        let utxos = UtxoStore::<Test>::iter_values().next().unwrap();
+        // that has a value of ALICE_GENESIS_BALANCE - 90 and a reward that has a value of 90
+        let utxos = UtxoStore::<Test>::get(utxo_hash).unwrap();
         let reward = RewardTotal::<Test>::get();
+        assert_eq!(utxos.value, ALICE_GENESIS_BALANCE - 90);
+        assert_eq!(reward, 90);
+    })
+}
 
-        assert_eq!(utxos.value, 90);
-        assert_eq!(reward, ALICE_GENESIS_BALANCE - 90);
+#[test]
+fn test_reward_overflow() {
+    execute_with_alice(|alice_pub_key| {
+        let (utxo0, input0) = tx_input_gen_no_signature();
+
+        // Check the default parameters
+        let utxos = UtxoStore::<Test>::get(input0.outpoint).unwrap();
+        assert_eq!(utxos.value, ALICE_GENESIS_BALANCE);
+        let reward = RewardTotal::<Test>::get();
+        assert_eq!(reward, 0);
+
+        // Make a new transaction where
+        // Input balance:  4_000_000_000_000_000_000_000
+        // u64::MAX:          18_446_744_073_709_551_615
+        // the difference: 3_981_553_255_926_290_448_385
+        let tx = Transaction {
+            inputs: vec![input0],
+            outputs: vec![TransactionOutput::new_pubkey(
+                3_981_553_255_926_290_448_385,
+                H256::from(alice_pub_key),
+            )],
+            time_lock: Default::default(),
+        }
+        .sign_unchecked(&[utxo0], 0, &alice_pub_key);
+        assert_err!(
+            Utxo::spend(Origin::signed(H256::zero()), tx),
+            "reward exceed allowed amount"
+        );
     })
 }
 
@@ -359,7 +425,10 @@ fn test_script() {
         let (utxo0, input0) = tx_input_gen_no_signature();
         let tx = Transaction {
             inputs: vec![input0],
-            outputs: vec![TransactionOutput::new_pubkey(90, H256::from(alice_pub_key))],
+            outputs: vec![TransactionOutput::new_pubkey(
+                ALICE_GENESIS_BALANCE - 90,
+                H256::from(alice_pub_key),
+            )],
             time_lock: Default::default(),
         }
         .sign_unchecked(&[utxo0], 0, &alice_pub_key);
@@ -374,7 +443,10 @@ fn test_time_lock_tx() {
         let (utxo0, input0) = tx_input_gen_no_signature();
         let tx = Transaction {
             inputs: vec![input0],
-            outputs: vec![TransactionOutput::new_pubkey(90, H256::from(alice_pub_key))],
+            outputs: vec![TransactionOutput::new_pubkey(
+                ALICE_GENESIS_BALANCE - 90,
+                H256::from(alice_pub_key),
+            )],
             time_lock: BlockTime::Blocks(10).as_raw().unwrap(),
         }
         .sign_unchecked(&[utxo0], 0, &alice_pub_key);
@@ -393,7 +465,10 @@ fn test_time_lock_script_fail() {
         let script_hash: H256 = BlakeTwo256::hash(script.as_ref());
         let tx1 = Transaction {
             inputs: vec![input0],
-            outputs: vec![TransactionOutput::new_script_hash(90, script_hash)],
+            outputs: vec![TransactionOutput::new_script_hash(
+                ALICE_GENESIS_BALANCE - 90,
+                script_hash,
+            )],
             time_lock: Default::default(),
         }
         .sign_unchecked(&[utxo0], 0, &alice_pub_key);
@@ -404,7 +479,10 @@ fn test_time_lock_script_fail() {
         // the time lock restrictions imposed by the scripting system.
         let tx2 = Transaction {
             inputs: vec![TransactionInput::new_script(outpoint, script, Default::default())],
-            outputs: vec![TransactionOutput::new_pubkey(50, H256::from(alice_pub_key))],
+            outputs: vec![TransactionOutput::new_pubkey(
+                ALICE_GENESIS_BALANCE - 150,
+                H256::from(alice_pub_key),
+            )],
             time_lock: Default::default(),
         };
         assert_err!(
@@ -423,7 +501,10 @@ fn attack_double_spend_by_tweaking_input() {
         let drop_script_hash = BlakeTwo256::hash(drop_script.as_ref());
         let tx0 = Transaction {
             inputs: vec![input0],
-            outputs: vec![TransactionOutput::new_script_hash(50, drop_script_hash)],
+            outputs: vec![TransactionOutput::new_script_hash(
+                ALICE_GENESIS_BALANCE - 50,
+                drop_script_hash,
+            )],
             time_lock: Default::default(),
         }
         .sign_unchecked(&[utxo0], 0, &alice_pub_key);
@@ -438,8 +519,11 @@ fn attack_double_spend_by_tweaking_input() {
             })
             .collect();
         let tx1 = Transaction {
-            inputs: inputs,
-            outputs: vec![TransactionOutput::new_pubkey(500, H256::from(alice_pub_key))],
+            inputs,
+            outputs: vec![TransactionOutput::new_pubkey(
+                ALICE_GENESIS_BALANCE - 500,
+                H256::from(alice_pub_key),
+            )],
             time_lock: Default::default(),
         };
         assert_err!(
@@ -451,7 +535,7 @@ fn attack_double_spend_by_tweaking_input() {
 
 #[test]
 fn test_send_to_address() {
-    let (mut test_ext, alice_pub_key, _karl_pub_key) = new_test_ext_and_keys();
+    let (mut test_ext, alice_pub_key, _karl_pub_key) = alice_test_ext_and_keys();
     test_ext.execute_with(|| {
         // `addr` is bech32-encoded, SCALE-encoded `Destination::Pubkey(alice_pub_key)`
         let addr = "ml1qrft7juyfhl06emj4zzrue5ljs6q39n2jalr4c40rhtcur647n0kwueyfsn";
@@ -571,7 +655,7 @@ proptest! {
             let script_hash: H256 = BlakeTwo256::hash(script.as_ref());
             let tx1 = Transaction {
                 inputs: vec![input0],
-                outputs: vec![TransactionOutput::new_script_hash(90, script_hash)],
+                outputs: vec![TransactionOutput::new_script_hash(ALICE_GENESIS_BALANCE - 90, script_hash)],
                 time_lock: Default::default(),
             }
             .sign_unchecked(&[utxo0], 0, &alice);
@@ -580,7 +664,7 @@ proptest! {
 
             let tx2 = Transaction {
                 inputs: vec![TransactionInput::new_script(outpoint, script, Default::default())],
-                outputs: vec![TransactionOutput::new_pubkey(50, H256::from(alice))],
+                outputs: vec![TransactionOutput::new_pubkey(ALICE_GENESIS_BALANCE - u32::MAX as Value, H256::from(alice))],
                 time_lock: tx_lock_time,
             };
             Utxo::spend(Origin::signed(H256::zero()), tx2)
@@ -608,7 +692,7 @@ proptest! {
             let (utxo0, input0) = tx_input_gen_no_signature();
             let tx = Transaction {
                 inputs: vec![input0],
-                outputs: vec![TransactionOutput::new_pubkey(50, H256::from(alice))],
+                outputs: vec![TransactionOutput::new_pubkey(ALICE_GENESIS_BALANCE - 50, H256::from(alice))],
                 time_lock: tx_lock_time,
             }
             .sign_unchecked(&[utxo0], 0, &alice);
@@ -641,7 +725,7 @@ proptest! {
             let (utxo0, input0) = tx_input_gen_no_signature();
             let tx = Transaction {
                 inputs: vec![input0],
-                outputs: vec![TransactionOutput::new_pubkey(50, H256::from(alice))],
+                outputs: vec![TransactionOutput::new_pubkey(ALICE_GENESIS_BALANCE - 50, H256::from(alice))],
                 time_lock: now,
             }
             .sign_unchecked(&[utxo0], 0, &alice);
@@ -671,7 +755,7 @@ proptest! {
             let (utxo0, input0) = tx_input_gen_no_signature();
             let tx = Transaction {
                 inputs: vec![input0],
-                outputs: vec![TransactionOutput::new_pubkey(50, H256::from(alice))],
+                outputs: vec![TransactionOutput::new_pubkey(ALICE_GENESIS_BALANCE - 50, H256::from(alice))],
                 time_lock: time,
             }
             .sign_unchecked(&[utxo0], 0, &alice);
@@ -702,7 +786,7 @@ fn test_token_issuance() {
     execute_with_alice(|alice_pub_key| {
         let (utxo0, input0) = tx_input_gen_no_signature();
         let output_new = TransactionOutput {
-            value: 0,
+            value: ALICE_GENESIS_BALANCE,
             destination: Destination::Pubkey(alice_pub_key),
             data: Some(OutputData::TokenIssuanceV1 {
                 //token_id: TokenId::new_asset(first_input_hash),
@@ -857,7 +941,7 @@ macro_rules! test_tx {
         execute_with_alice(|alice_pub_key| {
             let (utxo0, input0) = tx_input_gen_no_signature();
             let output_new = TransactionOutput {
-                value: 1,
+                value: ALICE_GENESIS_BALANCE - 1,
                 destination: Destination::Pubkey(alice_pub_key),
                 data: Some($data.clone()),
             };
@@ -894,9 +978,9 @@ fn test_tokens_issuance_empty_ticker() {
     // Ticker empty
     let data = OutputData::TokenIssuanceV1 {
         token_ticker: vec![],
-        amount_to_issue: 0,
-        number_of_decimals: 0,
-        metadata_uri: vec![],
+        amount_to_issue: 1_000_000_000,
+        number_of_decimals: 2,
+        metadata_uri: "mintlayer.org".as_bytes().to_vec(),
     };
     test_tx!(data, Err, "token ticker can't be empty");
 }
@@ -906,9 +990,9 @@ fn test_tokens_issuance_too_big_ticker() {
     // Ticker too long
     let data = OutputData::TokenIssuanceV1 {
         token_ticker: Vec::from([b"A"[0]; 10_000]),
-        amount_to_issue: 0,
-        number_of_decimals: 0,
-        metadata_uri: vec![],
+        amount_to_issue: 1_000_000_000,
+        number_of_decimals: 2,
+        metadata_uri: "mintlayer.org".as_bytes().to_vec(),
     };
     test_tx!(data, Err, "token ticker is too long");
 }
@@ -919,8 +1003,8 @@ fn test_tokens_issuance_amount_zero() {
     let data = OutputData::TokenIssuanceV1 {
         token_ticker: b"BensT".to_vec(),
         amount_to_issue: 0,
-        number_of_decimals: 0,
-        metadata_uri: vec![],
+        number_of_decimals: 2,
+        metadata_uri: "mintlayer.org".as_bytes().to_vec(),
     };
     test_tx!(data, Err, "output value must be nonzero");
 }
@@ -932,7 +1016,7 @@ fn test_tokens_issuance_too_big_decimals() {
         token_ticker: b"BensT".to_vec(),
         amount_to_issue: 1_000_000_000,
         number_of_decimals: 19,
-        metadata_uri: vec![],
+        metadata_uri: "mintlayer.org".as_bytes().to_vec(),
     };
     test_tx!(data, Err, "too long decimals");
 }
@@ -1032,14 +1116,17 @@ fn test_tx_issuance_for_transfer<F>(expecting_err_msg: &'static str, test_func: 
 where
     F: Fn(TokenId, Public, Public, H256, TransactionOutput<H256>) -> Transaction<H256>,
 {
-    let (mut test_ext, alice_pub_key, karl_pub_key) = new_test_ext_and_keys();
+    let (mut test_ext, alice_pub_key, karl_pub_key) = alice_test_ext_and_keys();
     test_ext.execute_with(|| {
         // Alice issue 1_000_000_000 MLS-01, and send them to Karl
         let (utxo0, input0) = tx_input_gen_no_signature();
         let tx = Transaction {
             inputs: vec![input0.clone()],
             outputs: vec![
-                TransactionOutput::new_pubkey(90, H256::from(alice_pub_key)),
+                TransactionOutput::new_pubkey(
+                    ALICE_GENESIS_BALANCE - 90,
+                    H256::from(alice_pub_key),
+                ),
                 TransactionOutput::new_p2pk_with_data(
                     10,
                     H256::from(karl_pub_key),
@@ -1087,11 +1174,11 @@ fn test_token_transfer_with_wrong_token_id() {
             Transaction {
                 inputs: vec![input.clone()],
                 outputs: vec![TransactionOutput::new_p2pk_with_data(
-                    0,
+                    ALICE_GENESIS_BALANCE - u64::MAX as Value,
                     H256::from(alice_pub_key),
                     OutputData::TokenTransferV1 {
                         token_id: TokenId::new(&input),
-                        amount: 1_00_000_000,
+                        amount: 100_000_000,
                     },
                 )],
                 time_lock: Default::default(),
@@ -1185,16 +1272,19 @@ fn test_token_transfer_send_part_others_burn() {
 
 #[test]
 fn test_token_transfer() {
-    let (mut test_ext, alice_pub_key, karl_pub_key) = new_test_ext_and_keys();
+    let (mut test_ext, alice_pub_key, karl_pub_key) = alice_test_ext_and_keys();
     test_ext.execute_with(|| {
         // Alice issue 1_000_000_000 MLS-01, and send them to Karl
         let (utxo0, input0) = tx_input_gen_no_signature();
         let tx = Transaction {
             inputs: vec![input0],
             outputs: vec![
-                TransactionOutput::new_pubkey(90, H256::from(alice_pub_key)),
+                TransactionOutput::new_pubkey(
+                    ALICE_GENESIS_BALANCE - 90,
+                    H256::from(alice_pub_key),
+                ),
                 TransactionOutput::new_p2pk_with_data(
-                    10,
+                    90,
                     H256::from(karl_pub_key),
                     OutputData::TokenIssuanceV1 {
                         token_ticker: "BensT".as_bytes().to_vec(),
@@ -1423,7 +1513,7 @@ fn test_token_transfer() {
 #[test]
 // Test tx where Input with token and without MLT, output has token (without MLT)
 fn test_token_creation_with_insufficient_fee() {
-    let (mut test_ext, alice_pub_key, karl_pub_key) = new_test_ext_and_keys();
+    let (mut test_ext, alice_pub_key, karl_pub_key) = alice_test_ext_and_keys();
     test_ext.execute_with(|| {
         // Alice issue 1000 MLS-01, and send them to Karl and the rest back to herself
         let (utxo0, input0) = tx_input_gen_no_signature();
@@ -1431,11 +1521,11 @@ fn test_token_creation_with_insufficient_fee() {
             inputs: vec![input0],
             outputs: vec![
                 TransactionOutput::new_pubkey(
-                    crate::tokens::Mlt(1).to_munit(),
+                    ALICE_GENESIS_BALANCE - u64::MAX as Value,
                     H256::from(karl_pub_key),
                 ),
                 TransactionOutput::new_p2pk_with_data(
-                    0,
+                    crate::tokens::Mlt(99).to_munit(),
                     H256::from(karl_pub_key),
                     OutputData::TokenIssuanceV1 {
                         token_ticker: "BensT".as_bytes().to_vec(),
@@ -1463,7 +1553,6 @@ fn test_token_creation_with_insufficient_fee() {
                 OutputData::TokenIssuanceV1 {
                     token_ticker: b"Enric".to_vec(),
                     amount_to_issue: 1_000_000_000,
-                    // Should be not more than 18 numbers
                     number_of_decimals: 2,
                     metadata_uri: "mintlayer.org".as_bytes().to_vec(),
                 },
@@ -1480,21 +1569,23 @@ fn test_token_creation_with_insufficient_fee() {
 
 #[test]
 fn test_transfer_and_issuance_in_one_tx() {
-    let (mut test_ext, alice_pub_key, karl_pub_key) = new_test_ext_and_keys();
+    let (mut test_ext, alice_pub_key, karl_pub_key) = alice_test_ext_and_keys();
     test_ext.execute_with(|| {
         // Alice issue 1_000_000_000 MLS-01, and send them to Karl
         let (utxo0, input0) = tx_input_gen_no_signature();
         let tx = Transaction {
             inputs: vec![input0],
             outputs: vec![
-                TransactionOutput::new_pubkey(90, H256::from(alice_pub_key)),
+                TransactionOutput::new_pubkey(
+                    ALICE_GENESIS_BALANCE - crate::tokens::Mlt(1000).to_munit(),
+                    H256::from(alice_pub_key),
+                ),
                 TransactionOutput::new_p2pk_with_data(
                     crate::tokens::Mlt(1000).to_munit(),
                     H256::from(karl_pub_key),
                     OutputData::TokenIssuanceV1 {
                         token_ticker: "BensT".as_bytes().to_vec(),
                         amount_to_issue: 1_000_000_000,
-                        // Should be not more than 18 numbers
                         number_of_decimals: 2,
                         metadata_uri: "mintlayer.org".as_bytes().to_vec(),
                     },
@@ -1609,7 +1700,7 @@ fn test_transfer_and_issuance_in_one_tx() {
 
 #[test]
 fn test_transfer_for_multiple_tokens() {
-    let (mut test_ext, alice_pub_key, karl_pub_key) = new_test_ext_and_keys();
+    let (mut test_ext, alice_pub_key, karl_pub_key) = alice_test_ext_and_keys();
     test_ext.execute_with(|| {
         //
         // Issue token 1 and send all tokens to Karl
@@ -1618,7 +1709,7 @@ fn test_transfer_for_multiple_tokens() {
         let tx = Transaction {
             inputs: vec![input0],
             outputs: vec![TransactionOutput::new_p2pk_with_data(
-                crate::tokens::Mlt(1000).to_munit(),
+                ALICE_GENESIS_BALANCE - crate::tokens::Mlt(100).to_munit(),
                 H256::from(karl_pub_key),
                 OutputData::TokenIssuanceV1 {
                     token_ticker: "TKN1".as_bytes().to_vec(),
@@ -1650,7 +1741,7 @@ fn test_transfer_for_multiple_tokens() {
                     },
                 ),
                 TransactionOutput::new_p2pk_with_data(
-                    crate::tokens::Mlt(500).to_munit(),
+                    ALICE_GENESIS_BALANCE - crate::tokens::Mlt(100).to_munit(),
                     H256::from(alice_pub_key),
                     OutputData::TokenIssuanceV1 {
                         token_ticker: "TKN2".as_bytes().to_vec(),
@@ -1693,7 +1784,7 @@ fn test_transfer_for_multiple_tokens() {
                     },
                 ),
                 TransactionOutput::new_p2pk_with_data(
-                    crate::tokens::Mlt(300).to_munit(),
+                    ALICE_GENESIS_BALANCE - crate::tokens::Mlt(100).to_munit(),
                     H256::from(karl_pub_key),
                     OutputData::TokenIssuanceV1 {
                         token_ticker: "TKN3".as_bytes().to_vec(),
@@ -1740,7 +1831,7 @@ fn test_transfer_for_multiple_tokens() {
                     },
                 ),
                 TransactionOutput::new_p2pk_with_data(
-                    0,
+                    ALICE_GENESIS_BALANCE - crate::tokens::Mlt(100).to_munit(),
                     H256::from(alice_pub_key),
                     OutputData::TokenTransferV1 {
                         token_id: tkn3_token_id.clone(),

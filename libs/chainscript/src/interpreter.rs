@@ -252,7 +252,7 @@ pub fn run_script<'a, Ctx: Context>(
                 opcodes::Class::PushData(_) => {
                     unreachable!("Already handled using Instruction::PushBytes")
                 }
-                opcodes::Class::AltStack(opc) => match opc {
+                opcodes::Class::AltStack(opc) if executing => match opc {
                     opcodes::AltStack::OP_TOALTSTACK => alt_stack.push(stack.pop()?),
                     opcodes::AltStack::OP_FROMALTSTACK => stack.push(alt_stack.pop()?),
                 },
@@ -670,6 +670,21 @@ mod test {
         test_case(&[sig1, sig1][..], Ok(false));
         // Last one should fail.
         test_case(&[sig1, sig2, sig3, sig0][..], Ok(false));
+    }
+
+    #[test]
+    fn unit_conditional_altstack() {
+        use opcodes::all::*;
+        let script = Builder::new()
+            .push_int(1337)
+            .push_int(0)
+            .push_opcode(OP_IF)
+            .push_opcode(OP_TOALTSTACK)
+            .push_opcode(OP_ENDIF)
+            .into_script();
+        let result = run_script(&TestContext::default(), &script, vec![].into());
+        let expected = vec![script::build_scriptint(1337).into()].into();
+        assert_eq!(result, Ok(expected));
     }
 
     use prop::collection::vec as gen_vec;

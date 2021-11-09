@@ -75,6 +75,12 @@ git = 'https://github.com/paritytech/substrate.git'
 version = '4.0.0-dev'
 branch = "master"
 
+[dependencies.pallet-authorship]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+version = '4.0.0-dev'
+branch = "master"
+
 [dependencies.pallet-timestamp]
 default-features = false
 git = 'https://github.com/paritytech/substrate.git'
@@ -102,16 +108,6 @@ branch = "master"
 [dev-dependencies.sp-keystore]
 version = "0.10.0-dev"
 git = 'https://github.com/paritytech/substrate.git'
-branch = "master"
-
-[dev-dependencies.pallet-aura]
-git = 'https://github.com/paritytech/substrate.git'
-version = '4.0.0-dev'
-branch = "master"
-
-[dev-dependencies.sp-consensus-aura]
-git = 'https://github.com/paritytech/substrate.git'
-version = '0.10.0-dev'
 branch = "master"
 
 [dev-dependencies.proptest]
