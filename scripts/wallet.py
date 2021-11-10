@@ -53,10 +53,19 @@ class Account:
     def current_era(self):
        return self.client.current_era()
 
+    def submit(self, tx):
+        call = self.client.substrate.compose_call(
+            call_module = 'Utxo',
+            call_function = 'spend',
+            call_params = { 'tx': tx.json() },
+        )
+        extrinsic = self.client.substrate.create_unsigned_extrinsic(call=call)
+        return self.client.substrate.submit_extrinsic(extrinsic, wait_for_inclusion=True)
+
 
 def balance(args):
     print('Total Free:', Account(args).mlt_balance(), 'MLT')
-    print('Total Locked:', Account(args).locked_mlt_balance(), 'MLT' )
+    print('Total Locked:', Account(args).locked_mlt_balance(), 'MLT')
 
 def print_key_info(keypair):
     print('Seed hex   :', keypair.seed_hex or 'UNKNOWN')
@@ -128,7 +137,7 @@ def lock(args):
             ),
         ]
     ).sign(acct.keypair, [u for (_, u) in utxos])
-    acct.client.submit(acct.keypair, tx)
+    acct.submit(tx)
 
 
 def lock_extra(args):
@@ -136,6 +145,7 @@ def lock_extra(args):
     utxo_value = Decimal()
     utxos = []
     amount = int(args.amount * MLT_UNIT)
+    fee = int()
 
     if amount < 0:
         raise Exception('Sending a negative amount')
@@ -171,7 +181,7 @@ def lock_extra(args):
             ),
         ]
     ).sign(acct.keypair, [u for (_, u) in utxos])
-    acct.client.submit(acct.keypair, tx)
+    acct.submit(tx)
 
 
 def pay(args):
@@ -179,6 +189,11 @@ def pay(args):
     utxo_value = Decimal()
     utxos = []
     amount = int(args.amount * MLT_UNIT)
+    fee = int(args.fee * MLT_UNIT)
+    total = amount + fee
+
+    if fee >= 2 ** 64:
+        raise Exception('Fee too high')
 
     if amount < 0:
         raise Exception('Sending a negative amount')
@@ -186,17 +201,13 @@ def pay(args):
     for (h, u) in acct.mlt_utxos():
         utxos.append((h, u))
         utxo_value += u.value
-        if utxo_value >= amount:
+        if utxo_value >= total:
             break
 
-    if utxo_value < amount:
-        raise Exception('Not enough funds')
-
-    fee = int(MLT_UNIT / 10) # TODO
-    if fee >= 2 ** 64:
-        raise Exception('Fee too large')
-
     change = utxo_value - amount - fee
+
+    if change < 0:
+        raise Exception('Not enough funds')
 
     tx = mint.Transaction(
         acct.client,
@@ -214,7 +225,7 @@ def pay(args):
             ),
         ]
     ).sign(acct.keypair, [u for (_, u) in utxos])
-    acct.client.submit(acct.keypair, tx)
+    acct.submit(tx)
 
 def parse_command_line():
     ap = argparse.ArgumentParser(description='Mintlayer command line interface')
@@ -248,6 +259,8 @@ def parse_command_line():
 
     pay_cmd = sub.add_parser('pay', help='Submit a payment')
     pay_cmd.set_defaults(func=pay)
+    pay_cmd.add_argument('--fee', type=Decimal, default=Decimal('0.1'), metavar='AMOUNT',
+            help='Specify the amount of MLT paid in fees')
     pay_cmd.add_argument('key', type=str, metavar='SENDER_KEY',
             help='Sender private key')
     pay_cmd.add_argument('to', type=str, metavar='RECEPIENT_PUBKEY',
@@ -295,6 +308,9 @@ def parse_command_line():
 def main():
     try:
         cmd = parse_command_line()
+        if hasattr(cmd, 'key') and os.path.isfile(cmd.key):
+            with open(cmd.key) as f:
+                cmd.key = f.readline().strip()
         cmd.func(cmd)
     except Exception as e:
         print(e)
