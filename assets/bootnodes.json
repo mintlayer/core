@@ -1,5 +1,9 @@
 {
 	"nodes": [
-		"/ip4/13.58.14.136/tcp/30333/p2p/12D3KooWEWRUqkmpZeweDgQYLeYpPT9UrfrNMFME7cdq5DY3xCeT"
+		"/ip4/18.222.224.28/tcp/30333/p2p/12D3KooW9yRHnKGuNCGBbnFGp2wSyVnod5KCURxTXrim2LDB3Bt6",
+		"/ip4/18.220.98.72/tcp/30333/p2p/12D3KooWJ5XNd2ZEH9N9i2yMBwVTRpJ5HxvskqbpmvFpeqPCdy6R",
+		"/ip4/3.144.201.81/tcp/30333/p2p/12D3KooWKTFgGhTtTP5crHLo9wnTRye6hKr7zTzHrVqPBkNR7Ksq",
+		"/ip4/18.191.161.217/tcp/30333/p2p/12D3KooWBviA2TYq7c2qnkbznMSj6HPSNLcXrmmDMpkwqsVQcn8r",
+		"/ip4/18.191.188.167/tcp/30333/p2p/12D3KooWJ7osvTfwEUmwzdGTiudtVCqj5qJcCUX58VSSFvSVt1Rb"
 	]
 }
