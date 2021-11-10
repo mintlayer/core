@@ -55,6 +55,103 @@ def keygen(args):
     print('Mnemonic   :', mnemonic)
     print_key_info(keypair)
 
+
+def unlock(args):
+    acct = Account(args)
+    acct.client.unlock_request_for_withdrawal(acct.keypair)
+
+def withdraw(args):
+    acct = Account(args)
+    acct.client.withdraw_stake(acct.keypair)
+
+
+def lock(args):
+    acct = Account(args)
+    utxo_value = Decimal()
+    utxos = []
+    amount = int(args.amount * MLT_UNIT)
+
+    if amount < 0:
+        raise Exception('Sending a negative amount')
+    elif amount <  40000:
+        raise Exception('Minimum amount to stake is 40,000 MLT')
+
+    for (h, u) in acct.mlt_utxos():
+        utxos.append((h, u))
+        utxo_value += u.value
+        if utxo_value >= amount:
+            break
+    if utxo_value < amount:
+        raise Exception('Not enough funds')
+
+    fee = int(MLT_UNIT / 10) # TODO
+    if fee >= 2 ** 64:
+        raise Exception('Fee too large')
+
+    change = utxo_value - amount - fee
+
+    tx = mint.Transaction(
+        acct.client,
+        inputs=[ mint.Input(h) for (h, _) in utxos ],
+        outputs=[
+            mint.Output(
+                value=amount,
+                destination=mint.DestLockForStaking(acct.keypair.public_key, args.controller_key, args.session_key),
+                data=None
+            ),
+            mint.Output(
+                value=change,
+                destination=mint.DestPubkey(acct.keypair.public_key),
+                data=None
+            ),
+        ]
+    ).sign(acct.keypair, [u for (_, u) in utxos])
+    acct.client.submit(acct.keypair, tx)
+
+
+def lock_extra(args):
+    acct = Account(args)
+    utxo_value = Decimal()
+    utxos = []
+    amount = int(args.amount * MLT_UNIT)
+
+    if amount < 0:
+        raise Exception('Sending a negative amount')
+
+    for (h, u) in acct.mlt_utxos():
+        utxos.append((h, u))
+        utxo_value += u.value
+        if utxo_value >= amount:
+            break
+
+    if utxo_value < amount:
+        raise Exception('Not enough funds')
+
+    fee = int(MLT_UNIT / 10) # TODO
+    if fee >= 2 ** 64:
+        raise Exception('Fee too large')
+
+    change = utxo_value - amount - fee
+
+    tx = mint.Transaction(
+        acct.client,
+        inputs=[ mint.Input(h) for (h, _) in utxos ],
+        outputs=[
+            mint.Output(
+                value=amount,
+                destination=mint.DestLockExtraForStaking(acct.keypair.public_key, args.controller_key),
+                data=None
+            ),
+            mint.Output(
+                value=change,
+                destination=mint.DestPubkey(acct.keypair.public_key),
+                data=None
+            ),
+        ]
+    ).sign(acct.keypair, [u for (_, u) in utxos])
+    acct.client.submit(acct.keypair, tx)
+
+
 def pay(args):
     acct = Account(args)
     utxo_value = Decimal()
@@ -133,6 +230,36 @@ def parse_command_line():
             help='Recepient public key')
     pay_cmd.add_argument('amount', type=Decimal, metavar='AMOUNT',
             help='Amount of MLT to send')
+
+    lock_cmd = sub.add_parser('lock', help='Lock your utxos for first time staking.')
+    lock_cmd.set_defaults(func=lock)
+    lock_cmd.add_argument('key', type=str, metavar='STASH_KEY',
+            help='STASH ACCOUNT private key')
+    lock_cmd.add_argument('controller_key', type=str, metavar='CONTROLLER_PUB_KEY',
+            help='CONTROLLER ACCOUNT public key')
+    lock_cmd.add_argument('session_key', type=str, metavar='SESSION_KEY',
+            help='session key after performing rpc call: `author_rotateKeys`')
+    lock_cmd.add_argument('amount', type=Decimal, metavar='AMOUNT',
+            help='Amount of MLT to send')
+
+    lock_ex_cmd = sub.add_parser('lock_extra', help='Lock extra of your utxos for staking')
+    lock_ex_cmd.set_defaults(func=lock_extra)
+    lock_ex_cmd.add_argument('key', type=str, metavar='STASH_KEY',
+            help='STASH ACCOUNT private key')
+    lock_ex_cmd.add_argument('controller_key', type=str, metavar='CONTROLLER_PUB_KEY',
+            help='CONTROLLER ACCOUNT public key')
+    lock_ex_cmd.add_argument('amount', type=Decimal, metavar='AMOUNT',
+            help='Amount of MLT to send')
+
+    unlock_cmd = sub.add_parser('unlock', help='as a stash account, you request to unlock your staked utxos.')
+    unlock_cmd.set_defaults(func=unlock)
+    unlock_cmd.add_argument('key', type=str, metavar='STASH_KEY',
+                help='Stash account private key')
+
+    withdraw_cmd = sub.add_parser('withdraw', help='as a stash account, you want to withdraw your staked utxos.')
+    withdraw_cmd.set_defaults(func=withdraw)
+    withdraw_cmd.add_argument('key', type=str, metavar='STASH_KEY',
+                help='Stash account private key')
 
     return ap.parse_args()
 
