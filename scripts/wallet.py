@@ -31,14 +31,32 @@ class Account:
     def utxos(self):
         return self.client.utxos_for(self.keypair)
 
+    def locked_mlt_utxos(self):
+        return self.client.locked_utxos_for(self.keypair)
+
     def mlt_utxos(self):
         return ((h, u) for (h, u) in self.utxos() if u.data is None)
+
+    def locked_mlt_balance(self):
+        res = sum(u.value for (_, u) in self.locked_mlt_utxos())
+        if res == 0:
+            return 0
+        else:
+            return sum(u.value for (_, u) in self.locked_mlt_utxos()) / MLT_UNIT
 
     def mlt_balance(self):
         return sum(u.value for (_, u) in self.mlt_utxos()) / MLT_UNIT
 
+    def withdrawal_era(self):
+       return self.client.withdrawal_era(self.keypair)
+
+    def current_era(self):
+       return self.client.current_era()
+
+
 def balance(args):
-    print('Total:', Account(args).mlt_balance(), 'MLT')
+    print('Total Free:', Account(args).mlt_balance(), 'MLT')
+    print('Total Locked:', Account(args).locked_mlt_balance(), 'MLT' )
 
 def print_key_info(keypair):
     print('Seed hex   :', keypair.seed_hex or 'UNKNOWN')
@@ -55,10 +73,14 @@ def keygen(args):
     print('Mnemonic   :', mnemonic)
     print_key_info(keypair)
 
-
 def unlock(args):
     acct = Account(args)
     acct.client.unlock_request_for_withdrawal(acct.keypair)
+
+def withdrawal_era(args):
+    account = Account(args)
+    print("withdrawal era: ",account.withdrawal_era())
+    print("current era: ",account.current_era())
 
 def withdraw(args):
     acct = Account(args)
@@ -208,6 +230,8 @@ def parse_command_line():
     bal_cmd.set_defaults(func=balance)
     bal_cmd.add_argument('key', type=str, metavar='PUBKEY',
             help='Public key to query funds for')
+
+
     # TODO
     #bal.add_argument('--token', '-t', type=str, default=None, metavar='TOK',
     #        help='Filter by token type')
@@ -260,6 +284,11 @@ def parse_command_line():
     withdraw_cmd.set_defaults(func=withdraw)
     withdraw_cmd.add_argument('key', type=str, metavar='STASH_KEY',
                 help='Stash account private key')
+
+    withdraw_era_cmd = sub.add_parser('withdrawal_era', help='given a controller account, returns the current era and the era you are able to withdraw')
+    withdraw_era_cmd.set_defaults(func=withdrawal_era)
+    withdraw_era_cmd.add_argument('key', type=str, metavar='CONTROLLER_KEY',
+            help='Controller account private key')
 
     return ap.parse_args()
 
