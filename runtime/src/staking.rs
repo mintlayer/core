@@ -21,17 +21,23 @@ use codec::Decode;
 use frame_support::dispatch::{DispatchResult, DispatchResultWithPostInfo, Vec};
 use frame_support::fail;
 use frame_system::{Config as SysConfig, RawOrigin};
+use pallet_balances::Pallet as BalancesPallet;
 use pallet_staking::{BalanceOf, Pallet as StakingPallet};
-use pallet_utxo::staking::StakingHelper;
+use pallet_utxo::{staking::StakingHelper, tokens::Value};
 use sp_core::sp_std::vec;
-use sp_runtime::traits::StaticLookup;
+use sp_runtime::traits::{CheckedAdd, StaticLookup};
 
 type StakeAccountId<T> = <T as SysConfig>::AccountId;
 type LookupSourceOf<T> = <<T as SysConfig>::Lookup as StaticLookup>::Source;
 
 pub struct StakeOps<T>(sp_core::sp_std::marker::PhantomData<T>);
 
-impl<T: pallet_staking::Config + pallet_utxo::Config + pallet_session::Config> StakeOps<T>
+impl<
+        T: pallet_staking::Config
+            + pallet_utxo::Config
+            + pallet_session::Config
+            + pallet_balances::Config,
+    > StakeOps<T>
 where
     StakeAccountId<T>: From<[u8; 32]>,
     BalanceOf<T>: From<u128>,
@@ -103,12 +109,27 @@ where
     }
 }
 
-impl<T: pallet_staking::Config + pallet_utxo::Config + pallet_session::Config>
-    StakingHelper<T::AccountId> for StakeOps<T>
+impl<
+        T: pallet_staking::Config
+            + pallet_utxo::Config
+            + pallet_session::Config
+            + pallet_balances::Config,
+    > StakingHelper<T::AccountId> for StakeOps<T>
 where
     StakeAccountId<T>: From<[u8; 32]>,
-    BalanceOf<T>: From<u128>,
+    BalanceOf<T>: From<Value>,
+    <T as pallet_balances::Config>::Balance: From<Value>,
 {
+    fn reward(stash_account: StakeAccountId<T>, value: Value) -> DispatchResultWithPostInfo {
+        let free_balance = BalancesPallet::<T>::free_balance(stash_account.clone());
+        let new_tot = free_balance
+            .checked_add(&(value.into()))
+            .ok_or("amount exceeded datatype's max.")?;
+
+        let stash_lookup: LookupSourceOf<T> = T::Lookup::unlookup(stash_account.clone());
+        BalancesPallet::<T>::set_balance(RawOrigin::Root.into(), stash_lookup, new_tot, 0.into())
+    }
+
     fn get_controller_account(
         stash_account: &StakeAccountId<T>,
     ) -> Result<StakeAccountId<T>, &'static str> {

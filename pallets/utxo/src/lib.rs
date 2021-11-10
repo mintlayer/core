@@ -478,7 +478,7 @@ pub mod pallet {
 
     #[pallet::storage]
     #[pallet::getter(fn current_block_author)]
-    pub(super) type BlockAuthor<T> = StorageValue<_, H256, OptionQuery>;
+    pub(super) type BlockAuthor<T: Config> = StorageValue<_, T::AccountId, OptionQuery>;
 
     #[pallet::storage]
     #[pallet::getter(fn utxo_store)]

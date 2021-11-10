@@ -34,6 +34,9 @@ pub use validation::*;
 
 /// A helper trait to handle staking NOT found in pallet-utxo.
 pub trait StakingHelper<AccountId> {
+    /// provide the same reward to pallet-balances
+    fn reward(stash_account: AccountId, value: Value) -> DispatchResultWithPostInfo;
+
     fn get_controller_account(stash_account: &AccountId) -> Result<AccountId, &'static str>;
 
     fn is_controller_account_exist(controller_account: &AccountId) -> bool;

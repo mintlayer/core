@@ -16,8 +16,8 @@
 // Author(s): C. Yap
 
 use crate::{
-    convert_to_h256, tokens::Value, BlockAuthor, Config, Event, Pallet, RewardTotal,
-    TransactionOutput, UtxoStore,
+    convert_to_h256, staking::StakingHelper, tokens::Value, BlockAuthor, Config, Event, Pallet,
+    RewardTotal, TransactionOutput, UtxoStore,
 };
 
 use frame_support::traits::Get;
@@ -32,15 +32,8 @@ where
     T: Config + pallet_authorship::Config,
 {
     fn note_author(author: T::AccountId) {
-        match convert_to_h256::<T>(&author) {
-            Ok(author_h256) => {
-                // store the block author. Reward during the `fn finalize()` phase.
-                <BlockAuthor<T>>::put(author_h256);
-            }
-            Err(e) => {
-                log::warn!("failed to find author: {:?}", e);
-            }
-        }
+        // store the block author. Reward during the `fn finalize()` phase.
+        <BlockAuthor<T>>::put(author);
     }
 
     fn note_uncle(_author: T::AccountId, _age: T::BlockNumber) {
@@ -103,21 +96,39 @@ fn get_block_author_reward<T: Config>(block_number: T::BlockNumber) -> Value {
 
 fn insert_to_utxo_store<T: Config>(
     block_number: T::BlockNumber,
-    block_author: H256,
+    block_author: T::AccountId,
     reward: Value,
 ) {
-    let utxo = TransactionOutput::new_pubkey(reward, block_author.clone());
+    match convert_to_h256::<T>(&block_author) {
+        Err(e) => {
+            log::warn!("failed to find author: {:?}", e);
+        }
+        Ok(author_h256) => {
+            let utxo = TransactionOutput::new_pubkey(reward, author_h256);
 
-    //TODO: https://github.com/mintlayer/core/pull/83#discussion_r742773343
-    let hash = {
-        let b_num = block_number.saturated_into::<u64>();
-        BlakeTwo256::hash_of(&(&utxo, b_num, "author_reward"))
-    };
+            //TODO: https://github.com/mintlayer/core/pull/83#discussion_r742773343
+            let hash = {
+                let b_num = block_number.saturated_into::<u64>();
+                BlakeTwo256::hash_of(&(&utxo, b_num, "author_reward"))
+            };
 
-    if !<UtxoStore<T>>::contains_key(hash) {
-        <UtxoStore<T>>::insert(hash, utxo.clone());
-
-        <Pallet<T>>::deposit_event(Event::<T>::BlockAuthorRewarded(utxo));
+            if !<UtxoStore<T>>::contains_key(hash) {
+                // give the same reward to the `pallet-balances` account.
+                match T::StakingHelper::reward(block_author, reward) {
+                    Err(e) => {
+                        log::warn!("failed to reward author's balance: {:?}", e.error);
+                        log::warn!(
+                            "failed to reward author's balance part 2: {:?}",
+                            e.post_info
+                        );
+                    }
+                    Ok(_) => {
+                        <UtxoStore<T>>::insert(hash, utxo.clone());
+                        <Pallet<T>>::deposit_event(Event::<T>::BlockAuthorRewarded(utxo));
+                    }
+                }
+            }
+        }
     }
 }
 
