@@ -17,7 +17,7 @@
 
 use crate::{
     mock::*, Destination, Error, LockedUtxos, StakingCount, Transaction, TransactionInput,
-    TransactionOutput, UtxoStore, MLT_UNIT,
+    TransactionOutput, UtxoStore,
 };
 use codec::Encode;
 use frame_support::{assert_err, assert_ok, sp_io::crypto};
