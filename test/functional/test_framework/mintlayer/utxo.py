@@ -82,6 +82,37 @@ class Client():
 
         return ((h, o.value) for (h, o) in query)
 
+    # TODO: move to a separate file
+    """ accesses current era """
+    def current_era(self):
+        query = self.substrate.query(
+            module='Staking',
+            storage_function='CurrentEra'
+        )
+        return query
+
+    # TODO: move to a separate file
+    """ gets the staking ledger of the given key """
+    def get_ledger(self, keypair):
+        query = self.substrate.query_map(
+            module='Staking',
+            storage_function='Ledger'
+        )
+
+        matching = lambda e: e[0].value == keypair.ss58_address
+
+        return filter(matching, ((h, o.value) for (h, o) in query))
+
+    # TODO: move to a separate file
+    """ returns what era for the user to be able to withdraw funds """
+    def withdrawal_era(self, keypair):
+        ledger = list(self.get_ledger(keypair))
+        if ledger:
+            return ledger[0][1]['unlocking'][0]['era']
+        else:
+            print("no funds to withdraw")
+
+
 
     """ Submit a transaction onto the blockchain """
     def submit(self, keypair, tx):
