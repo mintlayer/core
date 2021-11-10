@@ -273,7 +273,7 @@ impl pallet_timestamp::Config for Runtime {
 }
 
 parameter_types! {
-    pub const ExistentialDeposit: u128 = 0;
+    pub const ExistentialDeposit: u128 = MINIMUM_STAKE;
     pub const MaxLocks: u32 = 50;
 }
 
@@ -292,24 +292,13 @@ impl pallet_balances::Config for Runtime {
 }
 
 parameter_types! {
-    pub const TransactionByteFee: Balance = 0;
-}
-
-#[derive(Clone, Copy)]
-pub struct NoFee<T>(core::marker::PhantomData<T>);
-
-impl<T: sp_arithmetic::traits::BaseArithmetic + From<u32> + Copy + sp_arithmetic::traits::Unsigned>
-frame_support::weights::WeightToFeePolynomial for NoFee<T> {
-    type Balance = T;
-    fn polynomial() -> frame_support::weights::WeightToFeeCoefficients<T> {
-        (&[][..]).into()
-    }
+    pub const TransactionByteFee: Balance = 1;
 }
 
 impl pallet_transaction_payment::Config for Runtime {
     type OnChargeTransaction = CurrencyAdapter<Balances, ()>;
     type TransactionByteFee = TransactionByteFee;
-    type WeightToFee = NoFee<Balance>;
+    type WeightToFee = IdentityFee<Balance>;
     type FeeMultiplierUpdate = ();
 }
 
