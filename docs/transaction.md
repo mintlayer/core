@@ -2,17 +2,11 @@
 
 ## UTXO overview
 
-**TODO maybe system/model instead of structure?**
-Mintlayer uses the Bitcoin UTXO structure instead of the account-based models of Ethereum, Ripple, Stellar, and others.
-**TODO need explanation of this sentence, it is not clear to me**
-Since each transaction's output is stored separately (even when sent to a single address), it is only possible to spend the entire transaction’s output.
+Mintlayer uses the a UTXO system similar to Bitcoin's, instead of the account-based models of Ethereum, Ripple, Stellar, and others. There are three essential reasons for this: 
 
-There are three essential reasons for choosing the UTXO model: 
-
-- It is compatible with technologies already implemented in Bitcoin, such atomic swaps and the Lightning Network.
+- The utxo model is compatible with technologies already implemented in Bitcoin, such atomic swaps and the Lightning Network.
  
-**TODO - why does this improve privacy?**
-- It is more privacy-oriented: a single wallet usually utilizes multiple addresses, making it difficult and sometimes impossible to determine which addresses belong to whichs user. 
+- The utxo model is more privacy-oriented: a single wallet can utilize multiple addresses, making it difficult and sometimes impossible to determine which addresses belong to which user.
  
 - Payments can be batched together (aggregated) in a single transaction, saving a considerable amount of the space otherwise required for making a single transaction per payment.  
 
@@ -24,10 +18,10 @@ There are three destination types for transaction outputs :
 
 A general Mintlayer transaction looks something like this: 
 
-**TODO Not sure we want this in Rust code. Too developer specific. Not clear what H256 is, witness, lock**
-**TODO possibly add a link to information about the utxo system**
-**TODO if we go for the rust struct, then we need the data field. Also, what is this field?**
+**TODO if we go for the rust struct, then we need the data field in output**
+
 **TODO timelock is not a string..."**
+
 ```rust
 Transaction {
     inputs: [
@@ -66,17 +60,23 @@ In Mintlayer, as Substrate, transanctions need to be signed before being submitt
 - The timelock
 
 **TODO Explain what we are showing here**
+
 **TODO We need to document the python mintlayer crate**
+
 **TODO what is utxos[0][0]? Utxos is a two-dimentsional array?**
+
 **TODO I want to see the Transaction python class. What is the utxo[0][1] in the signature?**
-**In the second transaction's signature, outpoints instead of outputs**
+
+**TODO In the second transaction's signature, outpoints instead of outputs**
 ### Python
 
 ```python
 from substrateinterface import Keypair
 import mintlayer.utxo as utxo
 
-client = self.nodes[0].rpc_client
+#...
+
+account = Account(args)
 
 alice = Keypair.create_from_uri('//Alice')
 bob = Keypair.create_from_uri('//Bob')
@@ -85,7 +85,7 @@ bob = Keypair.create_from_uri('//Bob')
 utxos = list(client.utxos_for(alice))
 
 tx1 = utxo.Transaction(
-    client,
+    account.client,
     inputs=[
         utxo.Input(utxos[0][0]),
     ],
