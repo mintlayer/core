@@ -10,6 +10,10 @@ pub struct Cli {
     #[structopt(long, conflicts_with_all = &["chain", "dev"])]
     pub testnet: bool,
 
+    /// Do not fetch bootnodes if `--chain` is provided
+    #[structopt(long)]
+    pub disable_bootnodes: bool,
+
     #[structopt(flatten)]
     pub run: RunCmd,
 }

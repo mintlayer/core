@@ -245,13 +245,13 @@ pub fn run() -> sc_cli::Result<()> {
         None => {
             let runner = cli.create_runner(&cli.run)?;
             runner.run_node_until_exit(|mut config| async move {
-                // if dev chainspec is not used, fetch an up-to-date bootnode list from Github
-                match config.chain_spec.id() {
-                    "dev" => {}
-                    _ => match fetch_bootnode_list() {
+                // Fetch bootnodes from Github if development chain is not used
+                // and the user has not instructed us to not fetch them
+                if config.chain_spec.id() != "dev" && !cli.disable_bootnodes {
+                    match fetch_bootnode_list() {
                         Ok(mut bootnodes) => config.network.boot_nodes.append(&mut bootnodes),
                         Err(e) => log::error!("Failed to update bootnode list: {:?}", e),
-                    },
+                    }
                 }
 
                 if cli.testnet {
