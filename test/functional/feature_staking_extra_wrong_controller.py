@@ -32,7 +32,7 @@ class ExampleTest(MintlayerTestFramework):
         self.setup_clean_chain = True
         self.num_nodes = 2
         # Use self.extra_args to change command-line arguments for the nodes
-        self.extra_args = [['--alice'],['--bob']]
+        self.extra_args = [['--alice --dev'],['--bob --dev']]
 
         # self.log.info("I've finished set_test_params")  # Oops! Can't run self.log before run_test()
 

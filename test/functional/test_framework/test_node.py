@@ -64,7 +64,7 @@ class TestNode():
         self.extra_args = extra_args
         port_rpc = rpc_port(i)
         port_p2p = p2p_port(i)
-        self.args = [self.binary, "--dev",
+        self.args = [self.binary,
                      "--base-path", self.datadir,
                      "--log", "trace",
                      "--name", "testnode%d" % i,
