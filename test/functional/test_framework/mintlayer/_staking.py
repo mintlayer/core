@@ -2,6 +2,8 @@ import substrateinterface
 
 
 class Staking(object):
+    def __init__(self, substrate):
+        self.substrate = substrate
 
     """ Query the node for the staking ledger """
     def get_staking_ledger(self):

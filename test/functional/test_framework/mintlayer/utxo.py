@@ -6,6 +6,7 @@ from substrateinterface.exceptions import SubstrateRequestException
 import scalecodec
 import os
 import logging
+import staking
 
 """ Client. A thin wrapper over SubstrateInterface """
 class Client():
@@ -21,6 +22,8 @@ class Client():
             type_registry_preset='substrate-node-template',
             type_registry=custom_type_registry
         )
+
+        self.staking = Staking(self.substrate)
 
     """ SCALE-encode given object in JSON format """
     def encode_obj(self, ty, obj):
@@ -75,12 +78,7 @@ class Client():
     # TODO: move to a separate file
     """ accesses pallet-staking to retrieve the ledger """
     def get_staking_ledger(self):
-        query = self.substrate.query_map(
-            module='Staking',
-            storage_function='Ledger'
-        )
-
-        return ((h, o.value) for (h, o) in query)
+        return staking.get_staking_ledger()
 
     # TODO: move to a separate file
     """ accesses current era """
