@@ -125,7 +125,10 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 /// up by `pallet_aura` to implement `fn slot_duration()`.
 ///
 /// Change this to adjust the block time.
-pub const MILLISECS_PER_BLOCK: u64 = 60_000; //1 min
+#[cfg(not(feature = "short-block-time"))]
+pub const MILLISECS_PER_BLOCK: u64 = 60_000; // 1 min
+#[cfg(feature = "short-block-time")]
+pub const MILLISECS_PER_BLOCK: u64 = 3_000; // 3 sec
 
 // NOTE: Currently it is not possible to change the slot duration after the chain has started.
 //       Attempting to do so will brick block production.
