@@ -6,7 +6,7 @@ from substrateinterface.exceptions import SubstrateRequestException
 import scalecodec
 import os
 import logging
-import staking
+from staking import Staking
 
 """ Client. A thin wrapper over SubstrateInterface """
 class Client():
@@ -75,42 +75,21 @@ class Client():
         return filter(matching , staking_count)
 
 
-    # TODO: move to a separate file
     """ accesses pallet-staking to retrieve the ledger """
     def get_staking_ledger(self):
-        return staking.get_staking_ledger()
+        return self.staking.get_staking_ledger()
 
-    # TODO: move to a separate file
     """ accesses current era """
     def current_era(self):
-        query = self.substrate.query(
-            module='Staking',
-            storage_function='CurrentEra'
-        )
-        return query
+        return self.staking.current_era()
 
-    # TODO: move to a separate file
     """ gets the staking ledger of the given key """
     def get_ledger(self, keypair):
-        query = self.substrate.query_map(
-            module='Staking',
-            storage_function='Ledger'
-        )
+        return self.staking.get_ledger()
 
-        matching = lambda e: e[0].value == keypair.ss58_address
-
-        return filter(matching, ((h, o.value) for (h, o) in query))
-
-    # TODO: move to a separate file
     """ returns what era for the user to be able to withdraw funds """
     def withdrawal_era(self, keypair):
-        ledger = list(self.get_ledger(keypair))
-        if ledger:
-            return ledger[0][1]['unlocking'][0]['era']
-        else:
-            print("no funds to withdraw")
-
-
+        return self.staking.withdrawal_era()
 
     """ Submit a transaction onto the blockchain """
     def submit(self, keypair, tx):

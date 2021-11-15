@@ -13,3 +13,30 @@ class Staking(object):
         )
 
         return ((h, o.value) for (h, o) in query)
+
+    """ accesses current era """
+    def current_era(self):
+        query = self.substrate.query(
+            module='Staking',
+            storage_function='CurrentEra'
+        )
+        return query
+
+    """ gets the staking ledger of the given key """
+    def get_ledger(self, keypair):
+        query = self.substrate.query_map(
+            module='Staking',
+            storage_function='Ledger'
+        )
+
+        matching = lambda e: e[0].value == keypair.ss58_address
+
+        return filter(matching, ((h, o.value) for (h, o) in query))
+
+    """ returns what era for the user to be able to withdraw funds """
+    def withdrawal_era(self, keypair):
+        ledger = list(self.get_ledger(keypair))
+        if ledger:
+            return ledger[0][1]['unlocking'][0]['era']
+        else:
+            print("no funds to withdraw")
