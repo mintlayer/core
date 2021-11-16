@@ -248,6 +248,7 @@ path = "../pallets/pp"
 
 [features]
 default = ['std']
+short-block-time = []
 runtime-benchmarks = [
     'frame-benchmarking',
     'frame-support/runtime-benchmarks',
