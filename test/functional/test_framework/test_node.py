@@ -52,8 +52,8 @@ class TestNode():
         if timewait:
             self.rpc_timeout = timewait
         else:
-            # Wait for up to 600 seconds for the RPC server to respond
-            self.rpc_timeout = 600
+            # Wait for up to 120 seconds for the RPC server to respond
+            self.rpc_timeout = 120
         if binary is None:
             self.binary = os.getenv("NODEEXE", "mintlayer-core")
         else:
