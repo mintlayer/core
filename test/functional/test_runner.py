@@ -331,7 +331,7 @@ class TestHandler:
         running_test_names = [test_data[0] for test_data in self.jobs]
         running_test_names_list = ["{}{}{}".format(BOLD[1], nm, BOLD[0]) for nm in running_test_names]
         running_test_names_list = ", ".join(running_test_names_list)
-        logging.debug("Tests currently running: %s", running_test_names_list)
+        logging.debug("Test%s currently running: %s", "s" if len(running_test_names) > 1 else "", running_test_names_list)
 
         while True:
             # Return first proc that finishes
