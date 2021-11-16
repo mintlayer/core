@@ -67,9 +67,9 @@ jobs:
       with:
         submodules: recursive
     - name: Build
-      run: cargo build --release
+      run: cargo build --release --features short-block-time
     - name: Run tests
-      run: cargo test --release
+      run: cargo test --release --features short-block-time
     - name: Prepare functional tests
       uses: actions/setup-python@v2
       with:
