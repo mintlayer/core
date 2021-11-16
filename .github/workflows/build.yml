@@ -84,5 +84,5 @@ jobs:
       uses: actions/upload-artifact@v2
       if: failure()
       with:
-        name: test-artifacts
+        name: functional-tests-logs
         path: /tmp/mintlayer*
