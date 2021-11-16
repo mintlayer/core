@@ -65,6 +65,7 @@ class TestNode():
         port_rpc = rpc_port(i)
         port_p2p = p2p_port(i)
         self.args = [self.binary, "--dev",
+                     "--database", "paritydb-experimental",
                      "--base-path", self.datadir,
                      "--log", "trace",
                      "--name", "testnode%d" % i,
