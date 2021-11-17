@@ -65,6 +65,7 @@ class ExampleTest(MintlayerTestFramework):
         assert_equal(len(ledger[0][1]['unlocking']),0)
 
         alice_stash = Keypair.create_from_uri('//Alice//stash')
+        alice = Keypair.create_from_uri('//Alice')
 
         # fetch the genesis utxo from storage
         utxos = list(client.utxos_for(alice_stash))
@@ -87,9 +88,11 @@ class ExampleTest(MintlayerTestFramework):
         assert_equal(events[2].value['event_id'], 'StakeUnlocked')
 
         ledger = list(client.get_staking_ledger())
+
         assert_equal(len(ledger),2)
 
-        time.sleep(500)
+        while client.current_era() < client.withdrawal_era(alice):
+            time.sleep(1)
 
         (_, _, w_events) = client.withdraw_stake(alice_stash)
 
