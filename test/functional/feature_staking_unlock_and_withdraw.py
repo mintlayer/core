@@ -91,8 +91,14 @@ class ExampleTest(MintlayerTestFramework):
 
         assert_equal(len(ledger),2)
 
+        time_elapsed = 0
+        max_wait = 1200
+        time_step = 1
         while client.current_era() < client.withdrawal_era(alice):
-            time.sleep(1)
+            if time_elapsed > max_wait:
+                raise Exception('Timeout: waited too long for withdrawal_era')
+            time.sleep(time_step)
+            time_elapsed +=time_step
 
         (_, _, w_events) = client.withdraw_stake(alice_stash)
 
