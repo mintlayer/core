@@ -20,7 +20,10 @@ class Staking(object):
             module='Staking',
             storage_function='CurrentEra'
         )
-        return query
+        # this query returns an object of type scalecodec.types.U32
+        # so we convert it to an integer
+        # TODO find a more elegant way to do conversion
+        return int("{}".format(query))
 
     """ gets the staking ledger of the given key """
     def get_ledger(self, keypair):
