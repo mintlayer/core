@@ -229,11 +229,6 @@ git = 'https://github.com/paritytech/substrate.git'
 version = '4.0.0-dev'
 branch = "master"
 
-[dependencies.pallet-template]
-default-features = false
-version = '3.0.0'
-path = '../pallets/template'
-
 [dependencies.pallet-utxo]
 default-features = false
 path = "../pallets/utxo"
@@ -256,7 +251,6 @@ runtime-benchmarks = [
     'frame-system/runtime-benchmarks',
     'hex-literal',
     'pallet-balances/runtime-benchmarks',
-    'pallet-template/runtime-benchmarks',
     'pallet-timestamp/runtime-benchmarks',
     'pallet-utxo/runtime-benchmarks',
     'sp-runtime/runtime-benchmarks',
@@ -275,7 +269,6 @@ std = [
     'pallet-session/std',
     'pallet-staking/std',
     'pallet-sudo/std',
-    'pallet-template/std',
     'pallet-timestamp/std',
     'pallet-transaction-payment-rpc-runtime-api/std',
     'pallet-transaction-payment/std',
