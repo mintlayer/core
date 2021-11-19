@@ -291,8 +291,8 @@ fn testnet_genesis(
             // The # of validators set should be the same number of locked_utxos specified in UtxoConfig.
             minimum_validator_count: 1,
             invulnerables: initial_authorities.iter().map(|x| x.controller_account_id()).collect(),
-            slash_reward_fraction: sp_runtime::Perbill::from_percent(0), // nothing, since we're not using this at all.
             stakers,
+            min_validator_bond: MINIMUM_STAKE
             ..Default::default()
         },
     }

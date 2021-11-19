@@ -3690,6 +3690,7 @@ dependencies = [
  "pallet-transaction-payment-rpc-runtime-api",
  "pallet-utxo",
  "pallet-utxo-rpc-runtime-api",
+ "pallet-utxo-staking",
  "parity-scale-codec",
  "sp-api",
  "sp-block-builder",
@@ -4186,6 +4187,7 @@ dependencies = [
  "log",
  "pallet-authorship",
  "pallet-timestamp",
+ "pallet-utxo-staking",
  "parity-scale-codec",
  "pp-api",
  "proptest",
@@ -4227,6 +4229,24 @@ dependencies = [
  "sp-api",
  "sp-core",
  "sp-runtime",
+]
+
+[[package]]
+name = "pallet-utxo-staking"
+version = "0.1.0"
+dependencies = [
+ "frame-election-provider-support",
+ "frame-support",
+ "frame-system",
+ "log",
+ "pallet-authorship",
+ "pallet-session",
+ "parity-scale-codec",
+ "scale-info",
+ "serde",
+ "sp-runtime",
+ "sp-staking",
+ "sp-std",
 ]
 
 [[package]]

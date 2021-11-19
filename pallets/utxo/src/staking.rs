@@ -15,10 +15,7 @@
 //
 // Author(s): C. Yap
 
-use crate::{
-    convert_to_h256, tokens::Value, Config, Destination, Error, Event, LockedUtxos, Pallet,
-    RewardTotal, StakingCount, TransactionOutput, UtxoStore,
-};
+use crate::{convert_to_h256, tokens::Value, Config, Destination, Error, Event, LockedUtxos, Pallet, RewardTotal, StakingCount, TransactionOutput, UtxoStore, pick_utxo, TransactionInput, Transaction};
 use frame_support::{
     dispatch::{DispatchResultWithPostInfo, Vec},
     ensure, fail,
@@ -31,6 +28,102 @@ use sp_std::vec;
 
 use crate::staking::utils::remove_locked_utxos;
 pub use validation::*;
+use sp_std::marker::PhantomData;
+use sp_runtime::DispatchError;
+
+pub struct UtxoBalance<T>(PhantomData<T>);
+
+impl <T:Config> pallet_utxo_staking::Balance<T::AccountId> for UtxoBalance<T> {
+    fn staking_fee() -> Value {
+        T::StakeWithdrawalFee::get()
+    }
+
+    fn minimum_stake_balance() -> Value {
+        T::MinimumStake::get()
+    }
+
+    fn can_spend(account: &T::AccountId, value:Value) -> bool {
+       let (total,_,_) = pick_utxo::<T>(account,value);
+
+        total >= value
+    }
+
+    fn lock_for_staking(stash:T::AccountId, controller: T::AccountId, session_keys:Vec<u8>, value: Value) -> DispatchResultWithPostInfo {
+        let (total, hashes, utxos) = pick_utxo::<T>(&stash, value);
+        ensure!(total >= value, "Caller doesn't have enough UTXOs");
+
+        let utxo_staking = TransactionOutput::new_lock_for_staking(value,stash.clone(),controller,session_keys);
+        let utxo_change = TransactionOutput::new_pubkey(total - value, convert_to_h256::<T>(&stash)?);
+
+        let mut inputs: Vec<TransactionInput> = Vec::new();
+        for hash in hashes.iter() {
+            inputs.push(TransactionInput::new_empty(*hash));
+            <UtxoStore<T>>::remove(hash);
+            log::info!("removed from UtxoStore: hash: {:?}", hash);
+        }
+
+        let tx = Transaction {
+            inputs,
+            outputs: vec![utxo_staking.clone(), utxo_change.clone()],
+            time_lock: Default::default(),
+        };
+
+        // --------- TODO: from this point, this should be using the spend function including the signing,
+        // --------- rather than inserting directly to the storages.
+        let hash = tx.outpoint(0);
+        <LockedUtxos<T>>::insert(hash, utxo_staking);
+        log::info!("inserted to LockedUtxos: hash: {:?}", hash);
+
+        let hash = tx.outpoint(1);
+        <UtxoStore<T>>::insert(hash,utxo_change);
+        log::info!("inserted to UtxoStore: hash: {:?}", hash);
+
+        <Pallet<T>>::deposit_event(Event::<T>::TransactionSuccess(tx));
+
+        Ok(().into())
+    }
+
+}
+
+
+pub struct NoStaking<T>(PhantomData<T>);
+impl <T:Config> StakingHelper<T::AccountId> for NoStaking<T>{
+    fn get_controller_account(stash_account: &T::AccountId) -> Result<T::AccountId, &'static str> {
+        todo!()
+    }
+
+    fn is_controller_account_exist(controller_account: &T::AccountId) -> bool {
+        todo!()
+    }
+
+    fn can_decode_session_key(session_key: &Vec<u8>) -> bool {
+        todo!()
+    }
+
+    fn are_funds_locked(controller_account: &T::AccountId) -> bool {
+        todo!()
+    }
+
+    fn check_accounts_matched(controller_account: &T::AccountId, stash_account: &T::AccountId) -> bool {
+        todo!()
+    }
+
+    fn lock_for_staking(stash_account: &T::AccountId, controller_account: &T::AccountId, session_key: &Vec<u8>, value: u128) -> DispatchResultWithPostInfo {
+        todo!()
+    }
+
+    fn lock_extra_for_staking(stash_account: &T::AccountId, value: u128) -> DispatchResultWithPostInfo {
+        todo!()
+    }
+
+    fn unlock_request_for_withdrawal(stash_account: &T::AccountId) -> DispatchResultWithPostInfo {
+        todo!()
+    }
+
+    fn withdraw(stash_account: &T::AccountId) -> DispatchResultWithPostInfo {
+        todo!()
+    }
+}
 
 /// A helper trait to handle staking NOT found in pallet-utxo.
 pub trait StakingHelper<AccountId> {

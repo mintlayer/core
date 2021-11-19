@@ -40,7 +40,7 @@ pub use frame_support::{
 };
 pub use pallet_balances::Call as BalancesCall;
 use pallet_contracts::weights::WeightInfo;
-pub use pallet_staking::StakerStatus;
+pub use pallet_utxo_staking::StakerStatus;
 pub use pallet_timestamp::Call as TimestampCall;
 use pallet_transaction_payment::CurrencyAdapter;
 #[cfg(any(feature = "std", test))]
@@ -343,7 +343,7 @@ impl pallet_utxo::Config for Runtime {
             .collect()
     }
 
-    type StakingHelper = StakeOps<Runtime>;
+    type StakingHelper = pallet_utxo::staking::NoStaking<Runtime>;
     type MinimumStake = MinimumStake;
     type StakeWithdrawalFee = StakeWithdrawalFee;
     type InitialReward = InitialReward;
@@ -413,14 +413,14 @@ parameter_types! {
 }
 
 impl pallet_session_historical::Config for Runtime {
-    type FullIdentification = pallet_staking::Exposure<AccountId, Balance>;
-    type FullIdentificationOf = pallet_staking::ExposureOf<Runtime>;
+    type FullIdentification = pallet_utxo_staking::Exposure<AccountId>;
+    type FullIdentificationOf = pallet_utxo_staking::ExposureOf<Runtime>;
 }
 
 impl pallet_session::Config for Runtime {
     type Event = Event;
     type ValidatorId = AccountId;
-    type ValidatorIdOf = pallet_staking::StashOf<Self>;
+    type ValidatorIdOf = pallet_utxo_staking::StashOf<Self>;
     type ShouldEndSession = pallet_session::PeriodicSessions<Period, Offset>;
     type NextSessionRotation = ();
     type SessionManager = pallet_session_historical::NoteHistoricalRoot<Self, Staking>;
@@ -437,6 +437,7 @@ impl onchain::Config for Runtime {
     type DataProvider = Staking;
 }
 
+/*
 parameter_types! {
     // TODO: how many sessions is in 1 era?
     // we've settled on Period * # of Session blocks
@@ -476,9 +477,37 @@ impl pallet_staking::Config for Runtime {
     type WeightInfo = pallet_staking::weights::SubstrateWeight<Runtime>;
 }
 
+*/
+
+parameter_types! {
+    // we've settled on Period * # of Session blocks
+    // Note: an era is when the change of validator set happens.
+    pub const SessionsPerEra: sp_staking::SessionIndex = 2; // Note: upon unlocking funds, it doesn't mean withdrawal is activated.
+    // TODO: How long should the stake stay "bonded" or "locked", until it's allowed to withdraw?
+    pub const BondingDuration: pallet_utxo_staking::EraIndex = 2;
+
+}
+
+impl pallet_utxo_staking::Config for Runtime {
+    type Balance = pallet_utxo::staking::UtxoBalance<Runtime>;
+    type SettingSessionKey = StakeOps<Runtime>;
+    type UnixTime = Timestamp;
+    type CurrencyToVote = U128CurrencyToVote;
+    type ElectionProvider = onchain::OnChainSequentialPhragmen<Self>;
+    type GenesisElectionProvider = Self::ElectionProvider;
+    type Event = Event;
+    type SessionsPerEra = SessionsPerEra;
+    type BondingDuration = BondingDuration;
+    type SessionInterface = Self;
+    type NextNewSession = Session;
+    type WeightInfo = pallet_utxo_staking::weights::SubstrateWeight<Runtime>;
+}
+
+
 parameter_types! {
     pub const UncleGenerations: BlockNumber = 4;
 }
+
 
 // This config is to determine the block author.
 // Helpful when rewarding block authors.
@@ -517,7 +546,7 @@ construct_runtime!(
         Pp: pallet_pp::{Pallet, Call, Config<T>, Storage, Event<T>},
         Contracts: pallet_contracts::{Pallet, Call, Storage, Event<T>},
         Authorship: pallet_authorship::{Pallet, Call, Storage, Inherent},
-        Staking: pallet_staking::{Pallet, Call, Config<T>, Storage, Event<T>},
+        Staking: pallet_utxo_staking::{Pallet, Call, Config<T>, Storage, Event<T>},
         Session: pallet_session::{Pallet, Call, Config<T>, Storage, Event},
         Aura: pallet_aura::{Pallet, Config<T>},
         Historical: pallet_session_historical::{Pallet},

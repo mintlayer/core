@@ -79,6 +79,7 @@ pub mod pallet {
         H256, H512,
     };
     pub const MLT_UNIT: Value = 1_000 * 100_000_000;
+    pub type LockIdentifier = [u8; 8];
 
     #[pallet::error]
     pub enum Error<T> {
@@ -283,7 +284,7 @@ pub mod pallet {
         LockExtraForStaking {
             stash_account: AccountId,
             controller_account: AccountId,
-        },
+        }
     }
 
     impl<AccountId> Destination<AccountId> {
@@ -293,7 +294,6 @@ pub mod pallet {
         ));
 
         /// Calculate lock commitment for given destination.
-        ///
         /// The `lock` field of the input spending the UTXO has to match this hash.
         pub fn lock_commitment(&self) -> &H256 {
             match self {

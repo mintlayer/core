@@ -1,7 +1,7 @@
 [package]
 name = "pallet-utxo"
 version = "0.1.0"
-authors = ["BCarlaYap <2826165+BCarlaYap@users.noreply.github.com>"]
+authors = ["BCYap <2826165+b-yap@users.noreply.github.com>"]
 edition = "2018"
 
 [features]
@@ -14,6 +14,7 @@ std = [
     'frame-benchmarking/std',
     'chainscript/std',
     'pallet-timestamp/std',
+    'pallet-utxo-staking/std',
     'sp-core/std',
     'sp-std/std',
 ]
@@ -40,6 +41,11 @@ version = '0.1.0'
 [dependencies.chainscript]
 default-features = false
 path = '../../libs/chainscript'
+version = '0.1.0'
+
+[dependencies.pallet-utxo-staking]
+default-features = false
+path = '../staking'
 version = '0.1.0'
 
 [dependencies.codec]
