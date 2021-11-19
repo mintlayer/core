@@ -1213,9 +1213,10 @@ pub mod pallet {
     impl<T: Config> Pallet<T> {
         #[pallet::weight(<T as Config>::WeightInfo::spend(tx.inputs.len().saturating_add(tx.outputs.len()) as u32))]
         pub fn spend(
-            _origin: OriginFor<T>,
+            origin: OriginFor<T>,
             tx: Transaction<T::AccountId>,
         ) -> DispatchResultWithPostInfo {
+            ensure_none(origin)?;
             spend::<T>(&tx)?;
             Self::deposit_event(Event::<T>::TransactionSuccess(tx));
             Ok(().into())

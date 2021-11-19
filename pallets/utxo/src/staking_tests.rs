@@ -42,7 +42,7 @@ fn staking_first_time() {
         .sign(&[utxo], 0, &karl_pub_key)
         .expect("karl's pub key not found");
         let utxo = &tx1.outputs[0];
-        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx1.clone()));
+        assert_ok!(Utxo::spend(Origin::none(), tx1.clone()));
 
         let tx2 = Transaction {
             inputs: vec![TransactionInput::new_empty(tx1.outpoint(0))],
@@ -66,7 +66,7 @@ fn staking_first_time() {
         .expect("Alice's pub key not found");
         let new_utxo_hash = tx2.outpoint(1);
 
-        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx2));
+        assert_ok!(Utxo::spend(Origin::none(), tx2));
         assert!(UtxoStore::<Test>::contains_key(new_utxo_hash));
         assert!(StakingCount::<Test>::contains_key(H256::from(greg_pub_key)));
         assert!(StakingCount::<Test>::contains_key(H256::from(
@@ -109,7 +109,7 @@ fn simple_staking() {
         let locked_utxo_hash = tx.outpoint(0);
         let new_utxo_hash = tx.outpoint(1);
 
-        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx));
+        assert_ok!(Utxo::spend(Origin::none(), tx));
         assert!(UtxoStore::<Test>::contains_key(new_utxo_hash));
         assert!(LockedUtxos::<Test>::contains_key(locked_utxo_hash));
         assert!(StakingCount::<Test>::contains_key(H256::from(
@@ -148,7 +148,7 @@ fn less_than_minimum_stake() {
         tx.inputs[0].witness = karl_sig.0.to_vec();
 
         assert_err!(
-            Utxo::spend(Origin::signed(H256::zero()), tx),
+            Utxo::spend(Origin::none(), tx),
             "output value must be equal or more than the minimum stake"
         );
     })
@@ -193,7 +193,7 @@ fn non_mlt_staking() {
         .expect("karl's pub key not found");
 
         assert_err!(
-            Utxo::spend(Origin::signed(H256::zero()), tx),
+            Utxo::spend(Origin::none(), tx),
             "only MLT tokens are supported for staking"
         );
     })
@@ -224,7 +224,7 @@ fn controller_staking_again() {
         .expect(" tom's pub key not found");
 
         assert_err!(
-            Utxo::spend(Origin::signed(H256::zero()), tx),
+            Utxo::spend(Origin::none(), tx),
             "StashAccountAlreadyRegistered"
         );
     })
@@ -256,7 +256,7 @@ fn stash_account_is_staking() {
         .expect("alice's public key not found");
 
         assert_err!(
-            Utxo::spend(Origin::signed(H256::zero()), tx),
+            Utxo::spend(Origin::none(), tx),
             "StashAccountAlreadyRegistered"
         );
     })
@@ -288,7 +288,7 @@ fn simple_staking_extra() {
         let locked_utxo_hash = tx.outpoint(0);
         let new_utxo_hash = tx.outpoint(1);
 
-        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx));
+        assert_ok!(Utxo::spend(Origin::none(), tx));
         assert!(UtxoStore::<Test>::contains_key(new_utxo_hash));
         assert!(LockedUtxos::<Test>::contains_key(locked_utxo_hash));
         assert_eq!(
@@ -324,7 +324,7 @@ fn non_validator_staking_extra() {
         .expect("greg's pub key not found");
 
         assert_err!(
-            Utxo::spend(Origin::signed(H256::zero()), tx),
+            Utxo::spend(Origin::none(), tx),
             "StashAccountNotFound"
         );
     })
