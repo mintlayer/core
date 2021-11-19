@@ -27,7 +27,7 @@ mod tests;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 
-use codec::Encode;
+use codec::{Decode, Encode};
 pub use frame_support::{
     construct_runtime,
     dispatch::Vec,
@@ -144,7 +144,12 @@ fn send_p2pk_tx<T: Config>(
     ensure!(fund_info.funds >= value, "Caller doesn't have enough funds");
     let outpoints = fund_info.utxos.iter().map(|x| x.0).collect::<Vec<H256>>();
 
-    T::Utxo::send_conscrit_p2pk(caller, dest, value, &outpoints)
+    T::Utxo::submit_c2pk_tx(caller, dest, value, &outpoints).map(|_| {
+        <ContractBalances<T>>::mutate(&caller, |info| {
+            info.as_mut().unwrap().utxos = Vec::new();
+            info.as_mut().unwrap().funds = 0;
+        });
+    })
 }
 
 /// Create Contract-to-Contract transfer that allows smart contracts to
@@ -169,7 +174,12 @@ fn send_c2c_tx<T: Config>(
     ))?;
     let outpoints = fund_info.utxos.iter().map(|x| x.0).collect::<Vec<H256>>();
 
-    T::Utxo::send_conscrit_c2c(caller, dest, fund_info.funds, data, &outpoints)
+    T::Utxo::submit_c2c_tx(caller, dest, fund_info.funds, data, &outpoints).map(|_| {
+        <ContractBalances<T>>::mutate(&caller, |info| {
+            info.as_mut().unwrap().utxos = Vec::new();
+            info.as_mut().unwrap().funds = 0;
+        });
+    })
 }
 
 impl<T: Config> ProgrammablePoolApi for Pallet<T>
@@ -267,10 +277,18 @@ impl<T: pallet_contracts::Config + pallet::Config> ChainExtension<T> for Pallet<
     where
         <E::T as SysConfig>::AccountId: UncheckedFrom<<E::T as SysConfig>::Hash> + AsRef<[u8]>,
     {
+        // Fetch AccountId of the caller from the ChainExtension's memory
+        // This way the progrmmable pool can force the caller of the ChainExtension
+        // to only spend their own funds as `ContractBalances` will be queried
+        // using `acc_id` and user cannot control the value of this variable
+        let mut env = env.buf_in_buf_out();
+        let acc_id = env.ext().address().encode();
+        let acc_id: T::AccountId = T::AccountId::decode(&mut &acc_id[..])
+            .map_err(|_| "Failed to get smart contract's AccountId")?;
+
         match func_id {
             x if x == ChainExtensionCall::Transfer as u32 => {
-                let mut env = env.buf_in_buf_out();
-                let (acc_id, dest, value): (T::AccountId, T::AccountId, u128) = env.read_as()?;
+                let (dest, value): (T::AccountId, u128) = env.read_as()?;
 
                 if !<ContractBalances<T>>::get(&dest).is_none() {
                     return Err(DispatchError::Other(
@@ -281,9 +299,6 @@ impl<T: pallet_contracts::Config + pallet::Config> ChainExtension<T> for Pallet<
                 send_p2pk_tx::<T>(&acc_id, &dest, value)?
             }
             x if x == ChainExtensionCall::Balance as u32 => {
-                let mut env = env.buf_in_buf_out();
-                let acc_id: T::AccountId = env.read_as()?;
-
                 let fund_info = <ContractBalances<T>>::get(&acc_id).ok_or(DispatchError::Other(
                     "Contract doesn't own any UTXO or it doesn't exist!",
                 ))?;
@@ -294,16 +309,15 @@ impl<T: pallet_contracts::Config + pallet::Config> ChainExtension<T> for Pallet<
             x if x == ChainExtensionCall::Call as u32 => {
                 // `read_as_unbounded()` has to be used here because the size of `data`
                 //  is only known during runtime
-                let mut env = env.buf_in_buf_out();
-                let (acc_id, dest, selector, mut data): (
-                    T::AccountId,
-                    T::AccountId,
-                    [u8; 4],
-                    Vec<u8>,
-                ) = env.read_as_unbounded(env.in_len())?;
+                let (dest, selector, mut data): (T::AccountId, [u8; 4], Vec<u8>) =
+                    env.read_as_unbounded(env.in_len())?;
 
                 if <ContractBalances<T>>::get(&dest).is_none() {
                     return Err(DispatchError::Other("Destination doesn't exist"));
+                }
+
+                if acc_id == dest {
+                    return Err(DispatchError::Other("Contract cannot call itself"));
                 }
 
                 // append data to the selector so the final data
