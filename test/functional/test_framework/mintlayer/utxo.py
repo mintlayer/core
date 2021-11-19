@@ -248,6 +248,55 @@ class DestLockExtraForStaking(Destination):
     def get_ss58_address(self):
         return self.stash
 
+class OutputData():
+    def __init__(self, data):
+        self.data = data
+
+    @staticmethod
+    def load(obj):
+        if obj is None:
+            return None
+        if 'TokenIssuanceV1' in obj:
+            return TokenIssuanceV1.load(obj['TokenIssuanceV1'])
+        if 'TokenTransferV1' in obj:
+            return TokenTransferV1.load(obj['TokenTransferV1'])
+        return None
+
+    def type_string(self):
+        return 'OutputData'
+
+
+class TokenIssuanceV1():
+    def __init__(self, token_ticker, amount_to_issue, number_of_decimals, metadata_uri):
+        self.token_ticker = token_ticker
+        self.amount_to_issue = amount_to_issue
+        self.number_of_decimals = number_of_decimals
+        self.metadata_uri = metadata_uri
+
+    def type_string(self):
+        return 'TokenIssuanceV1'
+
+    @staticmethod
+    def load(obj):
+        return TokenIssuanceV1(obj['token_ticker'], obj['amount_to_issue'], obj['number_of_decimals'], obj['metadata_uri'])
+
+    def json(self):
+        return { 'TokenIssuanceV1': { 'token_ticker': self.token_ticker, 'amount_to_issue': self.amount_to_issue, 'number_of_decimals': self.number_of_decimals, 'metadata_uri': self.metadata_uri } }
+
+class TokenTransferV1():
+    def __init__(self, token_id, amount):
+        self.token_id = token_id
+        self.amount = amount
+
+    def type_string(self):
+        return 'TokenTransferV1'
+
+    @staticmethod
+    def load(obj):
+        return TokenTransferV1(obj['token_id'], obj['amount'])
+
+    def json(self):
+        return { 'TokenTransferV1': { 'token_id': self.token_id, 'amount': self.amount } }
 
 class Output():
     def __init__(self, value, destination, data):
@@ -258,18 +307,22 @@ class Output():
     @staticmethod
     def load(obj):
         dest = Destination.load(obj['destination'])
-        return Output(obj['value'], dest, obj['data'])
+        data = OutputData.load(obj['data'])
+        return Output(obj['value'], dest, data)
 
     def type_string(self):
         return 'TransactionOutput'
 
     def json(self):
+        if self.data is not None:
+            data = self.data.json()
+        else:
+            data = None
         return {
             'value': self.value,
             'destination': self.destination.json(),
-            'data': self.data,
+            'data': data,
         }
-
 
 class Input():
     def __init__(self, outpoint, lock = '0x', witness = '0x'):
@@ -340,3 +393,9 @@ class Transaction():
         }
         encoded = self.client.substrate.encode_scale('Outpoint', outpt)
         return '0x' + str(substrateinterface.utils.hasher.blake2_256(encoded.data))
+
+    def token_id(self):
+        input0 = self.inputs[0].json()
+        encoded = self.client.substrate.encode_scale('TransactionInput', input0)
+        id = '0x' + str(substrateinterface.utils.hasher.blake2_256(encoded.data)[0:40])
+        return { 'inner': id, }
