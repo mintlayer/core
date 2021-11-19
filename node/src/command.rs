@@ -18,7 +18,7 @@
 use crate::chain_spec::MltKeysInfo;
 use crate::cli::{Cli, Subcommand};
 use crate::{chain_spec, service};
-use node_template_runtime::{pallet_utxo, Block, TEST_NET_MLT_ORIG_SUPPLY};
+use mintlayer_runtime::{pallet_utxo, Block, TEST_NET_MLT_ORIG_SUPPLY};
 use sc_cli::{ChainSpec, Role, RuntimeVersion, SubstrateCli};
 use sc_network::config::MultiaddrWithPeerId;
 use sc_service::PartialComponents;
@@ -155,7 +155,7 @@ impl SubstrateCli for Cli {
     }
 
     fn native_runtime_version(_: &Box<dyn ChainSpec>) -> &'static RuntimeVersion {
-        &node_template_runtime::VERSION
+        &mintlayer_runtime::VERSION
     }
 }
 
