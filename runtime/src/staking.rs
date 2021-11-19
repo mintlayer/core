@@ -31,9 +31,9 @@ type LookupSourceOf<T> = <<T as SysConfig>::Lookup as StaticLookup>::Source;
 
 pub struct StakeOps<T>(sp_core::sp_std::marker::PhantomData<T>);
 
-
-impl<T: pallet_utxo_staking::Config + pallet_session::Config> pallet_utxo_staking::SettingSessionKey<T::AccountId>
-for StakeOps<T> {
+impl<T: pallet_utxo_staking::Config + pallet_session::Config>
+    pallet_utxo_staking::SettingSessionKey<T::AccountId> for StakeOps<T>
+{
     fn can_decode_session_keys(session_key: &Vec<u8>) -> bool {
         <T as pallet_session::Config>::Keys::decode(&mut &session_key[..]).is_ok()
     }

@@ -40,9 +40,9 @@ pub use frame_support::{
 };
 pub use pallet_balances::Call as BalancesCall;
 use pallet_contracts::weights::WeightInfo;
-pub use pallet_utxo_staking::StakerStatus;
 pub use pallet_timestamp::Call as TimestampCall;
 use pallet_transaction_payment::CurrencyAdapter;
+pub use pallet_utxo_staking::StakerStatus;
 #[cfg(any(feature = "std", test))]
 pub use sp_runtime::BuildStorage;
 pub use sp_runtime::{Perbill, Percent, Permill};
@@ -423,7 +423,7 @@ impl pallet_session::Config for Runtime {
     type ValidatorIdOf = pallet_utxo_staking::StashOf<Self>;
     type ShouldEndSession = pallet_session::PeriodicSessions<Period, Offset>;
     type NextSessionRotation = ();
-    type SessionManager = pallet_session_historical::NoteHistoricalRoot<Self, Staking>;
+    type SessionManager = pallet_session_historical::NoteHistoricalRoot<Self, UtxoStaking>;
     type SessionHandler = <opaque::SessionKeys as OpaqueKeys>::KeyTypeIdProviders;
     type Keys = opaque::SessionKeys;
     type DisabledValidatorsThreshold = DisabledValidatorsThreshold;
@@ -434,7 +434,7 @@ impl onchain::Config for Runtime {
     type AccountId = AccountId;
     type BlockNumber = BlockNumber;
     type Accuracy = Perbill;
-    type DataProvider = Staking;
+    type DataProvider = UtxoStaking;
 }
 
 /*
@@ -503,11 +503,9 @@ impl pallet_utxo_staking::Config for Runtime {
     type WeightInfo = pallet_utxo_staking::weights::SubstrateWeight<Runtime>;
 }
 
-
 parameter_types! {
     pub const UncleGenerations: BlockNumber = 4;
 }
-
 
 // This config is to determine the block author.
 // Helpful when rewarding block authors.
@@ -546,7 +544,7 @@ construct_runtime!(
         Pp: pallet_pp::{Pallet, Call, Config<T>, Storage, Event<T>},
         Contracts: pallet_contracts::{Pallet, Call, Storage, Event<T>},
         Authorship: pallet_authorship::{Pallet, Call, Storage, Inherent},
-        Staking: pallet_utxo_staking::{Pallet, Call, Config<T>, Storage, Event<T>},
+        UtxoStaking: pallet_utxo_staking::{Pallet, Call, Config<T>, Storage, Event<T>},
         Session: pallet_session::{Pallet, Call, Config<T>, Storage, Event},
         Aura: pallet_aura::{Pallet, Config<T>},
         Historical: pallet_session_historical::{Pallet},

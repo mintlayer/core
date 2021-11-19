@@ -6,19 +6,20 @@ pub use impls::*;
 
 #[frame_support::pallet]
 pub mod pallet {
+    use crate::{
+        locking::Balance, log, weights::WeightInfo, ActiveEraInfo, EraIndex, Exposure, Forcing,
+        SessionInterface, SettingSessionKey, StakingLedger, Value,
+    };
+    use frame_support::traits::CurrencyToVote;
     use frame_support::{
         pallet_prelude::*,
-        traits::{ EstimateNextNewSession, Get, UnixTime },
+        traits::{EstimateNextNewSession, Get, UnixTime},
         weights::Weight,
     };
-    use frame_system::{pallet_prelude::*};
-    use sp_runtime::{
-        traits::{ SaturatedConversion, StaticLookup}
-    };
+    use frame_system::pallet_prelude::*;
+    use sp_runtime::traits::{SaturatedConversion, StaticLookup};
     use sp_staking::SessionIndex;
     use sp_std::{convert::From, prelude::*};
-    use crate::{log, weights::WeightInfo, EraIndex, Value, SessionInterface, StakingLedger, ActiveEraInfo, locking::Balance, SettingSessionKey, Exposure, Forcing};
-    use frame_support::traits::CurrencyToVote;
 
     #[pallet::pallet]
     #[pallet::generate_store(pub(crate) trait Store)]
@@ -26,22 +27,21 @@ pub mod pallet {
 
     #[pallet::config]
     pub trait Config: frame_system::Config {
-
         type Balance: Balance<Self::AccountId>;
 
         type SettingSessionKey: SettingSessionKey<Self::AccountId>;
 
         /// Time used for computing era duration.
-		///
-		/// It is guaranteed to start being called from the first `on_finalize`. Thus value at
-		/// genesis is not used.
+        ///
+        /// It is guaranteed to start being called from the first `on_finalize`. Thus value at
+        /// genesis is not used.
         type UnixTime: UnixTime;
 
         /// Convert a balance into a number used for election calculation. This must fit into a
-    /// `u64` but is allowed to be sensibly lossy. The `u64` is used to communicate with the
-    /// [`sp_npos_elections`] crate which accepts u64 numbers and does operations in 128.
-    /// Consequently, the backward convert is used convert the u128s from sp-elections back to a
-    /// [`Value`].
+        /// `u64` but is allowed to be sensibly lossy. The `u64` is used to communicate with the
+        /// [`sp_npos_elections`] crate which accepts u64 numbers and does operations in 128.
+        /// Consequently, the backward convert is used convert the u128s from sp-elections back to a
+        /// [`Value`].
         type CurrencyToVote: CurrencyToVote<Value>;
 
         /// Something that provides the election functionality.
@@ -74,7 +74,7 @@ pub mod pallet {
         type SessionInterface: SessionInterface<Self::AccountId>;
 
         /// Something that can estimate the next session change, accurately or as a best effort
-		/// guess.
+        /// guess.
         type NextNewSession: EstimateNextNewSession<Self::BlockNumber>;
 
         /// Weight information for extrinsics in this pallet.
@@ -87,12 +87,12 @@ pub mod pallet {
     }
 
     /// Number of eras to keep in history.
-	///
-	/// Information is kept for eras in `[current_era - history_depth; current_era]`.
-	///
-	/// Must be more than the number of eras delayed by session otherwise. I.e. active era must
-	/// always be in history. I.e. `active_era > current_era - history_depth` must be
-	/// guaranteed.
+    ///
+    /// Information is kept for eras in `[current_era - history_depth; current_era]`.
+    ///
+    /// Must be more than the number of eras delayed by session otherwise. I.e. active era must
+    /// always be in history. I.e. `active_era > current_era - history_depth` must be
+    /// guaranteed.
     #[pallet::storage]
     #[pallet::getter(fn history_depth)]
     pub(crate) type HistoryDepth<T> = StorageValue<_, u32, ValueQuery, HistoryDepthOnEmpty>;
@@ -126,15 +126,15 @@ pub mod pallet {
     #[pallet::storage]
     #[pallet::getter(fn ledger)]
     pub type Ledger<T: Config> =
-    StorageMap<_, Blake2_128Concat, T::AccountId, StakingLedger<T::AccountId>>;
+        StorageMap<_, Blake2_128Concat, T::AccountId, StakingLedger<T::AccountId>>;
 
     /// The map from (wannabe) validator stash key to the preferences of that validator.
-	///
-	/// When updating this storage item, you must also update the `CounterForValidators`.
+    ///
+    /// When updating this storage item, you must also update the `CounterForValidators`.
     #[pallet::storage]
     #[pallet::getter(fn validators)]
     pub type Validators<T: Config> =
-    StorageMap<_, Twox64Concat, T::AccountId, T::AccountId, ValueQuery>;
+        StorageMap<_, Twox64Concat, T::AccountId, T::AccountId, ValueQuery>;
 
     /// A tracker to keep count of the number of items in the `Bonded` map.
     #[pallet::storage]
@@ -147,9 +147,9 @@ pub mod pallet {
     pub type MaxValidatorsCount<T> = StorageValue<_, u32, OptionQuery>;
 
     /// The current era index.
-	///
-	/// This is the latest planned era, depending on how the Session pallet queues the validator
-	/// set, it might be active or not.
+    ///
+    /// This is the latest planned era, depending on how the Session pallet queues the validator
+    /// set, it might be active or not.
     #[pallet::storage]
     #[pallet::getter(fn current_era)]
     pub type CurrentEra<T> = StorageValue<_, EraIndex>;
@@ -192,14 +192,12 @@ pub mod pallet {
     /// If total hasn't been set or has been removed then 0 stake is returned.
     #[pallet::storage]
     #[pallet::getter(fn eras_total_stake)]
-    pub type ErasTotalStake<T: Config> =
-    StorageMap<_, Twox64Concat, EraIndex, Value, ValueQuery>;
+    pub type ErasTotalStake<T: Config> = StorageMap<_, Twox64Concat, EraIndex, Value, ValueQuery>;
 
     /// Mode of era forcing.
     #[pallet::storage]
     #[pallet::getter(fn force_era)]
     pub type ForceEra<T> = StorageValue<_, Forcing, ValueQuery>;
-
 
     /// A mapping from still-bonded eras to the first session index of that era.
     ///
@@ -207,7 +205,7 @@ pub mod pallet {
     /// `[active_era - bounding_duration; active_era]`
     #[pallet::storage]
     pub(crate) type BondedEras<T: Config> =
-    StorageValue<_, Vec<(EraIndex, SessionIndex)>, ValueQuery>;
+        StorageValue<_, Vec<(EraIndex, SessionIndex)>, ValueQuery>;
 
     /// The last planned session scheduled by the session pallet.
     ///
@@ -223,8 +221,7 @@ pub mod pallet {
         pub minimum_validator_count: u32,
         pub invulnerables: Vec<T::AccountId>,
         pub force_era: Forcing,
-        pub stakers:
-        Vec<(T::AccountId, T::AccountId, Value, crate::StakerStatus)>,
+        pub stakers: Vec<(T::AccountId, T::AccountId, Value, crate::StakerStatus)>,
         pub min_validator_bond: Value,
     }
 
@@ -251,7 +248,6 @@ pub mod pallet {
             MinimumValidatorCount::<T>::put(self.minimum_validator_count);
             Invulnerables::<T>::put(&self.invulnerables);
             ForceEra::<T>::put(self.force_era);
-
             MinValidatorBond::<T>::put(self.min_validator_bond);
 
             for &(ref stash, ref controller, balance, ref status) in &self.stakers {
@@ -269,30 +265,28 @@ pub mod pallet {
 
                 frame_support::assert_ok!(<Pallet<T>>::validate_lock_for_staking(
                     T::Origin::from(Some(stash.clone()).into()),
-					T::Lookup::unlookup(controller.clone()),
-                    &vec![],
+                    T::Lookup::unlookup(controller.clone()),
                     balance
                 ));
 
                 frame_support::assert_ok!(<Pallet<T>>::bond(
-					stash.clone(),
-					controller.clone(),
-					balance
-				));
+                    stash.clone(),
+                    controller.clone(),
+                    balance
+                ));
 
                 frame_support::assert_ok!(match status {
-					crate::StakerStatus::Validator => <Pallet<T>>::apply_for_validator_role(
-						stash.clone(),
+                    crate::StakerStatus::Validator => <Pallet<T>>::apply_for_validator_role(
+                        stash.clone(),
                         controller.clone(),
                         vec![],
                         balance,
-					),
-					_ => Ok(().into()),
-				});
+                    ),
+                    _ => Ok(().into()),
+                });
             }
         }
     }
-
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(crate) fn deposit_event)]
@@ -310,7 +304,7 @@ pub mod pallet {
         Unbonded(T::AccountId, Value),
         /// An account has called `withdraw_unbonded` and removed unbonding chunks worth `Balance`
         /// from the unlocking queue. \[stash, amount\]
-        Withdrawn(T::AccountId,Value),
+        Withdrawn(T::AccountId, Value),
         /// The election failed. No new era is planned.
         StakingElectionFailed,
         /// An account has stopped participating as validator.
@@ -355,14 +349,11 @@ pub mod pallet {
         TooManyValidators,
         /// Failed to decode the provided session key.
         /// Make sure to get it from the rpc call `author_rotateKeys`
-        CannotDecodeSessionKey
+        CannotDecodeSessionKey,
     }
-
 
     #[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-
-
         fn on_initialize(_now: BlockNumberFor<T>) -> Weight {
             // just return the weight of the on_finalize.
             T::DbWeight::get().reads(1)
@@ -384,35 +375,28 @@ pub mod pallet {
 
         fn integrity_test() {
             sp_std::if_std! {
-				// sp_io::TestExternalities::new_empty().execute_with(||
-				// 	assert!(
-				// 		T::SlashDeferDuration::get() < T::BondingDuration::get() || T::BondingDuration::get() == 0,
-				// 		"As per documentation, slash defer duration ({}) should be less than bonding duration ({}).",
-				// 		T::SlashDeferDuration::get(),
-				// 		T::BondingDuration::get(),
-				// 	)
-				// );
-			}
+                // sp_io::TestExternalities::new_empty().execute_with(||
+                // 	assert!(
+                // 		T::SlashDeferDuration::get() < T::BondingDuration::get() || T::BondingDuration::get() == 0,
+                // 		"As per documentation, slash defer duration ({}) should be less than bonding duration ({}).",
+                // 		T::SlashDeferDuration::get(),
+                // 		T::BondingDuration::get(),
+                // 	)
+                // );
+            }
         }
     }
 
-
     #[pallet::call]
-    impl <T: Config> Pallet<T> {
-
-
+    impl<T: Config> Pallet<T> {
         #[pallet::weight(T::WeightInfo::lock())]
         pub fn lock(
             origin: OriginFor<T>,
             controller: <T::Lookup as StaticLookup>::Source,
-            session_keys:Vec<u8>,
+            session_keys: Vec<u8>,
             value: Value,
         ) -> DispatchResultWithPostInfo {
-            Self::lock_for_staking(origin,controller,session_keys, value)
+            Self::lock_for_staking(origin, controller, session_keys, value)
         }
-
-
     }
-
-
 }

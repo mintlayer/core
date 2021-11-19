@@ -284,7 +284,7 @@ pub mod pallet {
         LockExtraForStaking {
             stash_account: AccountId,
             controller_account: AccountId,
-        }
+        },
     }
 
     impl<AccountId> Destination<AccountId> {

@@ -15,7 +15,10 @@
 //
 // Author(s): C. Yap
 
-use crate::{convert_to_h256, tokens::Value, Config, Destination, Error, Event, LockedUtxos, Pallet, RewardTotal, StakingCount, TransactionOutput, UtxoStore, pick_utxo, TransactionInput, Transaction};
+use crate::{
+    convert_to_h256, pick_utxo, tokens::Value, Config, Destination, Error, Event, LockedUtxos,
+    Pallet, RewardTotal, StakingCount, Transaction, TransactionInput, TransactionOutput, UtxoStore,
+};
 use frame_support::{
     dispatch::{DispatchResultWithPostInfo, Vec},
     ensure, fail,
@@ -27,13 +30,13 @@ use sp_runtime::transaction_validity::{TransactionLongevity, ValidTransaction};
 use sp_std::vec;
 
 use crate::staking::utils::remove_locked_utxos;
-pub use validation::*;
-use sp_std::marker::PhantomData;
 use sp_runtime::DispatchError;
+use sp_std::marker::PhantomData;
+pub use validation::*;
 
 pub struct UtxoBalance<T>(PhantomData<T>);
 
-impl <T:Config> pallet_utxo_staking::Balance<T::AccountId> for UtxoBalance<T> {
+impl<T: Config> pallet_utxo_staking::Balance<T::AccountId> for UtxoBalance<T> {
     fn staking_fee() -> Value {
         T::StakeWithdrawalFee::get()
     }
@@ -42,18 +45,25 @@ impl <T:Config> pallet_utxo_staking::Balance<T::AccountId> for UtxoBalance<T> {
         T::MinimumStake::get()
     }
 
-    fn can_spend(account: &T::AccountId, value:Value) -> bool {
-       let (total,_,_) = pick_utxo::<T>(account,value);
+    fn can_spend(account: &T::AccountId, value: Value) -> bool {
+        let (total, _, _) = pick_utxo::<T>(account, value);
 
         total >= value
     }
 
-    fn lock_for_staking(stash:T::AccountId, controller: T::AccountId, session_keys:Vec<u8>, value: Value) -> DispatchResultWithPostInfo {
+    fn lock_for_staking(
+        stash: T::AccountId,
+        controller: T::AccountId,
+        session_keys: Vec<u8>,
+        value: Value,
+    ) -> DispatchResultWithPostInfo {
         let (total, hashes, utxos) = pick_utxo::<T>(&stash, value);
         ensure!(total >= value, "Caller doesn't have enough UTXOs");
 
-        let utxo_staking = TransactionOutput::new_lock_for_staking(value,stash.clone(),controller,session_keys);
-        let utxo_change = TransactionOutput::new_pubkey(total - value, convert_to_h256::<T>(&stash)?);
+        let utxo_staking =
+            TransactionOutput::new_lock_for_staking(value, stash.clone(), controller, session_keys);
+        let utxo_change =
+            TransactionOutput::new_pubkey(total - value, convert_to_h256::<T>(&stash)?);
 
         let mut inputs: Vec<TransactionInput> = Vec::new();
         for hash in hashes.iter() {
@@ -75,19 +85,17 @@ impl <T:Config> pallet_utxo_staking::Balance<T::AccountId> for UtxoBalance<T> {
         log::info!("inserted to LockedUtxos: hash: {:?}", hash);
 
         let hash = tx.outpoint(1);
-        <UtxoStore<T>>::insert(hash,utxo_change);
+        <UtxoStore<T>>::insert(hash, utxo_change);
         log::info!("inserted to UtxoStore: hash: {:?}", hash);
 
         <Pallet<T>>::deposit_event(Event::<T>::TransactionSuccess(tx));
 
         Ok(().into())
     }
-
 }
 
-
 pub struct NoStaking<T>(PhantomData<T>);
-impl <T:Config> StakingHelper<T::AccountId> for NoStaking<T>{
+impl<T: Config> StakingHelper<T::AccountId> for NoStaking<T> {
     fn get_controller_account(stash_account: &T::AccountId) -> Result<T::AccountId, &'static str> {
         todo!()
     }
@@ -104,15 +112,26 @@ impl <T:Config> StakingHelper<T::AccountId> for NoStaking<T>{
         todo!()
     }
 
-    fn check_accounts_matched(controller_account: &T::AccountId, stash_account: &T::AccountId) -> bool {
+    fn check_accounts_matched(
+        controller_account: &T::AccountId,
+        stash_account: &T::AccountId,
+    ) -> bool {
         todo!()
     }
 
-    fn lock_for_staking(stash_account: &T::AccountId, controller_account: &T::AccountId, session_key: &Vec<u8>, value: u128) -> DispatchResultWithPostInfo {
+    fn lock_for_staking(
+        stash_account: &T::AccountId,
+        controller_account: &T::AccountId,
+        session_key: &Vec<u8>,
+        value: u128,
+    ) -> DispatchResultWithPostInfo {
         todo!()
     }
 
-    fn lock_extra_for_staking(stash_account: &T::AccountId, value: u128) -> DispatchResultWithPostInfo {
+    fn lock_extra_for_staking(
+        stash_account: &T::AccountId,
+        value: u128,
+    ) -> DispatchResultWithPostInfo {
         todo!()
     }
 

@@ -5,15 +5,15 @@ mod locking;
 mod pallet;
 pub mod weights;
 
-pub use pallet::{pallet::*, *};
+use codec::{Decode, Encode};
+use frame_support::dispatch::DispatchResult;
+use frame_support::sp_runtime::traits::Convert;
 pub use locking::*;
-use codec::{Encode,Decode};
+pub use pallet::{pallet::*, *};
 use scale_info::TypeInfo;
+use sp_runtime::RuntimeDebug;
 use sp_staking::SessionIndex;
 use sp_std::vec::Vec;
-use sp_runtime::RuntimeDebug;
-use frame_support::sp_runtime::traits::Convert;
-use frame_support::dispatch::DispatchResult;
 
 pub(crate) const LOG_TARGET: &'static str = "runtime::staking";
 pub type Value = u128;
@@ -28,7 +28,6 @@ macro_rules! log {
 		)
 	};
 }
-
 
 /// Information regarding the active era (era in used in session).
 #[derive(Encode, Decode, RuntimeDebug, TypeInfo)]
@@ -49,13 +48,11 @@ pub enum StakerStatus {
     /// Chilling.
     Idle,
     /// Declared desire in validating or already participating in it.
-    Validator
+    Validator,
 }
 
 /// Counter for the number of eras that have passed.
 pub type EraIndex = u32;
-
-
 
 /// The ledger of a (bonded) stash.
 #[cfg_attr(feature = "runtime-benchmarks", derive(Default))]
@@ -73,8 +70,7 @@ pub struct StakingLedger<AccountId> {
     pub claimed_rewards: Vec<EraIndex>,
 }
 
-impl<AccountId> StakingLedger<AccountId>
-{
+impl<AccountId> StakingLedger<AccountId> {
     /// Re-bond funds that were scheduled for unlocking.
     fn rebond(mut self) -> Self {
         self.unlocking_era = None;
@@ -93,7 +89,7 @@ pub struct IndividualExposure<AccountId> {
 
 /// A snapshot of the stake backing a single validator in the system.
 #[derive(
-PartialEq, Eq, PartialOrd, Ord, Clone, Encode, Decode, Default, RuntimeDebug, TypeInfo,
+    PartialEq, Eq, PartialOrd, Ord, Clone, Encode, Decode, Default, RuntimeDebug, TypeInfo,
 )]
 pub struct Exposure<AccountId> {
     /// The total balance backing this validator.
@@ -121,18 +117,18 @@ pub trait SessionInterface<AccountId>: frame_system::Config {
 }
 
 impl<T: Config> SessionInterface<<T as frame_system::Config>::AccountId> for T
-    where
-        T: pallet_session::Config<ValidatorId = <T as frame_system::Config>::AccountId>,
-        T: pallet_session::historical::Config<
-            FullIdentification = Exposure<<T as frame_system::Config>::AccountId>,
-            FullIdentificationOf = ExposureOf<T>,
-        >,
-        T::SessionHandler: pallet_session::SessionHandler<<T as frame_system::Config>::AccountId>,
-        T::SessionManager: pallet_session::SessionManager<<T as frame_system::Config>::AccountId>,
-        T::ValidatorIdOf: Convert<
-            <T as frame_system::Config>::AccountId,
-            Option<<T as frame_system::Config>::AccountId>,
-        >,
+where
+    T: pallet_session::Config<ValidatorId = <T as frame_system::Config>::AccountId>,
+    T: pallet_session::historical::Config<
+        FullIdentification = Exposure<<T as frame_system::Config>::AccountId>,
+        FullIdentificationOf = ExposureOf<T>,
+    >,
+    T::SessionHandler: pallet_session::SessionHandler<<T as frame_system::Config>::AccountId>,
+    T::SessionManager: pallet_session::SessionManager<<T as frame_system::Config>::AccountId>,
+    T::ValidatorIdOf: Convert<
+        <T as frame_system::Config>::AccountId,
+        Option<<T as frame_system::Config>::AccountId>,
+    >,
 {
     fn disable_validator(validator: &<T as frame_system::Config>::AccountId) -> Result<bool, ()> {
         <pallet_session::Pallet<T>>::disable(validator)
@@ -147,10 +143,9 @@ impl<T: Config> SessionInterface<<T as frame_system::Config>::AccountId> for T
     }
 }
 
-
 pub trait SettingSessionKey<AccountId> {
     fn can_decode_session_keys(session_key: &Vec<u8>) -> bool;
-    fn set_session_keys(controller:AccountId, session_keys:&Vec<u8>) -> DispatchResult;
+    fn set_session_keys(controller: AccountId, session_keys: &Vec<u8>) -> DispatchResult;
 }
 
 /// Mode of era-forcing.
@@ -175,7 +170,6 @@ impl Default for Forcing {
     }
 }
 
-
 /// A `Convert` implementation that finds the stash of the given controller account,
 /// if any.
 pub struct StashOf<T>(sp_std::marker::PhantomData<T>);
@@ -193,13 +187,9 @@ impl<T: Config> Convert<T::AccountId, Option<T::AccountId>> for StashOf<T> {
 /// `active_era`. It can differ from the latest planned exposure in `current_era`.
 pub struct ExposureOf<T>(sp_std::marker::PhantomData<T>);
 
-impl<T: Config> Convert<T::AccountId, Option<Exposure<T::AccountId>>>
-for ExposureOf<T>
-{
+impl<T: Config> Convert<T::AccountId, Option<Exposure<T::AccountId>>> for ExposureOf<T> {
     fn convert(validator: T::AccountId) -> Option<Exposure<T::AccountId>> {
         <Pallet<T>>::active_era()
             .map(|active_era| <Pallet<T>>::eras_stakers(active_era.index, &validator))
     }
 }
-
-

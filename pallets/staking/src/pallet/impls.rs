@@ -1,37 +1,35 @@
-use crate::{log, Value, Config, Pallet, StakingLedger, Ledger, Validators, CounterForValidators, CurrentEra, Event, ActiveEra, ActiveEraInfo, SessionInterface, Exposure, ErasStartSessionIndex, EraIndex, ErasStakers, ErasTotalStake, IndividualExposure, CurrentPlannedSession, BondedEras, ForceEra, Forcing};
-
-use sp_staking::SessionIndex;
-use sp_std::vec;
-use frame_support::{
-    pallet_prelude::*,
-    traits::Get
+use crate::{
+    log, ActiveEra, ActiveEraInfo, BondedEras, Config, CounterForValidators, CurrentEra,
+    CurrentPlannedSession, EraIndex, ErasStakers, ErasStartSessionIndex, ErasTotalStake, Event,
+    Exposure, ForceEra, Forcing, IndividualExposure, Ledger, Pallet, SessionInterface,
+    StakingLedger, Validators, Value,
 };
-use sp_runtime::traits::Saturating;
-use frame_election_provider_support::{ElectionProvider, Supports, ElectionDataProvider, data_provider, VoteWeight};
-use frame_system::pallet_prelude::BlockNumberFor;
-use frame_support::traits::{EstimateNextNewSession, CurrencyToVote};
-use frame_support::sp_runtime::traits::{Bounded, Zero};
+
+use crate::weights::WeightInfo;
+use frame_election_provider_support::{
+    data_provider, ElectionDataProvider, ElectionProvider, Supports, VoteWeight,
+};
 use frame_support::dispatch::{Vec, Weight};
 use frame_support::pallet_prelude::DispatchClass;
-use crate::weights::WeightInfo;
+use frame_support::sp_runtime::traits::{Bounded, Zero};
+use frame_support::traits::{CurrencyToVote, EstimateNextNewSession};
+use frame_support::{pallet_prelude::*, traits::Get};
+use frame_system::pallet_prelude::BlockNumberFor;
+use sp_runtime::traits::Saturating;
+use sp_staking::SessionIndex;
+use sp_std::vec;
 
-impl<T:Config> Pallet<T> {
-
+impl<T: Config> Pallet<T> {
     /// The total balance that can be slashed from a stash account as of right now.
     pub fn slashable_balance_of(stash: &T::AccountId) -> Value {
         // Weight note: consider making the stake accessible through stash.
         Self::bonded(stash).and_then(Self::ledger).map(|l| l.total).unwrap_or_default()
     }
 
-
     /// Internal impl of [`Self::slashable_balance_of`] that returns [`VoteWeight`].
-    pub fn slashable_balance_of_vote_weight(
-        stash: &T::AccountId,
-        issuance: Value,
-    ) -> VoteWeight {
+    pub fn slashable_balance_of_vote_weight(stash: &T::AccountId, issuance: Value) -> VoteWeight {
         T::CurrencyToVote::to_vote(Self::slashable_balance_of(stash), issuance)
     }
-
 
     /// Returns a closure around `slashable_balance_of_vote_weight` that can be passed around.
     ///
@@ -46,7 +44,7 @@ impl<T:Config> Pallet<T> {
 
     // TODO: this should be using the total issuance
     pub fn overall_stake_value() -> Value {
-        let mut total:Value = 0;
+        let mut total: Value = 0;
         Ledger::<T>::iter_values().for_each(|ledger| {
             if ledger.unlocking_era.is_none() {
                 total = total.saturating_add(ledger.total);
@@ -57,11 +55,7 @@ impl<T:Config> Pallet<T> {
     }
 
     /// add the ledger for a controller.
-    pub(crate) fn add_ledger(
-        stash: T::AccountId,
-        controller: T::AccountId,
-        value:u128
-    ) {
+    pub(crate) fn add_ledger(stash: T::AccountId, controller: T::AccountId, value: u128) {
         let current_era = CurrentEra::<T>::get().unwrap_or(0);
         let history_depth = Self::history_depth();
         let last_reward_era = current_era.saturating_sub(history_depth);
@@ -70,10 +64,10 @@ impl<T:Config> Pallet<T> {
             stash: stash.clone(),
             total: value,
             unlocking_era: None,
-            claimed_rewards: (last_reward_era..current_era).collect()
+            claimed_rewards: (last_reward_era..current_era).collect(),
         };
         <Ledger<T>>::insert(controller, ledger);
-        <Pallet<T>>::deposit_event(Event::<T>::Bonded(stash,value));
+        <Pallet<T>>::deposit_event(Event::<T>::Bonded(stash, value));
     }
 
     /// update the ledger for a controller
@@ -81,11 +75,11 @@ impl<T:Config> Pallet<T> {
         stash: T::AccountId,
         controller: T::AccountId,
         value: u128,
-        ledger: &mut StakingLedger<T::AccountId>
+        ledger: &mut StakingLedger<T::AccountId>,
     ) {
         ledger.total += value;
         <Ledger<T>>::insert(controller, ledger);
-        <Pallet<T>>::deposit_event(Event::<T>::Bonded(stash,value));
+        <Pallet<T>>::deposit_event(Event::<T>::Bonded(stash, value));
     }
 
     /// Get all of the voters that are eligible for the npos election.
@@ -116,8 +110,11 @@ impl<T:Config> Pallet<T> {
         let mut validators_taken = 0u32;
         for (validator, _) in <Validators<T>>::iter().take(max_allowed_len) {
             // Append self vote.
-            let self_vote =
-                (validator.clone(), Self::weight_of(&validator), vec![validator.clone()]);
+            let self_vote = (
+                validator.clone(),
+                Self::weight_of(&validator),
+                vec![validator.clone()],
+            );
             all_voters.push(self_vote);
             validators_taken.saturating_inc();
         }
@@ -125,10 +122,7 @@ impl<T:Config> Pallet<T> {
         // all_voters should have not re-allocated.
         debug_assert!(all_voters.capacity() == max_allowed_len);
 
-        Self::register_weight(T::WeightInfo::get_npos_voters(
-            validators_taken,
-            0 as u32,
-        ));
+        Self::register_weight(T::WeightInfo::get_npos_voters(validators_taken, 0 as u32));
 
         log!(
             info,
@@ -157,13 +151,12 @@ impl<T:Config> Pallet<T> {
     }
 
     /// This function will add a validator to the `Validators` storage map, and keep track of the
-	/// `CounterForValidators`.
-	///
-	/// NOTE: you must ALWAYS use this function to add a validator to the system. Any access to
-	/// `Validators`, its counter, or `VoterList` outside of this function is almost certainly
-	/// wrong.
+    /// `CounterForValidators`.
+    ///
+    /// NOTE: you must ALWAYS use this function to add a validator to the system. Any access to
+    /// `Validators`, its counter, or `VoterList` outside of this function is almost certainly
+    /// wrong.
     pub fn do_add_validator(who: &T::AccountId, controller: &T::AccountId) {
-
         CounterForValidators::<T>::mutate(|x| x.saturating_inc());
         Validators::<T>::insert(who, controller);
     }
@@ -191,14 +184,14 @@ impl<T:Config> Pallet<T> {
                 _ => {
                     // Either `Forcing::ForceNone`,
                     // or `Forcing::NotForcing if era_length >= T::SessionsPerEra::get()`.
-                    return None
-                },
+                    return None;
+                }
             }
 
             // New era.
             let maybe_new_era_validators = Self::try_trigger_new_era(session_index, is_genesis);
-            if maybe_new_era_validators.is_some() &&
-                matches!(ForceEra::<T>::get(), Forcing::ForceNew)
+            if maybe_new_era_validators.is_some()
+                && matches!(ForceEra::<T>::get(), Forcing::ForceNew)
             {
                 ForceEra::<T>::put(Forcing::NotForcing);
             }
@@ -218,7 +211,7 @@ impl<T:Config> Pallet<T> {
         // active era is one behind (i.e. in the *last session of the active era*, or *first session
         // of the new current era*, depending on how you look at it).
         if let Some(next_active_era_start_session_index) =
-        Self::eras_start_session_index(next_active_era)
+            Self::eras_start_session_index(next_active_era)
         {
             if next_active_era_start_session_index == start_session {
                 Self::start_era(start_session);
@@ -235,10 +228,10 @@ impl<T:Config> Pallet<T> {
     fn end_session(session_index: SessionIndex) {
         if let Some(active_era) = Self::active_era() {
             if let Some(next_active_era_start_session_index) =
-            Self::eras_start_session_index(active_era.index + 1)
+                Self::eras_start_session_index(active_era.index + 1)
             {
                 if next_active_era_start_session_index == session_index + 1 {
-                   // Self::end_era(active_era, session_index);
+                    // Self::end_era(active_era, session_index);
                 }
             }
         }
@@ -270,7 +263,6 @@ impl<T:Config> Pallet<T> {
                 }
             }
         });
-
     }
 
     /// Plan a new era.
@@ -322,7 +314,7 @@ impl<T:Config> Pallet<T> {
                 Self::deposit_event(Event::StakingElectionFailed);
             })
         }
-            .ok()?;
+        .ok()?;
 
         let exposures = Self::collect_exposures(election_result);
 
@@ -345,17 +337,15 @@ impl<T:Config> Pallet<T> {
                     exposures.len(),
                     Self::minimum_validator_count(),
                 ),
-                _ => ()
+                _ => (),
             }
             Self::deposit_event(Event::StakingElectionFailed);
-            return None
+            return None;
         }
-
 
         Self::deposit_event(Event::StakersElected);
         Some(Self::trigger_new_era(start_session_index, exposures))
     }
-
 
     /// Process the output of the election.
     ///
@@ -367,7 +357,7 @@ impl<T:Config> Pallet<T> {
         let elected_stashes = exposures.iter().cloned().map(|(x, _)| x).collect::<Vec<_>>();
 
         // Populate stakers, exposures, and the snapshot of validator prefs.
-        let mut total_stake:Value = 0;
+        let mut total_stake: Value = 0;
         exposures.into_iter().for_each(|(stash, stake)| {
             total_stake = total_stake.saturating_add(stake.total);
             <ErasStakers<T>>::insert(new_planned_era, &stash, &stake);
@@ -389,8 +379,10 @@ impl<T:Config> Pallet<T> {
     }
 
     /// Consume a set of [`Supports`] from [`sp_npos_elections`] and collect them into a
-	/// [`(validator, weight)`].
-    pub(crate) fn collect_exposures(supports: Supports<T::AccountId>) -> Vec<(T::AccountId,Exposure::<T::AccountId>)> {
+    /// [`(validator, weight)`].
+    pub(crate) fn collect_exposures(
+        supports: Supports<T::AccountId>,
+    ) -> Vec<(T::AccountId, Exposure<T::AccountId>)> {
         // TODO: In substrate, the total issuance is used to extract the weight of the stake.
         // For now, the total staked will of an account will determine the vote.
         let overall_stake = Self::overall_stake_value();
@@ -398,38 +390,35 @@ impl<T:Config> Pallet<T> {
             T::CurrencyToVote::to_currency(e, overall_stake)
         };
 
-
-        supports.into_iter().map(
-            |(validator, support)| {
+        supports
+            .into_iter()
+            .map(|(validator, support)| {
                 // Build `struct exposure` from `support`.
                 let mut others = Vec::with_capacity(support.voters.len());
                 let mut own: Value = 0;
                 let mut total: Value = 0;
 
-                support.voters.into_iter()
-                    .for_each(|(nominator, stake)| {
-                        let stake = to_currency(stake);
+                support.voters.into_iter().for_each(|(nominator, stake)| {
+                    let stake = to_currency(stake);
 
-                        if nominator == validator {
-                            log!(info, "voting for myself: {:?}", validator);
-                            own = own.saturating_add(stake);
+                    if nominator == validator {
+                        log!(info, "voting for myself: {:?}", validator);
+                        own = own.saturating_add(stake);
+                    } else {
+                        log!(info, "account {:?} votes for {:?}", nominator, validator);
+                        others.push(IndividualExposure {
+                            who: nominator,
+                            value: stake,
+                        });
+                    }
+                    total = total.saturating_add(stake);
+                });
 
-                        } else {
-                            log!(info, "account {:?} votes for {:?}", nominator, validator);
-                            others.push(IndividualExposure{ who: nominator, value: stake});
-                        }
-                        total = total.saturating_add(stake);
-                    });
+                let exposure = Exposure { total, own, others };
 
-                let exposure = Exposure {
-                    total,
-                    own,
-                    others
-                };
-
-                (validator,exposure)
-            }).collect()
-
+                (validator, exposure)
+            })
+            .collect()
     }
 
     /// Clear all era information for given era.
@@ -448,10 +437,7 @@ impl<T:Config> Pallet<T> {
             DispatchClass::Mandatory,
         );
     }
-
 }
-
-
 
 impl<T: Config> ElectionDataProvider<T::AccountId, BlockNumberFor<T>> for Pallet<T> {
     const MAXIMUM_VOTES_PER_VOTER: u32 = 0;
@@ -478,7 +464,7 @@ impl<T: Config> ElectionDataProvider<T::AccountId, BlockNumberFor<T>> for Pallet
 
         // We can't handle this case yet -- return an error.
         if maybe_max_len.map_or(false, |max_len| target_count > max_len as u32) {
-            return Err("Target snapshot too big")
+            return Err("Target snapshot too big");
         }
 
         Ok(Self::get_npos_targets())
@@ -545,11 +531,9 @@ impl<T: Config> pallet_session::SessionManager<T::AccountId> for Pallet<T> {
 }
 
 impl<T: Config> pallet_session::historical::SessionManager<T::AccountId, Exposure<T::AccountId>>
-for Pallet<T>
+    for Pallet<T>
 {
-    fn new_session(
-        new_index: SessionIndex,
-    ) -> Option<Vec<(T::AccountId, Exposure<T::AccountId>)>> {
+    fn new_session(new_index: SessionIndex) -> Option<Vec<(T::AccountId, Exposure<T::AccountId>)>> {
         <Self as pallet_session::SessionManager<_>>::new_session(new_index).map(|validators| {
             let current_era = Self::current_era()
                 // Must be some as a new era has been created.
