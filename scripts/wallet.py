@@ -60,7 +60,25 @@ class Account:
             call_params = { 'tx': tx.json() },
         )
         extrinsic = self.client.substrate.create_unsigned_extrinsic(call=call)
-        return self.client.substrate.submit_extrinsic(extrinsic, wait_for_inclusion=True)
+
+        def result_handler(message, update_nr, sub_id):
+            if 'params' in message and type(message['params']['result']) is dict:
+                res = message['params']['result']
+                if 'inBlock' in res:
+                    return {
+                        'block_hash': res['inBlock']
+                    }
+
+        result = self.client.substrate.rpc_request(
+            "author_submitAndWatchExtrinsic",
+            [str(extrinsic.data)],
+            result_handler=result_handler
+        )
+
+        if 'block_hash' in result:
+            print('Transaction included in block', result['block_hash'])
+
+        return result
 
 
 def balance(args):
