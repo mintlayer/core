@@ -66,7 +66,7 @@ BASE_SCRIPTS= [
     'feature_staking_withdraw_no_unlock.py',
     'feature_staking_withdraw_not_validator.py',
     'feature_smart_contract_test.py',
-#     'feature_staking_unlock_and_withdraw.py' ## should be ran on 20 secs
+    'feature_staking_unlock_and_withdraw.py' ## should be ran on 20 secs
     # Don't append tests at the end to avoid merge conflicts
     # Put them in a random line within the section that fits their approximate run-time
 ]
