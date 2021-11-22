@@ -77,8 +77,6 @@ def assert_raises_substrate_exception(fun, *args, **kwds):
     else:
         raise AssertionError("No SubstrateRequestException raised")
 
-
-
 def assert_raises_process_error(returncode, output, fun, *args, **kwds):
     """Execute a process and asserts the process return code and output.
 

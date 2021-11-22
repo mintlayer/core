@@ -70,7 +70,6 @@ class ExampleTest(MintlayerTestFramework):
         # there's only 2 record of staking, which are alice and bob.
         assert_equal( len(list(client.staking_count())), 2 )
 
-        print("hoy hoy hoy: ", utxos[0][1].json())
         tx1 = utxo.Transaction(
             client,
             inputs=[
