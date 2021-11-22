@@ -1,6 +1,6 @@
 use node_template_runtime::{
     pallet_utxo, AccountId, BalancesConfig, GenesisConfig, PpConfig, SessionConfig, Signature,
-    StakerStatus, StakingConfig, SudoConfig, SystemConfig, UtxoConfig, MINIMUM_STAKE,
+    StakerStatus, SudoConfig, SystemConfig, UtxoConfig, UtxoStakingConfig, MINIMUM_STAKE,
     NUM_OF_VALIDATOR_SLOTS, WASM_BINARY,
 };
 use sc_network::config::MultiaddrWithPeerId;
@@ -279,20 +279,20 @@ fn testnet_genesis(
             genesis_utxos,
             // The # of validators set should also be the same here.
             // This should be the same as what's set as the initial authorities
-            locked_utxos,
-            // initial_reward_amount: 100 * MLT_UNIT
+            // locked_utxos
+            ..Default::default()
         },
         pp: PpConfig {
             _marker: Default::default(),
         },
         session: SessionConfig { keys: session_keys },
-        staking: StakingConfig {
+        utxo_staking: UtxoStakingConfig {
             validator_count: NUM_OF_VALIDATOR_SLOTS,
             // The # of validators set should be the same number of locked_utxos specified in UtxoConfig.
             minimum_validator_count: 1,
             invulnerables: initial_authorities.iter().map(|x| x.controller_account_id()).collect(),
-            slash_reward_fraction: sp_runtime::Perbill::from_percent(0), // nothing, since we're not using this at all.
             stakers,
+            min_validator_bond: MINIMUM_STAKE,
             ..Default::default()
         },
     }

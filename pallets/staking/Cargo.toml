@@ -1,0 +1,88 @@
+[package]
+name = "pallet-utxo-staking"
+version = "0.1.0"
+authors = ["BCYap <2826165+b-yap@users.noreply.github.com>"]
+edition = "2018"
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[dependencies]
+serde = { version = "1.0.126", optional = true }
+log = { version = "0.4.14", default-features = false }
+scale-info = { version = "1.0", default-features = false, features = ["derive"] }
+
+[dependencies.codec]
+default-features = false
+features = ['derive']
+package = 'parity-scale-codec'
+version = '2.0.0'
+
+[dependencies.sp-std]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+version = '4.0.0-dev'
+branch = "master"
+
+[dependencies.sp-runtime]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+version = '4.0.0-dev'
+branch = "master"
+
+
+[dependencies.sp-staking]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+version = '4.0.0-dev'
+branch = "master"
+
+[dependencies.frame-election-provider-support]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+version = '4.0.0-dev'
+branch = "master"
+
+[dependencies.frame-support]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+version = '4.0.0-dev'
+branch = "master"
+
+[dependencies.frame-system]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+version = '4.0.0-dev'
+branch = "master"
+
+[dependencies.pallet-session]
+default-features = false
+features = ["historical"]
+git = 'https://github.com/paritytech/substrate.git'
+version = '4.0.0-dev'
+branch = "master"
+
+[dependencies.pallet-authorship]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+version = '4.0.0-dev'
+branch = "master"
+
+
+
+[features]
+default = ["std"]
+std = [
+    "serde",
+    "codec/std",
+    "scale-info/std",
+    "sp-std/std",
+    "frame-support/std",
+    "frame-election-provider-support/std",
+    "sp-runtime/std",
+    "sp-staking/std",
+    "pallet-session/std",
+    "frame-system/std",
+    "pallet-authorship/std",
+    "log/std",
+]
