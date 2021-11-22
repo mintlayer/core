@@ -113,6 +113,21 @@ Let's look at these flags in detail:
 | `--node-key <key>`                         | The Ed25519 secret key to use for `libp2p` networking. The value is parsed as a hex-encoded Ed25519 32 byte secret key, i.e. 64 hex characters. WARNING: Secrets provided as command-line arguments are easily exposed. Use of this option should be limited to development and testing. |
 | `--telemetry-url`                          | Tells the node to send telemetry data to a particular server. The one we've chosen here is hosted by Parity and is available for anyone to use. You may also host your own (beyond the scope of this article) or omit this flag entirely.                                                |
 | `--validator`                              | Means that we want to participate in block production and finalization rather than just sync the network.                                                                                                                                                                                |
+
+## Docker setup
+
+Alternatively, Docker can be used to launch a Mintlayer node. In the root directory, run:
+
+```
+docker build -t mintlayer-core .
+docker run -t mintlayer-core
+```
+
+If you want to save the blockchain to host, run:
+```
+docker run -v ~/ml-blockchain:/tmp/ml-core -t mintlayer-core
+```
+
 ## Create a chain specification
 
 In the preceding example, we used `--chain local` which is a predefined "chain spec" that has Alice and Bob specified as validators along with many other useful defaults.
