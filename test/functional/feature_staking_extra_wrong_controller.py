@@ -13,6 +13,7 @@ import test_framework.mintlayer.utxo as utxo
 from test_framework.test_framework import MintlayerTestFramework
 from test_framework.util import (
     assert_equal,
+    assert_raises_substrate_exception,
     connect_nodes,
     wait_until,
 )
@@ -86,7 +87,7 @@ class ExampleTest(MintlayerTestFramework):
             ]
         ).sign(alice_stash, [utxos[0][1]])
 
-        client.submit(alice_stash, tx1)
+        assert_raises_substrate_exception(client.submit, alice_stash, tx1)
 
         # Get Bob's stash
         new_count = list(client.get_staking_count(alice_stash))[0][1]

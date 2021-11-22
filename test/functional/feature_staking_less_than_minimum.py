@@ -13,6 +13,7 @@ import test_framework.mintlayer.utxo as utxo
 from test_framework.test_framework import MintlayerTestFramework
 from test_framework.util import (
     assert_equal,
+    assert_raises_substrate_exception,
     connect_nodes,
     wait_until,
 )
@@ -69,6 +70,7 @@ class ExampleTest(MintlayerTestFramework):
         # there's only 2 record of staking, which are alice and bob.
         assert_equal( len(list(client.staking_count())), 2 )
 
+        print("hoy hoy hoy: ", utxos[0][1].json())
         tx1 = utxo.Transaction(
             client,
             inputs=[
@@ -78,6 +80,11 @@ class ExampleTest(MintlayerTestFramework):
                 utxo.Output(
                     value=50000 * COIN,
                     destination=utxo.DestPubkey(charlie_stash.public_key),
+                    data=None
+                ),
+                  utxo.Output(
+                    value=39999949950 * COIN,
+                    destination=utxo.DestPubkey(alice.public_key),
                     data=None
                 ),
             ]
@@ -101,8 +108,8 @@ class ExampleTest(MintlayerTestFramework):
                     data=None
                 ),
             ]
-        ).sign(charlie_stash, tx1.outputs)
-        client.submit(charlie_stash, tx2)
+        ).sign(charlie_stash, [tx1.outputs[0]])
+        assert_raises_substrate_exception(client.submit, charlie_stash, tx2)
 
         # there should only be 2 still, because Charlie failed on the staking.
         assert_equal(len(list(client.staking_count())), 2 )
