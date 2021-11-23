@@ -3,9 +3,21 @@
 
 ## Quick start 
 Binaries can be found [here](https://github.com/mintlayer/core/releases).
+
+Running a node also requires as input a chain specification.
+Currently a single chain specification for the testnet is provided, and can be downloaded using curl:
+
+```
+curl --proto '=https' -sSf 								\
+    https://raw.githubusercontent.com/mintlayer/core/master/assets/Testnet1Spec.json 	\
+    --output Testnet1Spec.json
+```
 Download and run:
 ```
-mintlayer-core --base-path data/my_first_ml_node --validator --rpc-external --rpc-methods Unsafe --chain=Testnet1Spec.json
+mintlayer-core 				\
+    --base-path data/my_first_ml_node 	\
+    --validator 			\
+    --chain=Testnet1Spec.json
 ```
 
 to start a node. It will automatically connect to the Mintlayer bootnodes.
@@ -80,7 +92,7 @@ See [Mintlayer installation on Windows](windows_installation.md)
 ## Running a node
 Clone the repository:
 
-```bash
+```
 git clone https://github.com/mintlayer/core.git
 ```
 
@@ -94,25 +106,47 @@ to build the project.
 
 Finally, to run a node:
 ```
-RUST_LOG=info ./target/release/mintlayer-core --base-path [PATH_TO_DB] --name [NODE_NAME] --port [P2P_PORT] --ws-port [WEB_SOCKET_PORT] --rpc-port [RPC_PORT] --validator --rpc-methods Unsafe --chain=[CHAIN_SPEC]
+RUST_LOG=info ./target/release/mintlayer-core 	\
+    --base-path [PATH_TO_DB] 			\
+    --name [NODE_NAME]     			\
+    --port [P2P_PORT] 				\
+    --ws-port [WEB_SOCKET_PORT]    		\
+    --rpc-port [RPC_PORT] 			\
+    --validator 				\
+    --chain=[CHAIN_SPEC]
 ```
+
 For example,
 ```
-RUST_LOG=info ./target/release/mintlayer-core --base-path data/node1 --name brian --port 30333 --ws-port 9945 --rpc-port 9933 --validator --rpc-methods Unsafe --chain=Testnet1Spec.json
+RUST_LOG=info ./target/release/mintlayer-core 	\
+    --base-path data/node1 			\
+    --name brian 				\
+    --port 30333 				\
+    --ws-port 9945 				\
+    --rpc-port 9933 				\
+    --validator 				\
+    --chain=Testnet1Spec.json
 ```
+
 Let's look at these flags in detail:
 
-| <div style="min-width:110pt"> Flags </div> | Descriptions                                                                                                                                                                                                                                                                             |
-| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--base-path`                              | Specifies a directory where Mintlayer should store all the data related to this chain. If the directory does not exist, it will be created for you. If other blockchain data already exists there you will get an error. Either clear the directory or choose a different one.           |
-| `--chain local`                            | Specifies which chain specification to use. There are a few prepackaged options including `local`, `development`, and `staging` but generally one specifies their own chain spec file. We'll specify our own file in a later step.                                                       |
-| `--alice`                                  | Puts the predefined Alice keys (both for block production and finalization) in the node's keystore. Generally one should generate their own keys and insert them with an RPC call. We'll generate our own keys in a later step. This flag also makes Alice a validator.                  |
-| `--port 30333`                             | Specifies the port that your node will listen for p2p traffic on. `30333` is the default and this flag can be omitted if you're happy with the default. If Bob's node will run on the same physical system, you will need to explicitly specify a different port for it.                 |
-| `--ws-port 9945`                           | Specifies the port that your node will listen for incoming WebSocket traffic on. The default value is `9944`. This example uses a custom web socket port number (`9945`).                                                                                                                |
-| `--rpc-port 9933`                          | Specifies the port that your node will listen for incoming RPC traffic on. `9933` is the default, so this parameter may be omitted.                                                                                                                                                      |
-| `--node-key <key>`                         | The Ed25519 secret key to use for `libp2p` networking. The value is parsed as a hex-encoded Ed25519 32 byte secret key, i.e. 64 hex characters. WARNING: Secrets provided as command-line arguments are easily exposed. Use of this option should be limited to development and testing. |
-| `--telemetry-url`                          | Tells the node to send telemetry data to a particular server. The one we've chosen here is hosted by Parity and is available for anyone to use. You may also host your own (beyond the scope of this article) or omit this flag entirely.                                                |
-| `--validator`                              | Means that we want to participate in block production and finalization rather than just sync the network.                                                                                                                                                                                |
+| <div style="min-width:110pt"> Flags </div> | Descriptions                                                                                                                                                                                                                                                                                                                               |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `--base-path`                              | Specifies a directory where Mintlayer should store all the data related to this chain. If the directory does not exist, it will be created for you. If other blockchain data already exists there you will get an error. Either clear the directory or choose a different one. |
+| `--chain=[CHAIN_SPEC_FILE]`                            | Specifies which chain specification to use. A chain specification, or "chain spec", is a collection of configuration information that dictates which network a blockchain node will connect to, which entities it will initially communicate with, and what consensus-critical state it must have at genesis. |
+| `--alice`                                  | Puts the predefined Alice keys (both for block production and finalization) in the node's keystore. Generally one should generate their own keys and insert them with an RPC call. We'll generate our own keys in a later step. This flag also makes Alice a validator.                                                                    |
+| `--port 30333`                             | Specifies the port that your node will listen for p2p traffic on. `30333` is the default and this flag can be omitted if you're happy with the default. If Bob's node will run on the same physical system, you will need to explicitly specify a different port for it.                                                                   |
+| `--ws-port 9945`                           | Specifies the port that your node will listen for incoming WebSocket traffic on. The default value is `9944`. This example uses a custom web socket port number (`9945`).                                                                                                                                                                  |
+| `--rpc-port 9933`                          | Specifies the port that your node will listen for incoming RPC traffic on. `9933` is the default, so this parameter may be omitted.                                                                                                                                                                                                        |
+| `--telemetry-url`                          | Tells the node to send telemetry data to a particular server. The one we've chosen here is hosted by Parity and is available for anyone to use. You may also host your own (beyond the scope of this article) or omit this flag entirely.                                                                                                  |
+| `--validator`                              | Means that we want to participate in block production and finalization rather than just sync the network.                                                                                                                                                                                                                                  |
+
+*Note*: As a safety precaution, the node will listen to RPC interfaces on localhost only.
+It is possible expose the node's RPC port publicly `--rpc-external`, but only do this if you understand the risks involved. As a safer alternative to enable RPC calls from outside the node, consider using tunnels.
+
+**TODO** Provide an explanation/examples of methods that are unsafe to call. Or link to a list, together with an explanation of why each method is unsafe.
+
+*Note*: Some RPC calls can be used to control the node's behavior and should never (or rarely) be exposed. We call such methods _Unsafe_, and they are disabled by default. It is possible to enable them using `--rpc-methods Unsafe`.
 
 ## Docker setup
 
@@ -127,6 +161,7 @@ If you want to save the blockchain to host, run:
 ```
 docker run -v ~/ml-blockchain:/tmp/ml-core -t mintlayer-core
 ```
+
 
 ## Create a chain specification
 
