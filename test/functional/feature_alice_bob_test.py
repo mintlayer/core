@@ -17,6 +17,7 @@ from test_framework.util import (
     connect_nodes,
     wait_until,
 )
+from test_framework.messages import COIN
 
 
 class ExampleTest(MintlayerTestFramework):
@@ -65,6 +66,8 @@ class ExampleTest(MintlayerTestFramework):
         # fetch the genesis utxo from storage
         utxos = list(client.utxos_for(alice))
 
+        print("how are you: ",utxos[0][1].json())
+
         tx1 = utxo.Transaction(
             client,
             inputs=[
@@ -72,10 +75,15 @@ class ExampleTest(MintlayerTestFramework):
             ],
             outputs=[
                 utxo.Output(
-                    value=50,
+                    value=50 * COIN,
                     destination=utxo.DestPubkey(bob.public_key),
                     data=None
                 ),
+                utxo.Output(
+                    value=39999999940 * COIN,
+                    destination=utxo.DestPubkey(alice.public_key),
+                    data=None
+                )
             ]
         ).sign(alice, [utxos[0][1]])
         client.submit(alice, tx1)
@@ -87,17 +95,17 @@ class ExampleTest(MintlayerTestFramework):
             ],
             outputs=[
                 utxo.Output(
-                    value=30,
+                    value=30 * COIN,
                     destination=utxo.DestPubkey(alice.public_key),
                     data=None
                 ),
                 utxo.Output(
-                    value=20,
+                    value=15 * COIN,
                     destination=utxo.DestPubkey(bob.public_key),
                     data=None
                 ),
             ]
-        ).sign(bob, tx1.outputs)
+        ).sign(bob, [tx1.outputs[0]])
         client.submit(bob, tx2)
 
 

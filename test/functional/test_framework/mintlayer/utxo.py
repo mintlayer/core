@@ -111,6 +111,7 @@ class Client():
             return (receipt.extrinsic_hash, receipt.block_hash, receipt.triggered_events)
         except SubstrateRequestException as e:
             self.log.debug("Failed to send: {}".format(e))
+            raise e
 
     """ Submit a transaction onto the blockchain: unlock """
     def unlock_request_for_withdrawal(self, keypair):

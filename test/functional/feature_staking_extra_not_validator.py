@@ -14,6 +14,7 @@ import test_framework.mintlayer.utxo as utxo
 from test_framework.test_framework import MintlayerTestFramework
 from test_framework.util import (
     assert_equal,
+    assert_raises_substrate_exception,
     connect_nodes,
     wait_until,
 )
@@ -90,7 +91,7 @@ class ExampleTest(MintlayerTestFramework):
                 ),
             ]
         ).sign(charlie_stash, [utxos[0][1]])
-        client.submit(charlie_stash, tx1)
+        assert_raises_substrate_exception(client.submit, charlie_stash, tx1)
 
         new_count = list(client.staking_count())
         # there should only be 2 count of staking, which are Alice and Bob
