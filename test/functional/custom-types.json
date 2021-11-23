@@ -13,7 +13,6 @@
 			"type": "struct",
 			"type_mapping": [
 				[ "dest_account", "AccountId" ],
-				[ "fund", "bool" ],
 				[ "input_data", "Vec<u8>" ]
 			]
 		},
@@ -32,12 +31,19 @@
 				[ "controller_account", "AccountId" ]
 			]
 		},
+		"DestinationFundPP": {
+			"type": "struct",
+			"type_mapping": [
+				[ "dest_account", "AccountId" ]
+			]
+		},
 		"Destination": {
 			"type": "enum",
 			"type_mapping": [
 				[ "Pubkey", "Pubkey" ],
 				[ "CreatePP", "DestinationCreatePP" ],
 				[ "CallPP", "DestinationCallPP" ],
+				[ "FundPP", "DestinationFundPP" ],
 				[ "ScriptHash", "H256"],
 				[ "LockForStaking", "DestinationStake" ],
 				[ "LockExtraForStaking", "DestinationStakeExtra" ]

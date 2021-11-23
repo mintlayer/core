@@ -50,6 +50,15 @@ use pp_api::ProgrammablePoolApi;
 use sp_core::{crypto::UncheckedFrom, Bytes, H256};
 use utxo_api::UtxoApi;
 
+macro_rules! set_contract_balance {
+    ($a:expr, $b:expr, $c:expr) => {
+        <ContractBalances<T>>::mutate($a, |info| {
+            info.as_mut().expect("Contract does not exist!").utxos = $b;
+            info.as_mut().expect("Contract does not exist!").funds = $c;
+        })
+    };
+}
+
 #[frame_support::pallet]
 pub mod pallet {
     use frame_support::inherent::Vec;
@@ -77,7 +86,7 @@ pub mod pallet {
     #[pallet::storage]
     #[pallet::getter(fn contract_balances)]
     pub(super) type ContractBalances<T: Config> =
-        StorageMap<_, Identity, T::AccountId, Option<ContractBalance>, ValueQuery>;
+        StorageMap<_, Identity, T::AccountId, ContractBalance>;
 
     #[pallet::event]
     #[pallet::metadata(T::AccountId = "AccountId")]
@@ -144,12 +153,20 @@ fn send_p2pk_tx<T: Config>(
     ensure!(fund_info.funds >= value, "Caller doesn't have enough funds");
     let outpoints = fund_info.utxos.iter().map(|x| x.0).collect::<Vec<H256>>();
 
-    T::Utxo::submit_c2pk_tx(caller, dest, value, &outpoints).map(|_| {
-        <ContractBalances<T>>::mutate(&caller, |info| {
-            info.as_mut().unwrap().utxos = Vec::new();
-            info.as_mut().unwrap().funds = 0;
-        });
-    })
+    // As excess funds are refunded back to the contract when the UTXO transfer
+    // has finished, the contract balance info must be reset before the transfer
+    // so that the balance map has consistent state after the C2PK transfer is done
+    //
+    // In case the call fails, i.e., there is no refunding TX, the state is reverted
+    // back to what it was before the transaction.
+    set_contract_balance!(&caller, Vec::new(), 0);
+
+    T::Utxo::submit_c2pk_tx(caller, dest, value, &outpoints).map_err(|_| {
+        set_contract_balance!(&caller, fund_info.utxos, fund_info.funds);
+        DispatchError::Other("Failed to submit C2PK transaction")
+    })?;
+
+    Ok(())
 }
 
 /// Create Contract-to-Contract transfer that allows smart contracts to
@@ -217,10 +234,10 @@ where
         // Create balance entry for the smart contract
         <ContractBalances<T>>::insert(
             res.account_id,
-            Some(ContractBalance {
+            ContractBalance {
                 funds: 0,
                 utxos: Vec::new(),
-            }),
+            },
         );
 
         Ok(())
@@ -230,24 +247,10 @@ where
         caller: &T::AccountId,
         dest: &T::AccountId,
         gas_limit: Weight,
-        utxo_hash: H256,
-        utxo_value: u128,
-        fund_contract: bool,
+        _utxo_hash: H256,
+        _utxo_value: u128,
         input_data: &Vec<u8>,
     ) -> Result<(), &'static str> {
-        // check if `dest` exist and if it does, update its balance information
-        <ContractBalances<T>>::get(&dest).ok_or("Contract doesn't exist!")?;
-        <ContractBalances<T>>::mutate(dest, |info| {
-            info.as_mut().unwrap().utxos.push((utxo_hash, utxo_value));
-        });
-
-        // only if explicitly specified, fund the contract
-        if fund_contract {
-            <ContractBalances<T>>::mutate(dest, |info| {
-                info.as_mut().unwrap().funds += utxo_value.saturated_into::<u128>();
-            });
-        }
-
         let _ = pallet_contracts::Pallet::<T>::bare_call(
             caller.clone(),
             dest.clone(),
@@ -263,6 +266,17 @@ where
         })?;
 
         Ok(())
+    }
+
+    fn fund(dest: &T::AccountId, utxo_hash: H256, utxo_value: u128) -> Result<(), &'static str> {
+        <ContractBalances<T>>::try_mutate(dest, |res| match res {
+            Some(info) => {
+                info.funds = info.funds.checked_add(utxo_value).ok_or("Contract fund overflow")?;
+                info.utxos.push((utxo_hash, utxo_value));
+                Ok(())
+            }
+            None => Err("Contract does not exist"),
+        })
     }
 }
 

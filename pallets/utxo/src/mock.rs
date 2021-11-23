@@ -100,8 +100,15 @@ impl<T: SysConfig> ProgrammablePoolApi for MockPool<T> {
         _gas_limit: Weight,
         _utxo_hash: H256,
         _utxo_value: u128,
-        _fund_contract: bool,
         _input_data: &Vec<u8>,
+    ) -> Result<(), &'static str> {
+        Ok(())
+    }
+
+    fn fund(
+        _dest: &Self::AccountId,
+        _utxo_hash: H256,
+        _utxo_value: u128,
     ) -> Result<(), &'static str> {
         Ok(())
     }

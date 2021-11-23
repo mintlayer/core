@@ -265,9 +265,10 @@ pub mod pallet {
         Pubkey(sr25519::Public),
         /// Pay to fund a new programmable pool. Takes code and data.
         CreatePP(Vec<u8>, Vec<u8>),
-        /// Pay to an existing contract. Takes a destination account,
-        /// whether the call funds the contract, and input data.
-        CallPP(AccountId, bool, Vec<u8>),
+        /// Pay to an existing contract. Takes a destination account and input data
+        CallPP(AccountId, Vec<u8>),
+        /// Fund an existing contract
+        FundPP(AccountId),
         /// Pay to script hash
         ScriptHash(H256),
         /// First attempt of staking.
@@ -377,15 +378,18 @@ pub mod pallet {
         }
 
         /// Create a new output to call a smart contract routine.
-        pub fn new_call_pp(
-            value: Value,
-            dest_account: AccountId,
-            fund: bool,
-            input: Vec<u8>,
-        ) -> Self {
+        pub fn new_call_pp(value: Value, dest_account: AccountId, input: Vec<u8>) -> Self {
             Self {
                 value,
-                destination: Destination::CallPP(dest_account, fund, input),
+                destination: Destination::CallPP(dest_account, input),
+                data: None,
+            }
+        }
+
+        pub fn new_fund_pp(value: Value, dest_account: AccountId) -> Self {
+            Self {
+                value,
+                destination: Destination::FundPP(dest_account),
                 data: None,
             }
         }
@@ -581,20 +585,11 @@ pub mod pallet {
         dest: &T::AccountId,
         utxo_hash: H256,
         utxo_value: u128,
-        fund_contract: bool,
         data: &Vec<u8>,
     ) -> Result<(), &'static str> {
         let weight: Weight = 6000000000;
 
-        T::ProgrammablePool::call(
-            caller,
-            dest,
-            weight,
-            utxo_hash,
-            utxo_value,
-            fund_contract,
-            data,
-        )
+        T::ProgrammablePool::call(caller, dest, weight, utxo_hash, utxo_value, data)
     }
 
     pub fn validate_transaction<T: Config>(
@@ -945,9 +940,13 @@ pub mod pallet {
                     ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
                     log::info!("TODO validate CreatePP as output");
                 }
-                Destination::CallPP(_, _, _) => {
+                Destination::CallPP(_, _) => {
                     ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
                     log::info!("TODO validate CallPP as output");
+                }
+                Destination::FundPP(_) => {
+                    ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
+                    log::info!("TODO validate FundPP as output");
                 }
                 Destination::Pubkey(_) | Destination::ScriptHash(_) => {
                     ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
@@ -1037,7 +1036,10 @@ pub mod pallet {
                     Destination::CreatePP(_, _) => {
                         log::info!("TODO validate spending of OP_CREATE");
                     }
-                    Destination::CallPP(_, _, _) => {
+                    Destination::CallPP(_, _) => {
+                        log::info!("TODO validate spending of CallPP");
+                    }
+                    Destination::FundPP(_) => {
                         // 32-byte hash + 1 byte length
                         ensure!(
                             input.witness.len() == 33,
@@ -1148,10 +1150,15 @@ pub mod pallet {
                     <UtxoStore<T>>::insert(hash, output);
                     create::<T>(caller, script, hash, output.value, &data)?;
                 }
-                Destination::CallPP(acct_id, fund, data) => {
+                Destination::CallPP(acct_id, data) => {
                     log::debug!("inserting to UtxoStore {:?} as key {:?}", output, hash);
                     <UtxoStore<T>>::insert(hash, output);
-                    call::<T>(caller, acct_id, hash, output.value, *fund, data)?;
+                    call::<T>(caller, acct_id, hash, output.value, data)?;
+                }
+                Destination::FundPP(acct_id) => {
+                    log::debug!("inserting to UtxoStore {:?} as key {:?}", output, hash);
+                    <UtxoStore<T>>::insert(hash, output);
+                    T::ProgrammablePool::fund(acct_id, hash, output.value)?;
                 }
                 Destination::LockForStaking { .. } => {
                     staking::lock_for_staking::<T>(hash, output)?;
@@ -1380,8 +1387,9 @@ impl<T: Config> crate::Pallet<T> {
 
 fn construct_inputs<T: Config>(
     outpoints: &Vec<H256>,
-) -> Result<Vec<TransactionInput>, DispatchError> {
+) -> Result<(u128, Vec<TransactionInput>), DispatchError> {
     let mut inputs: Vec<TransactionInput> = Vec::new();
+    let mut total_value = 0u128;
 
     let mut outpoints = outpoints.clone();
     outpoints.sort();
@@ -1389,7 +1397,8 @@ fn construct_inputs<T: Config>(
     for outpoint in outpoints.iter() {
         let tx = <UtxoStore<T>>::get(&outpoint).ok_or("UTXO doesn't exist!")?;
         match tx.destination {
-            Destination::CallPP(_, _, _) => {
+            Destination::FundPP(_) => {
+                total_value = total_value.checked_add(tx.value).ok_or("total value overflow")?;
                 inputs.push(TransactionInput::new_script(
                     *outpoint,
                     Builder::new().into_script(),
@@ -1407,7 +1416,35 @@ fn construct_inputs<T: Config>(
         }
     }
 
-    Ok(inputs)
+    Ok((total_value, inputs))
+}
+
+fn submit_c2x_tx<T: Config>(
+    caller: &T::AccountId,
+    inputs: &Vec<H256>,
+    outpoint: TransactionOutputFor<T>,
+) -> Result<(), DispatchError> {
+    let (total_value, vins) = construct_inputs::<T>(inputs)?;
+    let mut vouts: Vec<TransactionOutputFor<T>> = vec![outpoint];
+
+    // if there are funds left over from the C2X transfer rest back to the contract
+    if total_value > vouts[0].value {
+        vouts.push(TransactionOutput::new_fund_pp(
+            total_value - vouts[0].value,
+            caller.clone(),
+        ));
+    }
+
+    spend::<T>(
+        caller,
+        &Transaction {
+            inputs: vins,
+            outputs: vouts,
+            time_lock: Default::default(),
+        },
+    )
+    .map_err(|_| "Failed to spend the transaction!")?;
+    Ok(())
 }
 
 impl<T: Config> UtxoApi for Pallet<T>
@@ -1452,14 +1489,11 @@ where
         let pubkey_raw: [u8; 32] =
             dest.encode().try_into().map_err(|_| "Failed to get caller's public key")?;
 
-        let tx = Transaction {
-            inputs: construct_inputs::<T>(outpoints)?,
-            outputs: vec![TransactionOutput::new_pubkey(value, H256::from(pubkey_raw))],
-            time_lock: Default::default(),
-        };
-
-        spend::<T>(caller, &tx).map_err(|_| "Failed to spend the transaction!")?;
-        Ok(())
+        submit_c2x_tx::<T>(
+            caller,
+            outpoints,
+            TransactionOutput::new_pubkey(value, H256::from(pubkey_raw)),
+        )
     }
 
     fn submit_c2c_tx(
@@ -1469,13 +1503,10 @@ where
         data: &Vec<u8>,
         outpoints: &Vec<H256>,
     ) -> Result<(), DispatchError> {
-        let tx = Transaction {
-            inputs: construct_inputs::<T>(outpoints)?,
-            outputs: vec![TransactionOutput::new_call_pp(value, dest.clone(), true, data.clone())],
-            time_lock: Default::default(),
-        };
-
-        spend::<T>(caller, &tx).map_err(|_| "Failed to spend the transaction!")?;
-        Ok(())
+        submit_c2x_tx::<T>(
+            caller,
+            outpoints,
+            TransactionOutput::new_call_pp(value, dest.clone(), data.clone()),
+        )
     }
 }
