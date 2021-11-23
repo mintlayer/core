@@ -216,7 +216,7 @@ Make sure the _Option<H256>_ input box is still empty, then click the **+** butt
 4. In node's [chain_spec.rs](https://github.com/mintlayer/mintlayer-node/blob/master/node/src/chain_spec.rs):  
 4.1. Import the ff:
    ```rust 
-   use node_template_runtime::{UtxoConfig, pallet_utxo};
+   use mintlayer_runtime::{UtxoConfig, pallet_utxo};
    use sp_core:H256;
    ```
    4.2. add one more param on function `testnet_genesis()`: 
@@ -259,7 +259,7 @@ Make sure the _Option<H256>_ input box is still empty, then click the **+** butt
 6. Go back to the workspace directory `$> cd ..` and run:
    ```bash
     RUST_LOG=runtime=debug 
-    target/release/node-template benchmark 
+    target/release/mintlayer-core benchmark 
     --chain dev 
     --execution=wasm 
     --wasm-execution=compiled 
