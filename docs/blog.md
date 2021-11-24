@@ -12,27 +12,19 @@ At a glance, Mintlayer offers:
 - Fully interoperablity with bitcoin and the lightning network
 - Formidable security and privacy features
 
-
-**TODO** I think these are "lower level" and should not be mentioned in the "At a glance bullets" - Ben, what do you think? I have difficult time selling chainscript in a one-liner.
-
-- Chainscript - Mintlayer's superset of Bitcoin script
-- A UTXO based transaction model, reminiscent of Bitcoin's
-
-
-
 ## Native tokenization ##:
 
-**TODO** How to mention the native MLT token? What is its role?
+Mintlayer's native token, MLT, is used for staking and for paying transaction fees.
 
-Minting your token on Mintlayer is as easy as submitting a transaction. No smart contract is required!
+In addition, minting your own token on Mintlayer is as easy as submitting a transaction. No smart contract is required!
 
 **TODO** Why is ease of minting important? I'd like to articulate a bit more on this 
 
 **TODO** insert Anton's example - Ben, has he sent it yet?:
 
-Currently, there are three types of tokens that can be issued on Mintlayer (**TODO** I think it is friendlier (more concrete) to say "types tokens" than "token standards". But maybe the novice in me is being nitpicky):
+Currently, there are three types of tokens that can be issued on Mintlayer:
 - **MLS-01**: "normal" tokens, akin to ERC-20 tokens on Ethererum
-- **MLS-02**: confidential tokens (**TODO** Ben, let's have a chat about these as I do not entirely understand what they are. In particular I want to understand what it means that these tokens "do not rely on BLS for signature aggregation" - what is BLS? Let's talk about it)"
+- **MLS-02**: confidential tokens, whose transactions are not publicly available on the blockchain (**TODO** I want to understand these better, also in relation to BLS)
 - **MLS-03**: NFTs  (**TODO** need I say more? Everyone knows about these)
 
 ## WebAssembly Smart Contracts ##
@@ -49,21 +41,37 @@ Developers versed in Ethereum will probably feel most at home coding smart contr
 
 ## Full Interoperability with the Bitcoin ecosystem
 
-**TODO** What does interoperablity/compatibility with Bitcoin really mean? 
-
-- Mintlayer supports atomic swaps with Bitcoin
+- Mintlayer supports atomic swaps with Bitcoin without the need for an intermediary (**TODO** anything else to say here?).
 
 ## Formidable security, privacy, and performance inspired by Bitcoin ##
 
 For transactions Mintlayer uses a UTXO (Unspent Transaction Output) system, reminiscent of Bitcoin's. This means that there is no notion of "account" in Mintlayer as there is in blockchains such as Ethereum (**TODO** add other examples so it's not just Ethereum). Instead, the blockchain keeps a database of transactions with source and destination addresses (**TODO** this feels to me poorly phrased from a technical standpoint - Ben help). This comes with several advantages. From a privacy perspective, this allows to derive unique destination addresses for each transactions, which makes chain analysis much more difficult (**TODO** maybe include an example of what we mean by chain analysis). From a resource management perspective, this allows source and destination addresses to be included in a single transaction, which improves performance and saves space on the blockchain. (**TODO** is this true?).
 Each Mintlayer block references a bitcoin block. (**TODO** what are the implications of this? What kind of attacks does this prevent? Does this give us anything else under the category of interoperablity?)
 
-In addition, Mintlayer uses implements Chainscript, its own implementation of Bitcoin script. Here is an example of [**insert description**] using Chainscript:
+In addition, Mintlayer implements Chainscript, its own scripting language and a superset Bitcoin script. Much like Bitcoin script, Chainscript allows customization of spending conditions on funds transferred from one user to another, and can also be used for simple smart contracts.
 
-**TODO** insert one of the examples Lukas gave me
+For example, suppose Alice wants to send Bob some money provided he is able to produce a secret password picked by Alice. Alice wants to be able to take the funds back if Bob is unable or unwilling to produce the password within 2 days. In Chainscript, these conditions are expressed by:
 
-**TODO** is it accurate to  call Chainscript our IMPLEMENTATION of Bitcoin script? There are some differences, I understood from Lukas. But he also said that in principle any Bitcoin script should be able to execute properly on the Chainscript interpretrer.
+```
+OP_IF
+  OP_SHA256 <SHA256_OF_PASSWORD> OP_EQUALVERIFY <Bob_PK> OP_CHECKSIG
+OP_ELSE
+  <T+2days> OP_CHECKLOCKTIMEVERIFY OP_DROP <Alice_PK> OP_CHECKSIG
+OP_ENDIF
+
+```
+where `<T+2days>` where  represents the Unix timestamp two days from now.
+
+This script can be redeemed by Bob:
+```
+<Bob_SIG> <PASSWORD> 1
+```
+
+or by Alice, after two days have elapsed:
+```
+<Alice_SIG> 0
+```
 
 In addition to offering simplicity, Chainscript eliminates entire classes of security issues. For example, the absence of loops in Chainscript renders DoS (Denial of Service) attacks impossible.
 
-Furthermore, the stack-based execution model of Chainscript ensures that the time and processing resources necessary to execute a script is proportional to the size of the script, which in turn removes the need for gas fees (**TODO** couldn't someone in theory spam us with a really long Chainscript script?).
+Furthermore, the stack-based execution model of Chainscript ensures that the time and processing resources necessary to execute a script is proportional to the size of the script. As the maximum valid size for a script is bounded, so are the resources needed to execute it. In this way, the need for gas fees is eliminated in the case of simple (Chainscriptli )smart contracts.
