@@ -1,5 +1,4 @@
-
-# RUNNING
+# Running
 
 ## Quick start 
 Binaries can be found [here](https://github.com/mintlayer/core/releases).
@@ -162,11 +161,10 @@ If you want to save the blockchain to host, run:
 docker run -v ~/ml-blockchain:/tmp/ml-core -t mintlayer-core
 ```
 
-
 ## Create a chain specification
 
-In the preceding example, we used `--chain local` which is a predefined "chain spec" that has Alice and Bob specified as validators along with many other useful defaults.
-In this example we will create a two-node network using our own custom chain specification. The process generalizes to more nodes in a straightforward manner.
+In the preceding example, we used `--chain=Testnet1Spec.json` which is a predefined chain spec provided by Mintlayer.
+In this example we will create a network using our own custom chain specification.
 
 Rather than writing our chain spec completely from scratch, we'll just make a few modifications to
 the one we used before. To start, we need to export the chain spec to a file named
@@ -242,7 +240,71 @@ the proper storage keys.
 
 Finally share the `customSpecRaw.json` with your all the other validators in the network.
 
-**Note**: Because Rust -> Wasm optimized builds aren't reproducible, each person will get a slightly different Wasm blob which will break consensus if each participant generates the file themselves.For the curious, learn more about this issue in [this blog post](https://dev.to/gnunicorn/hunting-down-a-non-determinism-bug-in-our-rust-wasm-build-4fk1).
+**Note**: Because Rust -> Wasm optimized builds aren't reproducible, each person will get a slightly different Wasm blob which will break consensus if each participant generates the file themselves. For the curious, learn more about this issue in [this blog post](https://dev.to/gnunicorn/hunting-down-a-non-determinism-bug-in-our-rust-wasm-build-4fk1).
+
+### Connect with Polkadot-JS Apps Front-end
+
+Once the node is running locally, you can connect it to the **Polkadot-JS Apps** front-end
+to interact with your chain. [Click here](https://polkadot.js.org/apps/#/explorer?rpc=ws://localhost:9944) to connect your node.
+
+## Project Structure
+
+### Node
+
+- Networking: Mintlayer uses [libp2p](https://libp2p.io/) as its native networking stack for all inter-node communication.
+- Bootnodes: Mintlayer has [bootnodes](https://github.com/mintlayer/core/blob/master/assets/bootnodes.json) that a new node will attempt to connect to, unless a specific node is specified by the user.
+- Consensus: Mintlayer uses [AURA](https://docs.rs/sc-consensus-aura/0.9.0/sc_consensus_aura/) as its base consensus algorithm for the time being. There will be an update to introduce [DSA](https://www.mintlayer.org/docs/DSA-consensus-paper-draft.pdf) in the future. 
+- Finality: Since we are using AURA for consensus, we currently rely on [GRANDPA](https://docs.rs/sc-finality-grandpa/0.9.0/sc_finality_grandpa/) for finality.
+- Chain Spec: You can find our chain specification in [chain_spec.rs](https://github.com/mintlayer/core/blob/master/node/src/chain_spec.rs). It defines the basics of the chain such as the genesis block and the bootnodes.
+- Services: [service.rs](https://github.com/mintlayer/core/blob/master/node/src/service.rs) defines the node implementation itself. It is here you'll find the consensus setup.
+
+### Runtime
+
+For more information on what a [runtime](https://substrate.dev/docs/en/knowledgebase/getting-started/glossary#runtime) is follow the link.
+Code in the runtime must be written in `no_std` Rust since it compiles to Wasm.
+
+- lib.rs: The main file in Mintlayer's runtime. Here you'll find the Mintlayer-specific code for block production such as the block production period.
+- staking.rs: Mintlayer's staking implementation.
+
+
+### Pallets
+
+Mintlayer relies on a host of Substrate pallets as well as a few Mintlayer-specific pallets:
+-   pp: The implementation of programmable pools on Mintlayer. These are essentially Wasm smart contracts.
+-   utxo: Mintlayer's UTXO system.
+
+### Libs
+
+The `libs` is home to code that Mintlayer relies on but isn't technically a pallet:
+-   chainscript: Mintlayer's Bitcoin script implementation.
+-   bech32: code for handling transactions with destinations encoded using bech32
+
+### Testing
+
+Unit tests for particular modules are scattered throughout the codebase.
+The `test` directory is home to Mintlayer's functional test framework, which includes system-level tests. Heavily based on Bitcoin's functional test framework.
+
+### Crypto
+Currently, Mintlayer uses Schnorr signatures for crypto-related needs. We plan to move to our BLS implementation in the near future.
+
+### Contributing
+[See this guide](https://github.com/mintlayer/core/blob/master/CONTRIBUTING.md)
+
+### Branches
+The key branches of this repository are `master` and `staging`.
+
+`staging` is used as the development branch, while  `master` is used for fully tested.
+
+To submit a fix or a feature, code your changes on a new branch based on `staging` and create a pull request. This will trigger CI checks and notify the Minlayer team that a new pull request is awaiting review. Once all CI checks have passed and the pull request has been reviewed and approved by a member of the Mintlayer team, the pull request can be merged into `staging`.
+
+Periodically, the Mintlayer team will merge `staging` into `master`.
+Only a select few members of the Mintlayer team have push access to `master`
+
+## Security issues
+If you find an issue related to the security of Mintlayer then please contact us at security@mintlayer.org so we can address the issue. Mintlayer has a [bug bounty program](https://www.mintlayer.org/bug-bounties) so if your security issue is valid you are elligble for a reward paid in MLT. Do not disclose the security issue publicly until the core Mintlayer team has agreed the issue can be disclosed. See [SECURITY.md](https://github.com/mintlayer/core/blob/master/SECURITY.md) for more info.
+
+## Bugs
+Non-security related bugs should be opened as [issues](https://github.com/mintlayer/core/issues/new) in the core Mintlayer repo. Give as much detail as possible. If you want to fix a bug then see our guidelines for [contributing](https://github.com/mintlayer/core/blob/master/CONTRIBUTING.md).
 
 ## Firewall rules
 
