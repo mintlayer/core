@@ -25,7 +25,7 @@ In addition, minting your own token on Mintlayer is as easy as submitting a tran
 Currently, there are three types of tokens that can be issued on Mintlayer:
 - **MLS-01**: "normal" tokens, akin to ERC-20 tokens on Ethererum
 - **MLS-02**: confidential tokens, whose transactions are not publicly available on the blockchain (**TODO** I want to understand these better, also in relation to BLS)
-- **MLS-03**: NFTs  (**TODO** need I say more? Everyone knows about these)
+- **MLS-03**: NFTs
 
 ## WebAssembly Smart Contracts ##
 
@@ -41,12 +41,16 @@ Developers versed in Ethereum will probably feel most at home coding smart contr
 
 ## Full Interoperability with the Bitcoin ecosystem
 
-- Mintlayer supports atomic swaps with Bitcoin without the need for an intermediary (**TODO** anything else to say here?).
+- Mintlayer supports atomic swaps with Bitcoin without the need for an intermediary (**TODO** still supported? anything else to say here?).
 
-## Formidable security, privacy, and performance inspired by Bitcoin ##
+## Formidable security, privacy, and performance ##
 
-For transactions Mintlayer uses a UTXO (Unspent Transaction Output) system, reminiscent of Bitcoin's. This means that there is no notion of "account" in Mintlayer as there is in blockchains such as Ethereum (**TODO** add other examples so it's not just Ethereum). Instead, the blockchain keeps a database of transactions with source and destination addresses (**TODO** this feels to me poorly phrased from a technical standpoint - Ben help). This comes with several advantages. From a privacy perspective, this allows to derive unique destination addresses for each transactions, which makes chain analysis much more difficult (**TODO** maybe include an example of what we mean by chain analysis). From a resource management perspective, this allows source and destination addresses to be included in a single transaction, which improves performance and saves space on the blockchain. (**TODO** is this true?).
-Each Mintlayer block references a bitcoin block. (**TODO** what are the implications of this? What kind of attacks does this prevent? Does this give us anything else under the category of interoperablity?)
+## UTXO System 
+
+For transactions Mintlayer uses a UTXO (Unspent Transaction Output) system, reminiscent of Bitcoin's. This means that there is no notion of "account" in Mintlayer as there is in blockchains such as Ethereum (**TODO** add other examples so it's not just Ethereum). Instead, the blockchain keeps a database of transactions with source and destination addresses (**TODO** this feels to me poorly phrased from a technical standpoint - Ben help). This comes with several advantages. From a privacy perspective, this allows to derive unique destination addresses for each transaction, which makes chain analysis much more difficult (**TODO** maybe include an example of what we mean by chain analysis). From a resource management perspective, this allows multiple source and destination addresses to be included in a single transaction, which improves performance and saves space on the blockchain. (**TODO** is this true?).
+Each Mintlayer block references a bitcoin block. (**TODO** what are the implications of this? What kind of attacks does this prevent? Does this give us anything else under the category of interoperablity? Still true after ditching substrate?)
+
+## Chainscript
 
 In addition, Mintlayer implements Chainscript, its own scripting language and a superset Bitcoin script. Much like Bitcoin script, Chainscript allows customization of spending conditions on funds transferred from one user to another, and can also be used for simple smart contracts.
 
@@ -74,4 +78,6 @@ or by Alice, after two days have elapsed:
 
 In addition to offering simplicity, Chainscript eliminates entire classes of security issues. For example, the absence of loops in Chainscript renders DoS (Denial of Service) attacks impossible.
 
-Furthermore, the stack-based execution model of Chainscript ensures that the time and processing resources necessary to execute a script is proportional to the size of the script. As the maximum valid size for a script is bounded, so are the resources needed to execute it. In this way, the need for gas fees is eliminated in the case of simple (Chainscriptli )smart contracts.
+Furthermore, the stack-based execution model of Chainscript ensures that the time and processing resources necessary to execute a script is proportional to the size of the script. As the maximum valid size for a script is bounded, so are the resources needed to execute it. In this way, the need for gas fees is eliminated in the case of simple (Chainscript) smart contracts.
+
+## BLS Signatures
