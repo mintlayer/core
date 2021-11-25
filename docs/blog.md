@@ -2,20 +2,17 @@
 
 Mintlayer combines combines the best features of different chains in a novel way.
 
-**TODO** Order of the items?
-
 At a glance, Mintlayer offers:
 
 - Native tokenization, including NFTs and confidential tokens
 - Support for WebAssembly smart contracts
+- Formidable security and privacy features, by virtue of its UTXO system and the Chainscript scripting language
 - Signature aggregation through BLS 
 - Fully interoperablity with bitcoin and the lightning network
-- Formidable security and privacy features
 
 ## Native tokenization ##:
 
-Mintlayer's native token, MLT, is used for staking and for paying transaction fees.
-
+Mintlayer's native token, MLT, is used for staking and for paying transaction fees (**TODO** not sure about the transaction fees).
 In addition, minting your own token on Mintlayer is as easy as submitting a transaction. No smart contract is required!
 
 **TODO** Why is ease of minting important? I'd like to articulate a bit more on this 
@@ -45,14 +42,25 @@ Developers versed in Ethereum will probably feel most at home coding smart contr
 
 ## Formidable security, privacy, and performance ##
 
-## UTXO System 
+### UTXO System 
 
-For transactions Mintlayer uses a UTXO (Unspent Transaction Output) system, reminiscent of Bitcoin's. This means that there is no notion of "account" in Mintlayer as there is in blockchains such as Ethereum (**TODO** add other examples so it's not just Ethereum). Instead, the blockchain keeps a database of transactions with source and destination addresses (**TODO** this feels to me poorly phrased from a technical standpoint - Ben help). This comes with several advantages. From a privacy perspective, this allows to derive unique destination addresses for each transaction, which makes chain analysis much more difficult (**TODO** maybe include an example of what we mean by chain analysis). From a resource management perspective, this allows multiple source and destination addresses to be included in a single transaction, which improves performance and saves space on the blockchain. (**TODO** is this true?).
+Similarly to Bitcoin, Mintlayer uses a UTXO (Unspent Transaction Output) system for transactions. This means that there is no notion of wallet (or account) at the chain level in Mintlayer as there is on blockchains such as Ethereum (**TODO** add other examples). Instead, the blockchain keeps a history of all transactions, where each transaction consists of a set of inputs and outputs. Every input to a transaction is the output of a previously executed transaction, and a transaction output is considered _unspent_ if it does not appear as an input in any transaction.
+
+The absence of accounts at the chain level offers privacy-related advantages. For example, wallets can implement logic allowing an end user to generate a different destination address for each transaction, while the wallet takes care of determining the user's balance by scanning the blockchain for all unspent transaction outputs and determining which outputs belong to the user. Using a different destination address for each transaction renders it far more difficult to link transactions to a specific users.
+
+Furthermore, the UTXO system also makes it relatively simple to _mix_ transactions. Commonly, this is done by means of CoinJoin, a process in which multiple inputs from different sources feed into a single transaction with several outputs having different destinations (**TODO** does this describe coinjoin or mixing more generally?). Although all inputs and outputs are stil publicly visible, it is not possible to tie any individual source address to outputs that ended up at a specific destination.
+
+From a resource management perspective, allowing multiple source and destination addresses within a single transaction improves performance and saves space on the blockchain. (**TODO** is this true? elaborate).
+
 Each Mintlayer block references a bitcoin block. (**TODO** what are the implications of this? What kind of attacks does this prevent? Does this give us anything else under the category of interoperablity? Still true after ditching substrate?)
 
-## Chainscript
+**TODO** should we mention this downside? We support smart contracts and that's it, the outside world doesn't need to know what difficulties we went through to implement them.
 
-In addition, Mintlayer implements Chainscript, its own scripting language and a superset Bitcoin script. Much like Bitcoin script, Chainscript allows customization of spending conditions on funds transferred from one user to another, and can also be used for simple smart contracts.
+The one downside to the UTXO system is that the stateless nature of a UTXO chain makes smart contract systems more difficult, it is for this reason Mintlayer will use programmable pools as a smart contract abstraction to an account based system.
+
+### Chainscript
+
+Mintlayer implements Chainscript, its own scripting language and a superset Bitcoin script. Much like Bitcoin script, Chainscript allows customization of spending conditions on funds transferred from one user to another, and can also be used for simple smart contracts.
 
 For example, suppose Alice wants to send Bob some money provided he is able to produce a secret password picked by Alice. Alice wants to be able to take the funds back if Bob is unable or unwilling to produce the password within 2 days. In Chainscript, these conditions are expressed by:
 
