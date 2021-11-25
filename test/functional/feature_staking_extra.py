@@ -91,13 +91,15 @@ class ExampleTest(MintlayerTestFramework):
                 )
             ]
         ).sign(alice_stash, [utxos[0][1]])
-        (_,_,events) = client.submit(alice_stash, tx1)
+        (_, block_hash, _events) = client.submit(alice_stash, tx1)
 
-        assert_equal(events[0].value['module_id'],'Staking')
-        assert_equal(events[0].value['event_id'], 'Bonded')
+        events = client.substrate.get_events(block_hash = block_hash)
 
-        assert_equal(events[1].value['module_id'],'Utxo')
-        assert_equal(events[1].value['event_id'], 'TransactionSuccess')
+        assert_equal(events[1].value['module_id'],'Staking')
+        assert_equal(events[1].value['event_id'], 'Bonded')
+
+        assert_equal(events[2].value['module_id'],'Utxo')
+        assert_equal(events[2].value['event_id'], 'TransactionSuccess')
 
         # Get Alice stash
         new_count = list(client.get_staking_count(alice_stash))[0][1]

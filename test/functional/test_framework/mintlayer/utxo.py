@@ -96,14 +96,16 @@ class Client():
         return self.staking.withdrawal_era(keypair)
 
     def submit_extrinsic(self, extrinsic):
+        extrinsic.extrinsic_hash = extrinsic.generate_hash()
         def result_handler(message, update_nr, sub_id):
+            print('Msg:', message)
             if 'params' in message and type(message['params']['result']) is dict:
                 res = message['params']['result']
                 if 'inBlock' in res:
                     return substrateinterface.ExtrinsicReceipt(
                         substrate = self.substrate,
                         block_hash = res['inBlock'],
-                        extrinsic_hash = "Unknown"
+                        extrinsic_hash = '0x{}'.format(extrinsic.extrinsic_hash)
                     )
 
         result = self.substrate.rpc_request(
@@ -122,12 +124,12 @@ class Client():
             call_params = { 'tx': tx.json() },
         )
         extrinsic = self.substrate.create_unsigned_extrinsic(call=call)
-        self.log.debug("extrinsic submitted...")
 
         try:
+            self.log.debug("Submitting extrinsic")
             receipt = self.submit_extrinsic(extrinsic)
             self.log.debug("Extrinsic '{}' sent and included in block '{}'".format(receipt.extrinsic_hash, receipt.block_hash))
-            return (receipt.extrinsic_hash, receipt.block_hash, [])
+            return (receipt.extrinsic_hash, receipt.block_hash, None)
         except SubstrateRequestException as e:
             self.log.debug("Failed to send: {}".format(e))
             raise e
