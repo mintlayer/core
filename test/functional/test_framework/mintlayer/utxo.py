@@ -95,6 +95,27 @@ class Client():
     def withdrawal_era(self, keypair):
         return self.staking.withdrawal_era(keypair)
 
+    def submit_extrinsic(self, extrinsic):
+        extrinsic.extrinsic_hash = extrinsic.generate_hash()
+        def result_handler(message, update_nr, sub_id):
+            print('Msg:', message)
+            if 'params' in message and type(message['params']['result']) is dict:
+                res = message['params']['result']
+                if 'inBlock' in res:
+                    return substrateinterface.ExtrinsicReceipt(
+                        substrate = self.substrate,
+                        block_hash = res['inBlock'],
+                        extrinsic_hash = '0x{}'.format(extrinsic.extrinsic_hash)
+                    )
+
+        result = self.substrate.rpc_request(
+            "author_submitAndWatchExtrinsic",
+            [str(extrinsic.data)],
+            result_handler=result_handler
+        )
+
+        return result
+
     """ Submit a transaction onto the blockchain """
     def submit(self, keypair, tx):
         call = self.substrate.compose_call(
@@ -102,13 +123,13 @@ class Client():
             call_function = 'spend',
             call_params = { 'tx': tx.json() },
         )
-        extrinsic = self.substrate.create_signed_extrinsic(call=call, keypair=keypair)
-        self.log.debug("extrinsic submitted...")
+        extrinsic = self.substrate.create_unsigned_extrinsic(call=call)
 
         try:
-            receipt = self.substrate.submit_extrinsic(extrinsic, wait_for_inclusion=True)
+            self.log.debug("Submitting extrinsic")
+            receipt = self.submit_extrinsic(extrinsic)
             self.log.debug("Extrinsic '{}' sent and included in block '{}'".format(receipt.extrinsic_hash, receipt.block_hash))
-            return (receipt.extrinsic_hash, receipt.block_hash, receipt.triggered_events)
+            return (receipt.extrinsic_hash, receipt.block_hash, None)
         except SubstrateRequestException as e:
             self.log.debug("Failed to send: {}".format(e))
             raise e

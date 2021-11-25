@@ -1089,7 +1089,6 @@ pub mod pallet {
     /// Update storage to reflect changes made by transaction
     /// Where each utxo key is a hash of the entire transaction and its order in the TransactionOutputs vector
     pub fn update_storage<T: Config>(
-        caller: &T::AccountId,
         tx: &TransactionFor<T>,
         reward: Value,
     ) -> DispatchResultWithPostInfo {
@@ -1143,15 +1142,15 @@ pub mod pallet {
                         Some(OutputData::TokenTransferV1 { .. }) | None => continue,
                     }
                 }
-                Destination::CreatePP(script, data) => {
-                    log::debug!("inserting to UtxoStore {:?} as key {:?}", output, hash);
-                    <UtxoStore<T>>::insert(hash, output);
-                    create::<T>(caller, script, hash, output.value, &data)?;
+                Destination::CreatePP(_script, _data) => {
+                    //log::debug!("inserting to UtxoStore {:?} as key {:?}", output, hash);
+                    //<UtxoStore<T>>::insert(hash, output);
+                    //create::<T>(caller, script, hash, output.value, &data)?;
                 }
-                Destination::CallPP(acct_id, fund, data) => {
-                    log::debug!("inserting to UtxoStore {:?} as key {:?}", output, hash);
-                    <UtxoStore<T>>::insert(hash, output);
-                    call::<T>(caller, acct_id, hash, output.value, *fund, data)?;
+                Destination::CallPP(_acct_id, _fund, _data) => {
+                    //log::debug!("inserting to UtxoStore {:?} as key {:?}", output, hash);
+                    //<UtxoStore<T>>::insert(hash, output);
+                    //call::<T>(caller, acct_id, hash, output.value, *fund, data)?;
                 }
                 Destination::LockForStaking { .. } => {
                     staking::lock_for_staking::<T>(hash, output)?;
@@ -1166,12 +1165,11 @@ pub mod pallet {
     }
 
     pub fn spend<T: Config>(
-        caller: &T::AccountId,
         tx: &TransactionFor<T>,
     ) -> DispatchResultWithPostInfo {
         let tx_validity = validate_transaction::<T>(tx)?;
         ensure!(tx_validity.requires.is_empty(), "missing inputs");
-        update_storage::<T>(caller, tx, tx_validity.priority as Value)?;
+        update_storage::<T>(tx, tx_validity.priority as Value)?;
         Ok(().into())
     }
 
@@ -1218,7 +1216,8 @@ pub mod pallet {
             origin: OriginFor<T>,
             tx: Transaction<T::AccountId>,
         ) -> DispatchResultWithPostInfo {
-            spend::<T>(&ensure_signed(origin)?, &tx)?;
+            ensure_none(origin)?;
+            spend::<T>(&tx)?;
             Self::deposit_event(Event::<T>::TransactionSuccess(tx));
             Ok(().into())
         }
@@ -1287,7 +1286,7 @@ pub mod pallet {
                     .ok_or(DispatchError::Other("Failed to sign the transaction"))?;
             }
 
-            spend::<T>(&signer, &tx)
+            spend::<T>(&tx)
         }
 
         /// unlock the stake using the STASH ACCOUNT. Stops validating, and allow access to withdraw.
@@ -1417,14 +1416,13 @@ where
     type AccountId = T::AccountId;
 
     fn spend(
-        caller: &T::AccountId,
+        _caller: &T::AccountId,
         value: u128,
         address: H256,
         utxo: H256,
         sig: H512,
     ) -> DispatchResultWithPostInfo {
         spend::<T>(
-            caller,
             &Transaction {
                 inputs: vec![TransactionInput::new_with_signature(utxo, sig)],
                 outputs: vec![TransactionOutputFor::<T>::new_pubkey(value, address)],
@@ -1444,7 +1442,7 @@ where
     }
 
     fn submit_c2pk_tx(
-        caller: &T::AccountId,
+        _caller: &T::AccountId,
         dest: &T::AccountId,
         value: u128,
         outpoints: &Vec<H256>,
@@ -1458,12 +1456,12 @@ where
             time_lock: Default::default(),
         };
 
-        spend::<T>(caller, &tx).map_err(|_| "Failed to spend the transaction!")?;
+        spend::<T>(&tx).map_err(|_| "Failed to spend the transaction!")?;
         Ok(())
     }
 
     fn submit_c2c_tx(
-        caller: &Self::AccountId,
+        _caller: &Self::AccountId,
         dest: &Self::AccountId,
         value: u128,
         data: &Vec<u8>,
@@ -1475,7 +1473,7 @@ where
             time_lock: Default::default(),
         };
 
-        spend::<T>(caller, &tx).map_err(|_| "Failed to spend the transaction!")?;
+        spend::<T>(&tx).map_err(|_| "Failed to spend the transaction!")?;
         Ok(())
     }
 }

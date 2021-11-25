@@ -99,8 +99,8 @@ fn test_script_preimage() {
             time_lock: Default::default(),
         };
 
-        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx1));
-        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx2));
+        assert_ok!(Utxo::spend(Origin::none(), tx1));
+        assert_ok!(Utxo::spend(Origin::none(), tx2));
     })
 }
 
@@ -131,7 +131,7 @@ fn test_unchecked_2nd_output() {
         UtxoStore::<Test>::insert(utxo1_hash, &tx1.outputs[1]);
         // When adding a transaction, the output should be reported as already present.
         assert_err!(
-            Utxo::spend(Origin::signed(H256::zero()), tx1),
+            Utxo::spend(Origin::none(), tx1),
             "output already exists"
         );
     })
@@ -156,7 +156,7 @@ fn test_simple_tx() {
 
         let (_, init_utxo) = genesis_utxo();
         assert!(UtxoStore::<Test>::contains_key(H256::from(init_utxo)));
-        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx));
+        assert_ok!(Utxo::spend(Origin::none(), tx));
         assert!(!UtxoStore::<Test>::contains_key(H256::from(init_utxo)));
         assert!(UtxoStore::<Test>::contains_key(new_utxo_hash));
         assert_eq!(
@@ -181,7 +181,7 @@ fn attack_with_sending_to_own_account() {
         tx.inputs[0].witness = karl_sig.0.to_vec();
 
         assert_noop!(
-            Utxo::spend(Origin::signed(H256::zero()), tx),
+            Utxo::spend(Origin::none(), tx),
             "missing inputs"
         );
     });
@@ -193,13 +193,13 @@ fn attack_with_empty_transactions() {
         // We should use the real input because. Otherwise, appears another error
         let (_, input) = tx_input_gen_no_signature();
         assert_err!(
-            Utxo::spend(Origin::signed(H256::zero()), Transaction::default()), // empty tx
+            Utxo::spend(Origin::none(), Transaction::default()), // empty tx
             "no inputs"
         );
 
         assert_err!(
             Utxo::spend(
-                Origin::signed(H256::zero()),
+                Origin::none(),
                 Transaction {
                     inputs: vec![input], // an empty tx
                     outputs: vec![],
@@ -226,7 +226,7 @@ fn attack_by_double_counting_input() {
         .sign_unchecked(&utxos[..], 1, &alice_pub_key);
 
         assert_err!(
-            Utxo::spend(Origin::signed(H256::zero()), tx),
+            Utxo::spend(Origin::none(), tx),
             "each input should be used only once"
         );
     });
@@ -244,7 +244,7 @@ fn attack_with_invalid_signature() {
         };
 
         assert_err!(
-            Utxo::spend(Origin::signed(H256::zero()), tx),
+            Utxo::spend(Origin::none(), tx),
             "signature must be valid"
         );
     });
@@ -263,7 +263,7 @@ fn attack_by_permanently_sinking_outputs() {
         .sign_unchecked(&[utxo0], 0, &alice_pub_key);
 
         assert_noop!(
-            Utxo::spend(Origin::signed(H256::zero()), tx),
+            Utxo::spend(Origin::none(), tx),
             "output value must be nonzero"
         );
     });
@@ -285,7 +285,7 @@ fn attack_by_overflowing_value() {
         .sign_unchecked(&[utxo0], 0, &alice_pub_key);
 
         assert_err!(
-            Utxo::spend(Origin::signed(H256::zero()), tx),
+            Utxo::spend(Origin::none(), tx),
             "output value overflow"
         );
     });
@@ -307,7 +307,7 @@ fn attack_by_overspending() {
         .sign_unchecked(&[utxo0], 0, &alice_pub_key);
 
         assert_noop!(
-            Utxo::spend(Origin::signed(H256::zero()), tx),
+            Utxo::spend(Origin::none(), tx),
             "output value must not exceed input value"
         );
     })
@@ -334,7 +334,7 @@ fn tx_from_alice_to_karl() {
         }
         .sign_unchecked(&[utxo0], 0, &alice_pub_key);
 
-        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx.clone()));
+        assert_ok!(Utxo::spend(Origin::none(), tx.clone()));
         let new_utxo_hash = tx.outpoint(1);
         let new_utxo = tx.outputs[1].clone();
 
@@ -349,7 +349,7 @@ fn tx_from_alice_to_karl() {
         }
         .sign_unchecked(&[new_utxo], 0, &alice_pub_key);
 
-        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx));
+        assert_ok!(Utxo::spend(Origin::none(), tx));
     });
 }
 
@@ -376,7 +376,7 @@ fn test_reward() {
         }
         .sign_unchecked(&[utxo0], 0, &alice_pub_key);
 
-        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx.clone()));
+        assert_ok!(Utxo::spend(Origin::none(), tx.clone()));
         let utxo_hash = tx.outpoint(0);
 
         // if the previous spend succeeded, there should be one utxo
@@ -413,7 +413,7 @@ fn test_reward_overflow() {
         }
         .sign_unchecked(&[utxo0], 0, &alice_pub_key);
         assert_err!(
-            Utxo::spend(Origin::signed(H256::zero()), tx),
+            Utxo::spend(Origin::none(), tx),
             "reward exceed allowed amount"
         );
     })
@@ -433,7 +433,7 @@ fn test_script() {
         }
         .sign_unchecked(&[utxo0], 0, &alice_pub_key);
 
-        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx));
+        assert_ok!(Utxo::spend(Origin::none(), tx));
     })
 }
 
@@ -451,7 +451,7 @@ fn test_time_lock_tx() {
         }
         .sign_unchecked(&[utxo0], 0, &alice_pub_key);
         assert_err!(
-            Utxo::spend(Origin::signed(H256::zero()), tx),
+            Utxo::spend(Origin::none(), tx),
             "Time lock restrictions not satisfied",
         );
     })
@@ -473,7 +473,7 @@ fn test_time_lock_script_fail() {
         }
         .sign_unchecked(&[utxo0], 0, &alice_pub_key);
         let outpoint = tx1.outpoint(0);
-        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx1));
+        assert_ok!(Utxo::spend(Origin::none(), tx1));
 
         // The following should fail because the transaction-level time lock does not conform to
         // the time lock restrictions imposed by the scripting system.
@@ -486,7 +486,7 @@ fn test_time_lock_script_fail() {
             time_lock: Default::default(),
         };
         assert_err!(
-            Utxo::spend(Origin::signed(H256::zero()), tx2),
+            Utxo::spend(Origin::none(), tx2),
             "script verification failed"
         );
     })
@@ -508,7 +508,7 @@ fn attack_double_spend_by_tweaking_input() {
             time_lock: Default::default(),
         }
         .sign_unchecked(&[utxo0], 0, &alice_pub_key);
-        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx0.clone()));
+        assert_ok!(Utxo::spend(Origin::none(), tx0.clone()));
 
         // Create a transaction that spends the same input 10 times by slightly modifying the
         // redeem script.
@@ -527,7 +527,7 @@ fn attack_double_spend_by_tweaking_input() {
             time_lock: Default::default(),
         };
         assert_err!(
-            Utxo::spend(Origin::signed(H256::zero()), tx1),
+            Utxo::spend(Origin::none(), tx1),
             "each input should be used only once"
         );
     });
@@ -670,14 +670,14 @@ proptest! {
             }
             .sign_unchecked(&[utxo0], 0, &alice);
             let outpoint = tx1.outpoint(0);
-            assert!(Utxo::spend(Origin::signed(H256::zero()), tx1).is_ok());
+            assert!(Utxo::spend(Origin::none(), tx1).is_ok());
 
             let tx2 = Transaction {
                 inputs: vec![TransactionInput::new_script(outpoint, script, Default::default())],
                 outputs: vec![TransactionOutput::new_pubkey(ALICE_GENESIS_BALANCE - u32::MAX as Value, H256::from(alice))],
                 time_lock: tx_lock_time,
             };
-            Utxo::spend(Origin::signed(H256::zero()), tx2)
+            Utxo::spend(Origin::none(), tx2)
         });
 
         // The transaction should be accepted if and only if:
@@ -818,7 +818,7 @@ fn test_token_issuance() {
         // After calling `Utxo::spend`, we should check that Storages successfully changed.
         // If it successfully wrote a new UTXO in the Storage, tx goes through all verifications correctly.
         assert!(UtxoStore::<Test>::contains_key(H256::from(init_utxo)));
-        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx));
+        assert_ok!(Utxo::spend(Origin::none(), tx));
         assert!(!UtxoStore::<Test>::contains_key(H256::from(init_utxo)));
         // Checking a new UTXO
         assert!(UtxoStore::<Test>::contains_key(new_utxo_hash));
@@ -868,7 +868,7 @@ fn test_token_issuance() {
 //         let new_utxo_hash = tx.outpoint(0);
 //         let (_, init_utxo) = genesis_utxo();
 //         assert!(UtxoStore::<Test>::contains_key(H256::from(init_utxo)));
-//         assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx));
+//         assert_ok!(Utxo::spend(Origin::none(), tx));
 //         assert!(!UtxoStore::<Test>::contains_key(H256::from(init_utxo)));
 //         assert!(UtxoStore::<Test>::contains_key(new_utxo_hash));
 //         assert_eq!(
@@ -914,7 +914,7 @@ fn test_token_issuance() {
 //         let (_, init_utxo) = genesis_utxo();
 //         // Submit
 //         assert!(UtxoStore::<Test>::contains_key(H256::from(init_utxo)));
-//         assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx.clone()));
+//         assert_ok!(Utxo::spend(Origin::none(), tx.clone()));
 //         assert!(!UtxoStore::<Test>::contains_key(H256::from(init_utxo)));
 //         // Checking a new UTXO
 //         assert!(UtxoStore::<Test>::contains_key(new_utxo_hash));
@@ -939,7 +939,7 @@ fn test_token_issuance() {
 //         // Submit
 //         assert!(UtxoStore::<Test>::contains_key(H256::from(new_utxo_hash)));
 //         frame_support::assert_err_ignore_postinfo!(
-//             Utxo::spend(Origin::signed(H256::zero()), tx),
+//             Utxo::spend(Origin::none(), tx),
 //             "digital data has already been minted"
 //         );
 //     });
@@ -968,14 +968,14 @@ macro_rules! test_tx {
             // We can check what error we are expecting
             if stringify!($checking) == "Err" {
                 frame_support::assert_err_ignore_postinfo!(
-                    Utxo::spend(Origin::signed(H256::zero()), tx),
+                    Utxo::spend(Origin::none(), tx),
                     $err
                 );
                 assert!(UtxoStore::<Test>::contains_key(H256::from(init_utxo)));
                 assert!(!UtxoStore::<Test>::contains_key(new_utxo_hash));
             } else if stringify!($checking) == "Ok" {
                 // We can check is that success
-                assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx));
+                assert_ok!(Utxo::spend(Origin::none(), tx));
                 assert!(!UtxoStore::<Test>::contains_key(H256::from(init_utxo)));
                 assert!(UtxoStore::<Test>::contains_key(new_utxo_hash));
             }
@@ -1115,7 +1115,7 @@ fn test_two_token_creation_in_one_tx() {
         }
         .sign_unchecked(&[utxo0], 0, &alice_pub_key);
         frame_support::assert_err_ignore_postinfo!(
-            Utxo::spend(Origin::signed(H256::zero()), tx),
+            Utxo::spend(Origin::none(), tx),
             "this id can't be used for a new token"
         );
     });
@@ -1153,7 +1153,7 @@ where
         }
         .sign_unchecked(&[utxo0.clone()], 0, &alice_pub_key);
         let token_id = TokenId::new(&tx.inputs[0]);
-        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx.clone()));
+        assert_ok!(Utxo::spend(Origin::none(), tx.clone()));
 
         let token_utxo_hash = tx.outpoint(1);
         let token_utxo: TransactionOutput<H256> = tx.outputs[1].clone();
@@ -1166,7 +1166,7 @@ where
             token_utxo,
         );
         frame_support::assert_err_ignore_postinfo!(
-            Utxo::spend(Origin::signed(H256::zero()), tx),
+            Utxo::spend(Origin::none(), tx),
             expecting_err_msg
         );
     });
@@ -1309,7 +1309,7 @@ fn test_token_transfer() {
         }
         .sign_unchecked(&[utxo0.clone()], 0, &alice_pub_key);
         let token_id = TokenId::new(&tx.inputs[0]);
-        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx.clone()));
+        assert_ok!(Utxo::spend(Origin::none(), tx.clone()));
         let token_utxo_hash = tx.outpoint(1);
         let token_utxo = tx.outputs[1].clone();
 
@@ -1337,7 +1337,7 @@ fn test_token_transfer() {
             time_lock: Default::default(),
         }
         .sign_unchecked(&[token_utxo.clone()], 0, &karl_pub_key);
-        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx.clone()));
+        assert_ok!(Utxo::spend(Origin::none(), tx.clone()));
         let alice_tokens_utxo_hash = tx.outpoint(0);
         let karl_tokens_utxo_hash = tx.outpoint(1);
         let karl_tokens_utxo = tx.outputs[1].clone();
@@ -1371,7 +1371,7 @@ fn test_token_transfer() {
             time_lock: Default::default(),
         }
         .sign_unchecked(&[karl_tokens_utxo], 0, &karl_pub_key);
-        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx.clone()));
+        assert_ok!(Utxo::spend(Origin::none(), tx.clone()));
         assert_eq!(
             300_000_000,
             UtxoStore::<Test>::get(alice_tokens_utxo_hash)
@@ -1426,7 +1426,7 @@ fn test_token_transfer() {
 //             time_lock: Default::default(),
 //         }
 //         .sign_unchecked(&[utxo0.clone()], 0, &alice_pub_key);
-//         assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx.clone()));
+//         assert_ok!(Utxo::spend(Origin::none(), tx.clone()));
 //         let token_utxo_hash = tx.outpoint(1);
 //         let token_utxo = tx.outputs[1].clone();
 //
@@ -1445,7 +1445,7 @@ fn test_token_transfer() {
 //         }
 //         .sign_unchecked(&[token_utxo.clone()], 0, &karl_pub_key);
 //         frame_support::assert_err_ignore_postinfo!(
-//             Utxo::spend(Origin::signed(H256::zero()), tx),
+//             Utxo::spend(Origin::none(), tx),
 //             "input for the token not found"
 //         );
 //         // Let's fail on exceed token amount
@@ -1463,7 +1463,7 @@ fn test_token_transfer() {
 //         }
 //         .sign_unchecked(&[token_utxo.clone()], 0, &karl_pub_key);
 //         frame_support::assert_err_ignore_postinfo!(
-//             Utxo::spend(Origin::signed(H256::zero()), tx),
+//             Utxo::spend(Origin::none(), tx),
 //             "output value must not exceed input value"
 //         );
 //
@@ -1482,7 +1482,7 @@ fn test_token_transfer() {
 //         }
 //         .sign_unchecked(&[token_utxo.clone()], 0, &karl_pub_key);
 //         frame_support::assert_err_ignore_postinfo!(
-//             Utxo::spend(Origin::signed(H256::zero()), tx),
+//             Utxo::spend(Origin::none(), tx),
 //             "output value must not exceed input value"
 //         );
 //
@@ -1500,7 +1500,7 @@ fn test_token_transfer() {
 //             time_lock: Default::default(),
 //         }
 //         .sign_unchecked(&[token_utxo], 0, &karl_pub_key);
-//         assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx.clone()));
+//         assert_ok!(Utxo::spend(Origin::none(), tx.clone()));
 //         let nft_utxo_hash = tx.outpoint(0);
 //         assert!(!UtxoStore::<Test>::contains_key(H256::from(
 //             token_utxo_hash
@@ -1549,7 +1549,7 @@ fn test_token_creation_with_insufficient_fee() {
         }
         .sign_unchecked(&[utxo0.clone()], 0, &alice_pub_key);
 
-        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx.clone()));
+        assert_ok!(Utxo::spend(Origin::none(), tx.clone()));
         let token_utxo_hash = tx.outpoint(1);
         let token_utxo = tx.outputs[1].clone();
         let tx = Transaction {
@@ -1571,7 +1571,7 @@ fn test_token_creation_with_insufficient_fee() {
         }
         .sign_unchecked(&[token_utxo], 0, &karl_pub_key);
         frame_support::assert_err_ignore_postinfo!(
-            Utxo::spend(Origin::signed(H256::zero()), tx),
+            Utxo::spend(Origin::none(), tx),
             "insufficient fee"
         );
     });
@@ -1605,7 +1605,7 @@ fn test_transfer_and_issuance_in_one_tx() {
         }
         .sign_unchecked(&[utxo0.clone()], 0, &alice_pub_key);
         let first_issuance_token_id = TokenId::new(&tx.inputs[0]);
-        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx.clone()));
+        assert_ok!(Utxo::spend(Origin::none(), tx.clone()));
         let token_utxo_hash = tx.outpoint(1);
         let token_utxo = tx.outputs[1].clone();
 
@@ -1644,7 +1644,7 @@ fn test_transfer_and_issuance_in_one_tx() {
             time_lock: Default::default(),
         }
         .sign_unchecked(&[token_utxo.clone()], 0, &karl_pub_key);
-        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx.clone()));
+        assert_ok!(Utxo::spend(Origin::none(), tx.clone()));
         let alice_transfer_utxo_hash = tx.outpoint(0);
         let karl_transfer_utxo_hash = tx.outpoint(1);
         let karl_issuance_utxo_hash = tx.outpoint(2);
@@ -1732,7 +1732,7 @@ fn test_transfer_for_multiple_tokens() {
         }
         .sign_unchecked(&[utxo0.clone()], 0, &alice_pub_key);
         let tkn1_token_id = TokenId::new(&tx.inputs[0]);
-        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx.clone()));
+        assert_ok!(Utxo::spend(Origin::none(), tx.clone()));
         let tkn1_utxo_hash = tx.outpoint(0);
         let tkn1_utxo = tx.outputs[0].clone();
         //
@@ -1765,7 +1765,7 @@ fn test_transfer_for_multiple_tokens() {
         }
         .sign_unchecked(&[tkn1_utxo.clone()], 0, &karl_pub_key);
         let tkn2_token_id = TokenId::new(&tx.inputs[0]);
-        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx.clone()));
+        assert_ok!(Utxo::spend(Origin::none(), tx.clone()));
         let tkn1_utxo_hash = tx.outpoint(0);
         let tkn2_utxo_hash = tx.outpoint(1);
         //
@@ -1809,7 +1809,7 @@ fn test_transfer_for_multiple_tokens() {
         .sign_unchecked(&prev_utxos, 0, &alice_pub_key)
         .sign_unchecked(&prev_utxos, 1, &alice_pub_key);
         let tkn3_token_id = TokenId::new(&tx.inputs[0]);
-        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx.clone()));
+        assert_ok!(Utxo::spend(Origin::none(), tx.clone()));
         let tkn1_utxo_hash = tx.outpoint(0);
         let tkn2_utxo_hash = tx.outpoint(1);
         let tkn3_utxo_hash = tx.outpoint(2);
@@ -1854,7 +1854,7 @@ fn test_transfer_for_multiple_tokens() {
         .sign_unchecked(&prev_utxos, 0, &karl_pub_key)
         .sign_unchecked(&prev_utxos, 1, &karl_pub_key)
         .sign_unchecked(&prev_utxos, 2, &karl_pub_key);
-        assert_ok!(Utxo::spend(Origin::signed(H256::zero()), tx.clone()));
+        assert_ok!(Utxo::spend(Origin::none(), tx.clone()));
         let tkn1_utxo_hash = tx.outpoint(0);
         let tkn2_utxo_hash = tx.outpoint(1);
         let tkn3_utxo_hash = tx.outpoint(2);
