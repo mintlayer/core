@@ -599,15 +599,116 @@ pub mod pallet {
         // }
     }
 
+    pub struct ValidateError {
+        pub code: u8,
+        pub message: &'static str,
+    }
+
+    impl ValidateError {
+        pub fn new(code: u8, message: &'static str) -> ValidateError {
+            Self { code, message }
+        }
+    }
+
+    // VE = Validate Error, 0 = no error
+    pub const VE_NO_ERROR: u8 = 0;
+    // no inputs
+    pub const VE_NO_INPUTS: u8 = 1;
+    // no outputs
+    pub const VE_NO_OUTPUTS: u8 = 2;
+    // too many inputs
+    pub const VE_TOO_MANY_INPUTS: u8 = 3;
+    // too many outputs
+    pub const VE_TOO_MANY_OUTPUTS: u8 = 4;
+    // each input should be used only once
+    pub const VE_MULTIPLE_USED_INPUT: u8 = 5;
+    // each output should be used once
+    pub const VE_MULTIPLE_USED_OUTPUT: u8 = 6;
+    // Time lock restrictions not satisfied
+    pub const VE_TIME_LOCK_RESTRICTIONS_NOT_SATISFIED: u8 = 7;
+    // Lock hash does not match
+    pub const VE_LOCK_HASH_DOES_NOT_MATCH: u8 = 8;
+    // missing inputs
+    pub const VE_MISSING_INPUTS: u8 = 9;
+    // token has never been issued
+    pub const VE_TOKEN_DID_NOT_ISSUED: u8 = 10;
+    // token ticker has none ascii characters
+    pub const VE_TOKEN_TICKER_HAS_NONE_ASCII_CHAR: u8 = 11;
+    // metadata uri has none ascii characters
+    pub const VE_TOKEN_METADATAURI_HAS_NONE_ASCII_CHAR: u8 = 12;
+    // token ticker is too long
+    pub const VE_TOKEN_TICKER_TOO_LONG: u8 = 13;
+    // token ticker can't be empty
+    pub const VE_TOKEN_TICKER_CANT_BE_EMPTY: u8 = 14;
+    // token metadata uri is too long
+    pub const VE_TOKEN_METADATAURI_TOO_LONG: u8 = 15;
+    // output value must be nonzero
+    pub const VE_OUTPUT_VALUE_MUST_BE_NONEZERO: u8 = 16;
+    // too many decimals
+    pub const VE_TOO_MANY_DECIMALS: u8 = 17;
+    // this id can't be used for a token
+    pub const VE_TOKEN_ID_CAN_NOT_BE_USED: u8 = 18;
+    // input value overflow
+    pub const VE_INPUT_VALUE_OVERFLOW: u8 = 19;
+    // output value overflow
+    pub const VE_OUTPUT_VALUE_OVERFLOW: u8 = 20;
+    // input for the token not found
+    pub const VE_TOKEN_INPUT_NOT_FOUND: u8 = 21;
+    // no inputs for the token id
+    pub const VE_NO_INPUTS_FOR_TOKEN_ID: u8 = 22;
+    // output already exists
+    pub const VE_OUTPUT_EXIST: u8 = 23;
+    // output value must not exceed input value
+    pub const VE_OUTPUT_VALUE_MUST_NOT_EXCEED_INPUT_VALUE: u8 = 24;
+    // corrupted output data
+    pub const VE_CORRUPTED_OUTPUT_DATA: u8 = 25;
+    // too many issuance in one transaction
+    pub const VE_TOO_MANY_ISSUANCES: u8 = 26;
+    // insufficient fee
+    pub const VE_INSUFFICIENT_FEE: u8 = 27;
+    // bad signature format
+    pub const VE_BAD_SIGNATURE_FORMAT: u8 = 28;
+    // signature must be valid
+    pub const VE_INVALID_SIGNATURE: u8 = 29;
+    // cannot spend a staking utxo
+    pub const VE_CANNOT_SPEND_STAKING_UTXO: u8 = 30;
+    // reward underflow
+    pub const VE_REWARD_UNDERFLOW: u8 = 31;
+    // reward exceed allowed amount
+    pub const VE_REWARD_EXCEED_ALLOWED_AMOUNT: u8 = 32;
+    // Some staking error
+    pub const EV_STAKING_ERROR: u8 = 33;
+    // Failed to convert witness to an opcode
+    pub const VE_FAILED_COVERT_WITNESS_TO_OPCODE: u8 = 34;
+    // OP_SPEND not found
+    pub const VE_OPSPEND_NOT_FOUND: u8 = 35;
+    // script verification failed
+    pub const VE_SCRIPT_VERIFICATION_FAILED: u8 = 36;
+
+    // Under construction
+    pub const VE_RESERVED: u8 = u8::MAX;
+
     pub fn validate_transaction<T: Config>(
         tx: &TransactionFor<T>,
-    ) -> Result<ValidTransaction, &'static str> {
+    ) -> Result<ValidTransaction, ValidateError> {
         //ensure rather than assert to avoid panic
         //both inputs and outputs should contain at least 1 and at most u32::MAX - 1 entries
-        ensure!(!tx.inputs.is_empty(), "no inputs");
-        ensure!(!tx.outputs.is_empty(), "no outputs");
-        ensure!(tx.inputs.len() < (u32::MAX as usize), "too many inputs");
-        ensure!(tx.outputs.len() < (u32::MAX as usize), "too many outputs");
+        ensure!(
+            !tx.inputs.is_empty(),
+            ValidateError::new(VE_NO_INPUTS, "no inputs")
+        );
+        ensure!(
+            !tx.outputs.is_empty(),
+            ValidateError::new(VE_NO_OUTPUTS, "no outputs")
+        );
+        ensure!(
+            tx.inputs.len() < (u32::MAX as usize),
+            ValidateError::new(VE_TOO_MANY_INPUTS, "too many inputs")
+        );
+        ensure!(
+            tx.outputs.len() < (u32::MAX as usize),
+            ValidateError::new(VE_TOO_MANY_OUTPUTS, "too many outputs")
+        );
 
         //ensure each input is used only a single time
         //maps each input into btree
@@ -622,7 +723,10 @@ pub mod pallet {
             //we want map size and input size to be equal to ensure each is used only once
             ensure!(
                 input_map.len() == tx.inputs.len(),
-                "each input should be used only once"
+                ValidateError::new(
+                    VE_MULTIPLE_USED_INPUT,
+                    "each input should be used only once"
+                )
             );
         }
         //ensure each output is unique
@@ -634,14 +738,17 @@ pub mod pallet {
             //check each output is defined only once
             ensure!(
                 out_map.len() == tx.outputs.len(),
-                "each output should be used once"
+                ValidateError::new(VE_MULTIPLE_USED_OUTPUT, "each output should be used once")
             );
         }
 
         // Verify absolute time lock
         ensure!(
             tx.check_time_lock::<T>(),
-            "Time lock restrictions not satisfied"
+            ValidateError::new(
+                VE_TIME_LOCK_RESTRICTIONS_NOT_SATISFIED,
+                "Time lock restrictions not satisfied"
+            )
         );
         // In order to avoid race condition in network we maintain a list of required utxos for a tx
         // Example of race condition:
@@ -665,7 +772,7 @@ pub mod pallet {
                     let lock_commitment = input_utxo.destination.lock_commitment();
                     ensure!(
                         input.lock_hash() == *lock_commitment,
-                        "Lock hash does not match"
+                        ValidateError::new(VE_LOCK_HASH_DOES_NOT_MATCH, "Lock hash does not match")
                     );
                     resolved.push(input_utxo);
                 } else {
@@ -704,7 +811,8 @@ pub mod pallet {
         let mut total_value_of_input_tokens: BTreeMap<TokenId, Value> = BTreeMap::new();
         let mut mlt_amount_in_inputs: Value = 0;
         for input in &tx.inputs {
-            let output = <UtxoStore<T>>::get(&input.outpoint).ok_or("missing inputs")?;
+            let output = <UtxoStore<T>>::get(&input.outpoint)
+                .ok_or(ValidateError::new(VE_MISSING_INPUTS, "missing inputs"))?;
             match &output.data {
                 Some(OutputData::TokenIssuanceV1 {
                     token_ticker,
@@ -713,31 +821,65 @@ pub mod pallet {
                     metadata_uri,
                 }) => {
                     // We have to check is this token already issued?
-                    let token_id = TokenIssuanceId::<T>::get(input.outpoint)
-                        .ok_or("token has never been issued")?;
+                    let token_id = TokenIssuanceId::<T>::get(input.outpoint).ok_or(
+                        ValidateError::new(VE_TOKEN_DID_NOT_ISSUED, "token has never been issued"),
+                    )?;
                     ensure!(
                         token_ticker.is_ascii(),
-                        "token ticker has none ascii characters"
+                        ValidateError::new(
+                            VE_TOKEN_TICKER_HAS_NONE_ASCII_CHAR,
+                            "token ticker has none ascii characters"
+                        )
                     );
                     ensure!(
                         metadata_uri.is_ascii(),
-                        "metadata uri has none ascii characters"
+                        ValidateError::new(
+                            VE_TOKEN_METADATAURI_HAS_NONE_ASCII_CHAR,
+                            "metadata uri has none ascii characters"
+                        )
                     );
-                    ensure!(token_ticker.len() <= 5, "token ticker is too long");
-                    ensure!(!token_ticker.is_empty(), "token ticker can't be empty");
-                    ensure!(metadata_uri.len() <= 100, "token metadata uri is too long");
-                    ensure!(amount_to_issue > &0u128, "output value must be nonzero");
-                    ensure!(number_of_decimals <= &18, "too long decimals");
+                    ensure!(
+                        token_ticker.len() <= 5,
+                        ValidateError::new(VE_TOKEN_TICKER_TOO_LONG, "token ticker is too long")
+                    );
+                    ensure!(
+                        !token_ticker.is_empty(),
+                        ValidateError::new(
+                            VE_TOKEN_TICKER_CANT_BE_EMPTY,
+                            "token ticker can't be empty"
+                        )
+                    );
+                    ensure!(
+                        metadata_uri.len() <= 100,
+                        ValidateError::new(
+                            VE_TOKEN_METADATAURI_TOO_LONG,
+                            "token metadata uri is too long"
+                        )
+                    );
+                    ensure!(
+                        amount_to_issue > &0u128,
+                        ValidateError::new(
+                            VE_OUTPUT_VALUE_MUST_BE_NONEZERO,
+                            "output value must be nonzero"
+                        )
+                    );
+                    ensure!(
+                        number_of_decimals <= &18,
+                        ValidateError::new(VE_TOO_MANY_DECIMALS, "too many decimals")
+                    );
                     // If token has just created we can't meet another amount here.
                     ensure!(
                         !total_value_of_input_tokens.contains_key(&token_id),
-                        "this id can't be used for a token"
+                        ValidateError::new(
+                            VE_TOKEN_ID_CAN_NOT_BE_USED,
+                            "this id can't be used for a token"
+                        )
                     );
                     total_value_of_input_tokens.insert(token_id.clone(), *amount_to_issue);
                     // But probably in this input we have a fee
-                    mlt_amount_in_inputs = mlt_amount_in_inputs
-                        .checked_add(output.value)
-                        .ok_or("input value overflow")?;
+                    mlt_amount_in_inputs = mlt_amount_in_inputs.checked_add(output.value).ok_or(
+                        ValidateError::new(VE_INPUT_VALUE_OVERFLOW, "input value overflow"),
+                    )?;
                 }
                 Some(OutputData::TokenTransferV1 {
                     ref token_id,
@@ -746,7 +888,7 @@ pub mod pallet {
                 }) => {
                     ensure!(
                         TokenIssuanceTransactions::<T>::contains_key(token_id),
-                        "token has never been issued"
+                        ValidateError::new(VE_TOKEN_DID_NOT_ISSUED, "token has never been issued")
                     );
                     total_value_of_input_tokens.insert(
                         token_id.clone(),
@@ -754,12 +896,15 @@ pub mod pallet {
                             .get(token_id)
                             .unwrap_or(&0)
                             .checked_add(*amount)
-                            .ok_or("input value overflow")?,
+                            .ok_or(ValidateError::new(
+                                VE_INPUT_VALUE_OVERFLOW,
+                                "input value overflow",
+                            ))?,
                     );
                     // But probably in this input we have a fee
-                    mlt_amount_in_inputs = mlt_amount_in_inputs
-                        .checked_add(output.value)
-                        .ok_or("input value overflow")?;
+                    mlt_amount_in_inputs = mlt_amount_in_inputs.checked_add(output.value).ok_or(
+                        ValidateError::new(VE_INPUT_VALUE_OVERFLOW, "input value overflow"),
+                    )?;
                 }
 
                 // todo: This part isn't fully tested, left for the next PR
@@ -789,9 +934,9 @@ pub mod pallet {
                 //     total_value_of_input_tokens.insert(token_id.clone(), 1);
                 // }
                 None => {
-                    mlt_amount_in_inputs = mlt_amount_in_inputs
-                        .checked_add(output.value)
-                        .ok_or("input value overflow")?;
+                    mlt_amount_in_inputs = mlt_amount_in_inputs.checked_add(output.value).ok_or(
+                        ValidateError::new(VE_INPUT_VALUE_OVERFLOW, "input value overflow"),
+                    )?;
                 }
             }
         }
@@ -811,32 +956,65 @@ pub mod pallet {
 
                     ensure!(
                         !TokenIssuanceTransactions::<T>::contains_key(&token_id),
-                        "token has already been issued"
+                        ValidateError::new(VE_TOKEN_DID_NOT_ISSUED, "token has never been issued")
                     );
                     ensure!(
                         token_ticker.is_ascii(),
-                        "token ticker has none ascii characters"
+                        ValidateError::new(
+                            VE_TOKEN_TICKER_HAS_NONE_ASCII_CHAR,
+                            "token ticker has none ascii characters"
+                        )
                     );
                     ensure!(
                         metadata_uri.is_ascii(),
-                        "metadata uri has none ascii characters"
+                        ValidateError::new(
+                            VE_TOKEN_METADATAURI_HAS_NONE_ASCII_CHAR,
+                            "metadata uri has none ascii characters"
+                        )
                     );
-                    ensure!(token_ticker.len() <= 5, "token ticker is too long");
-                    ensure!(!token_ticker.is_empty(), "token ticker can't be empty");
-                    ensure!(metadata_uri.len() <= 100, "token metadata uri is too long");
-                    ensure!(amount_to_issue > &0u128, "output value must be nonzero");
-                    ensure!(number_of_decimals <= &18, "too long decimals");
+                    ensure!(
+                        token_ticker.len() <= 5,
+                        ValidateError::new(VE_TOKEN_TICKER_TOO_LONG, "token ticker is too long")
+                    );
+                    ensure!(
+                        !token_ticker.is_empty(),
+                        ValidateError::new(
+                            VE_TOKEN_TICKER_CANT_BE_EMPTY,
+                            "token ticker can't be empty"
+                        )
+                    );
+                    ensure!(
+                        metadata_uri.len() <= 100,
+                        ValidateError::new(
+                            VE_TOKEN_METADATAURI_TOO_LONG,
+                            "token metadata uri is too long"
+                        )
+                    );
+                    ensure!(
+                        amount_to_issue > &0u128,
+                        ValidateError::new(
+                            VE_OUTPUT_VALUE_MUST_BE_NONEZERO,
+                            "output value must be nonzero"
+                        )
+                    );
+                    ensure!(
+                        number_of_decimals <= &18,
+                        ValidateError::new(VE_TOO_MANY_DECIMALS, "too many decimals")
+                    );
 
                     // If token has just created we can't meet another amount here.
                     ensure!(
                         !total_value_of_output_tokens.contains_key(&token_id),
-                        "this id can't be used for a new token"
+                        ValidateError::new(
+                            VE_TOKEN_ID_CAN_NOT_BE_USED,
+                            "this id can't be used for a token"
+                        )
                     );
                     total_value_of_output_tokens.insert(token_id.clone(), *amount_to_issue);
                     // But probably in this input we have a fee
-                    mlt_amount_in_outputs = mlt_amount_in_outputs
-                        .checked_add(output.value)
-                        .ok_or("input value overflow")?;
+                    mlt_amount_in_outputs = mlt_amount_in_outputs.checked_add(output.value).ok_or(
+                        ValidateError::new(VE_INPUT_VALUE_OVERFLOW, "input value overflow"),
+                    )?;
                 }
                 Some(OutputData::TokenTransferV1 {
                     ref token_id,
@@ -845,7 +1023,10 @@ pub mod pallet {
                 }) => {
                     ensure!(
                         TokenIssuanceTransactions::<T>::contains_key(token_id),
-                        "input for the token not found"
+                        ValidateError::new(
+                            VE_TOKEN_INPUT_NOT_FOUND,
+                            "input for the token not found"
+                        )
                     );
                     total_value_of_output_tokens.insert(
                         token_id.clone(),
@@ -853,12 +1034,15 @@ pub mod pallet {
                             .get(token_id)
                             .unwrap_or(&0)
                             .checked_add(*amount)
-                            .ok_or("output value overflow")?,
+                            .ok_or(ValidateError::new(
+                                VE_OUTPUT_VALUE_OVERFLOW,
+                                "output value overflow",
+                            ))?,
                     );
                     // But probably in this input we have a fee
-                    mlt_amount_in_outputs = mlt_amount_in_outputs
-                        .checked_add(output.value)
-                        .ok_or("input value overflow")?;
+                    mlt_amount_in_outputs = mlt_amount_in_outputs.checked_add(output.value).ok_or(
+                        ValidateError::new(VE_INPUT_VALUE_OVERFLOW, "input value overflow"),
+                    )?;
                 }
                 // todo: This part isn't fully tested, left for the next PR
                 // Some(OutputData::TokenBurnV1 { .. }) => {
@@ -888,9 +1072,9 @@ pub mod pallet {
                 //     total_value_of_output_tokens.insert(token_id.clone(), 1);
                 // }
                 None => {
-                    mlt_amount_in_outputs = mlt_amount_in_outputs
-                        .checked_add(output.value)
-                        .ok_or("output value overflow")?;
+                    mlt_amount_in_outputs = mlt_amount_in_outputs.checked_add(output.value).ok_or(
+                        ValidateError::new(VE_OUTPUT_VALUE_OVERFLOW, "output value overflow"),
+                    )?;
                 }
             }
         }
@@ -913,7 +1097,7 @@ pub mod pallet {
                 // But when we don't have an input for token but token id exist
                 ensure!(
                     !<TokenIssuanceTransactions<T>>::contains_key(tid),
-                    "no inputs for the token id"
+                    ValidateError::new(VE_NO_INPUTS_FOR_TOKEN_ID, "no inputs for the token id")
                 );
             }
         }
@@ -926,11 +1110,29 @@ pub mod pallet {
             match output.data {
                 Some(OutputData::TokenIssuanceV1 {
                     amount_to_issue, ..
-                }) => ensure!(amount_to_issue > 0, "output value must be nonzero"),
+                }) => ensure!(
+                    amount_to_issue > 0,
+                    ValidateError::new(
+                        VE_OUTPUT_VALUE_MUST_BE_NONEZERO,
+                        "output value must be nonzero"
+                    )
+                ),
                 Some(OutputData::TokenTransferV1 { amount, .. }) => {
-                    ensure!(amount > 0, "output value must be nonzero")
+                    ensure!(
+                        amount > 0,
+                        ValidateError::new(
+                            VE_OUTPUT_VALUE_MUST_BE_NONEZERO,
+                            "output value must be nonzero"
+                        )
+                    )
                 }
-                None => ensure!(output.value > 0, "output value must be nonzero"),
+                None => ensure!(
+                    output.value > 0,
+                    ValidateError::new(
+                        VE_OUTPUT_VALUE_MUST_BE_NONEZERO,
+                        "output value must be nonzero"
+                    )
+                ),
                 // todo: This part isn't fully tested, left for the next PR
                 // Some(OutputData::TokenBurnV1 { amount_to_burn, .. }) => {
                 //     ensure!(amount_to_burn > 0, "output value must be nonzero")
@@ -944,18 +1146,29 @@ pub mod pallet {
 
             match output.destination {
                 Destination::CreatePP(_, _) => {
-                    ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
+                    ensure!(
+                        !<UtxoStore<T>>::contains_key(hash),
+                        ValidateError::new(VE_OUTPUT_EXIST, "output already exists")
+                    );
                     log::info!("TODO validate CreatePP as output");
                 }
                 Destination::CallPP(_, _, _) => {
-                    ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
+                    ensure!(
+                        !<UtxoStore<T>>::contains_key(hash),
+                        ValidateError::new(VE_OUTPUT_EXIST, "output already exists")
+                    );
                     log::info!("TODO validate CallPP as output");
                 }
                 Destination::Pubkey(_) | Destination::ScriptHash(_) => {
-                    ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
+                    ensure!(
+                        !<UtxoStore<T>>::contains_key(hash),
+                        ValidateError::new(VE_OUTPUT_EXIST, "output already exists")
+                    );
                 }
                 Destination::LockForStaking { .. } | Destination::LockExtraForStaking { .. } => {
-                    staking::validate_staking_ops::<T>(output, hash)?;
+                    // todo: we should convert errors from DispatchResultWithPostInfo later
+                    staking::validate_staking_ops::<T>(output, hash)
+                        .map_err(|_err| ValidateError::new(EV_STAKING_ERROR, "staking error"))?;
                 }
             }
         }
@@ -965,7 +1178,10 @@ pub mod pallet {
             // We have to check sum of input tokens is less or equal to output tokens.
             ensure!(
                 mlt_amount_in_outputs <= mlt_amount_in_inputs,
-                "output value must not exceed input value"
+                ValidateError::new(
+                    VE_OUTPUT_VALUE_MUST_NOT_EXCEED_INPUT_VALUE,
+                    "output value must not exceed input value"
+                )
             );
 
             let mut issuance_counter = 0;
@@ -974,7 +1190,10 @@ pub mod pallet {
                     Some(input_value) => {
                         ensure!(
                             input_value == token_value,
-                            "output value must not exceed input value"
+                            ValidateError::new(
+                                VE_OUTPUT_VALUE_MUST_NOT_EXCEED_INPUT_VALUE,
+                                "output value must not exceed input value"
+                            )
                         )
                     }
                     // We have an output, but we have not an input
@@ -999,24 +1218,33 @@ pub mod pallet {
                                 }
                                 None | Some(OutputData::TokenTransferV1 { .. }) => {
                                     // But we can't send a token without input
-                                    frame_support::fail!("input for the token not found2")
+                                    frame_support::fail!(ValidateError::new(
+                                        VE_TOKEN_INPUT_NOT_FOUND,
+                                        "input for the token not found"
+                                    ))
                                 }
                             },
                             // This situation should never happen, but let's cover it
-                            None => frame_support::fail!("corrupted output data"),
+                            None => frame_support::fail!(ValidateError::new(
+                                VE_CORRUPTED_OUTPUT_DATA,
+                                "corrupted output data"
+                            )),
                         }
                     }
                 }
             }
             ensure!(
                 issuance_counter <= 1,
-                "too many issuance in one transaction"
+                ValidateError::new(
+                    VE_TOO_MANY_ISSUANCES,
+                    "too many issuance in one transaction"
+                )
             );
             if issuance_counter == 1 {
                 // The sender should pay not less than 100 MLT for issuance
                 ensure!(
                     mlt_amount_in_inputs >= crate::tokens::Mlt(100).to_munit(),
-                    "insufficient fee"
+                    ValidateError::new(VE_INSUFFICIENT_FEE, "insufficient fee")
                 );
             }
 
@@ -1032,9 +1260,15 @@ pub mod pallet {
                         );
                         let ok = pubkey
                             .parse_sig(&input.witness[..])
-                            .ok_or("bad signature format")?
+                            .ok_or(ValidateError::new(
+                                VE_BAD_SIGNATURE_FORMAT,
+                                "bad signature format",
+                            ))?
                             .verify(&msg);
-                        ensure!(ok, "signature must be valid");
+                        ensure!(
+                            ok,
+                            ValidateError::new(VE_INVALID_SIGNATURE, "signature must be valid")
+                        );
                     }
                     Destination::CreatePP(_, _) => {
                         log::info!("TODO validate spending of OP_CREATE");
@@ -1042,21 +1276,33 @@ pub mod pallet {
                     Destination::CallPP(_, _, _) => {
                         let spend =
                             u16::from_le_bytes(input.witness[1..].try_into().or_else(|_| {
-                                Err(DispatchError::Other(
+                                Err(ValidateError::new(
+                                    VE_FAILED_COVERT_WITNESS_TO_OPCODE,
                                     "Failed to convert witness to an opcode",
                                 ))
                             })?);
-                        ensure!(spend == 0x1337, "OP_SPEND not found");
+                        ensure!(
+                            spend == 0x1337,
+                            ValidateError::new(VE_OPSPEND_NOT_FOUND, "OP_SPEND not found")
+                        );
                     }
                     Destination::ScriptHash(_hash) => {
                         let witness = input.witness.clone();
                         let lock = input.lock.clone();
                         crate::script::verify(&tx, &input_utxos, index as u64, witness, lock)
-                            .map_err(|_| "script verification failed")?;
+                            .map_err(|_| {
+                                ValidateError::new(
+                                    VE_SCRIPT_VERIFICATION_FAILED,
+                                    "script verification failed",
+                                )
+                            })?;
                     }
                     Destination::LockForStaking { .. }
                     | Destination::LockExtraForStaking { .. } => {
-                        return Err("cannot spend a staking utxo.");
+                        return Err(ValidateError::new(
+                            VE_CANNOT_SPEND_STAKING_UTXO,
+                            "cannot spend a staking utxo",
+                        ));
                     }
                 }
             }
@@ -1064,9 +1310,12 @@ pub mod pallet {
             // Reward at the moment only in MLT
             reward = mlt_amount_in_inputs
                 .checked_sub(mlt_amount_in_outputs)
-                .ok_or("reward underflow")?;
+                .ok_or(ValidateError::new(VE_REWARD_UNDERFLOW, "reward underflow"))?;
             if reward >= u64::MAX.into() {
-                frame_support::fail!("reward exceed allowed amount");
+                frame_support::fail!(ValidateError::new(
+                    VE_REWARD_EXCEED_ALLOWED_AMOUNT,
+                    "reward exceed allowed amount"
+                ));
             }
         }
 
@@ -1162,7 +1411,8 @@ pub mod pallet {
         caller: &T::AccountId,
         tx: &TransactionFor<T>,
     ) -> DispatchResultWithPostInfo {
-        let tx_validity = validate_transaction::<T>(tx)?;
+        let tx_validity =
+            validate_transaction::<T>(tx).map_err(|err| DispatchError::Other(err.message))?;
         ensure!(tx_validity.requires.is_empty(), "missing inputs");
         update_storage::<T>(caller, tx, tx_validity.priority as Value)?;
         Ok(().into())

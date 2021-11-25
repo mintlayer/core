@@ -69,11 +69,8 @@ impl TokenId {
 #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 #[derive(Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, RuntimeDebug)]
 pub enum OutputData {
-    // TokenTransfer data to another user. If it is a token, then the token data must also be transferred to the recipient.
-    #[codec(index = 1)]
-    TokenTransferV1 { token_id: TokenId, amount: Value },
     // A new token creation
-    #[codec(index = 2)]
+    #[codec(index = 0)]
     TokenIssuanceV1 {
         // token_id: TokenId,
         token_ticker: Vec<u8>,
@@ -82,6 +79,9 @@ pub enum OutputData {
         number_of_decimals: u8,
         metadata_uri: Vec<u8>,
     },
+    // TokenTransfer data to another user. If it is a token, then the token data must also be transferred to the recipient.
+    #[codec(index = 1)]
+    TokenTransferV1 { token_id: TokenId, amount: Value },
     // todo: This part isn't fully tested, left for the next PR
 
     // // Burning a token or NFT

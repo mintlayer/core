@@ -76,7 +76,7 @@ class ExampleTest(MintlayerTestFramework):
             ],
             outputs=[
                 utxo.Output(
-                    value=50000 * COIN,
+                    value=50000 * COIN + utxo.OVERFLOW_PART_OF_VALUE,
                     destination=utxo.DestPubkey(charlie_stash.public_key),
                     data=None
                 ),
@@ -91,7 +91,7 @@ class ExampleTest(MintlayerTestFramework):
             ],
             outputs=[
                 utxo.Output(
-                    value=4000 * COIN,
+                    value=utxo.OVERFLOW_PART_OF_VALUE - 4000 * COIN,
                     destination=utxo.DestLockForStaking(charlie_stash.public_key, charlie.public_key,'0xa03bcfaac6ebdc26bb9c256c51b08f9c1c6d4569f48710a42939168d1d7e5b6086b20e145e97158f6a0b5bff2994439d3320543c8ff382d1ab3e5eafffaf1a18'),
                     data=None
                 ),

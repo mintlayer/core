@@ -34,7 +34,7 @@ from test_framework.util import (
 )
 
 
-class ExampleTest(MintlayerTestFramework):
+class TokenTest(MintlayerTestFramework):
 
     def set_test_params(self):
         self.setup_clean_chain = True
@@ -61,58 +61,87 @@ class ExampleTest(MintlayerTestFramework):
         client = self.nodes[0].rpc_client
 
         alice = Keypair.create_from_uri('//Alice')
+        bob = Keypair.create_from_uri('//Bob')
 
         # Find an utxo with enough funds
-        utxos = [u for u in client.utxos_for(alice) if u[1].value >= 150]
+        utxos = list(client.utxos_for(alice))
+        # tx1 = utxo.Transaction(
+        #     client,
+        #     inputs=[
+        #         utxo.Input(utxos[0][0]),
+        #     ],
+        #     outputs=[
+        #         utxo.Output(
+        #             value=utxo.OVERFLOW_PART_OF_VALUE,
+        #             destination=utxo.DestPubkey(alice.public_key),
+        #             data=None
+        #         ),
+        #         # This output prevent reward overflow
+        #         utxo.Output(
+        #             value=100,
+        #             destination=utxo.DestPubkey(bob.public_key),
+        #             data=utxo.DataTokenIssuanceV1("TEST", 1000,  1, "")
+        #         )
+        #
+        #     ]
+        # ).sign(alice, [utxos[0][1]])
+        # token_id = tx1.token_id()
+        # client.submit(alice, tx1)
+        #
+        # tx2 = utxo.Transaction(
+        #     client,
+        #     inputs=[
+        #         utxo.Input(tx1.outpoint(1)),
+        #     ],
+        #     outputs=[
+        #         utxo.Output(
+        #             value=99,
+        #             destination=utxo.DestPubkey(alice.public_key),
+        #             data=None
+        #         ),
+        #         # utxo.Output(
+        #         #     value=0,
+        #         #     destination=utxo.DestPubkey(alice.public_key),
+        #         #     data=utxo.DataTokenTransferV1(token_id, 1000)
+        #         # ),
+        #     ]
+        # ).sign(bob, [tx1.outputs[0]])
+        # client.submit(bob, tx2)
         tx1 = utxo.Transaction(
             client,
             inputs=[
                 utxo.Input(utxos[0][0]),
             ],
             outputs=[
-                # utxo.Output(
-                #     value=50,
-                #     destination=utxo.DestPubkey(alice.public_key),
-                #     data=None
-                # ),
-                # utxo.Output(
-                #     value=3981553255926290448385,
-                #     destination=utxo.DestPubkey(alice.public_key),
-                #     data=None
-                # ),
-                # This output prevent reward overflow
                 utxo.Output(
-                    value=50, # genesis amount - u64::MAX
-                    destination=utxo.DestPubkey(alice.public_key),
-                    data=None #utxo.TokenIssuanceV1("TEST", 1000,  1, "")
+                    value=utxo.OVERFLOW_PART_OF_VALUE,
+                    destination=utxo.DestPubkey(bob.public_key),
+                    data=utxo.DataTokenIssuanceV1("TEST", 1000,  1, "")
                 )
-
             ]
         ).sign(alice, [utxos[0][1]])
-        # token_id = tx1.token_id()
-        res1 = client.submit(alice, tx1)
-        assert_equal(res1, 1)
-        #
-        # tx2 = utxo.Transaction(
-        #     client,
-        #     inputs=[
-        #         # spend the 100 utxo output (index 1)
-        #         utxo.Input(tx1.outpoint(1)),
-        #     ],
-        #     outputs=[
-        #         utxo.Output(
-        #             value=100,
-        #             destination=utxo.DestPubkey(alice.public_key),
-        #             data=utxo.TokenTransferV1(token_id, 1000)
-        #         ),
-        #     ]
-        # ).sign(alice, [tx1.outputs[1]])
-        # res2 = client.submit(alice, tx2)
-        # print('+++++++++++++++++++++++++++++++++++++++++++++++++++')
-        # print(tx2)
-        # print('+++++++++++++++++++++++++++++++++++++++++++++++++++')
-        # assert_equal(res2, 1)
+        token_id = tx1.token_id()
+        client.submit(alice, tx1)
 
+        tx2 = utxo.Transaction(
+            client,
+            inputs=[
+                utxo.Input(tx1.outpoint(0)),
+            ],
+            outputs=[
+                utxo.Output(
+                    value=0,
+                    destination=utxo.DestPubkey(alice.public_key),
+                    data=utxo.DataTokenTransferV1(token_id, 1000)
+                ),
+                utxo.Output(
+                    value=1,
+                    destination=utxo.DestPubkey(bob.public_key),
+                    data=None
+                ),
+            ]
+        ).sign(bob, tx1.outputs)
+        client.submit(bob, tx2)
 
 if __name__ == '__main__':
-    ExampleTest().main()
+    TokenTest().main()

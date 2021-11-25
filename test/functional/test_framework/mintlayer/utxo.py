@@ -8,6 +8,12 @@ import os
 import logging
 from staking import Staking
 
+# The problem is on the Substrate side the reward for each transaction calculate in u64,
+# and at the same time Value has type u128. The current genesis amount for each account
+# is more than u64, and we have to send this amount to MLT to correctly process the transaction.
+# If we send less then tx will be rejected at the moment. Soon we will fix reward overflow.
+OVERFLOW_PART_OF_VALUE = 3981553255926290448386
+
 """ Client. A thin wrapper over SubstrateInterface """
 class Client():
     def __init__(self, url="ws://127.0.0.1", port=9944):
@@ -107,6 +113,8 @@ class Client():
             return (receipt.extrinsic_hash, receipt.block_hash, receipt.triggered_events)
         except SubstrateRequestException as e:
             self.log.debug("Failed to send: {}".format(e))
+            # Should be thrown upper
+            raise Exception(format(e))
 
     """ Submit a transaction onto the blockchain: unlock """
     def unlock_request_for_withdrawal(self, keypair):
@@ -257,33 +265,33 @@ class OutputData():
         if obj is None:
             return None
         if 'TokenIssuanceV1' in obj:
-            return TokenIssuanceV1.load(obj['TokenIssuanceV1'])
+            return DataTokenIssuanceV1.load(obj['TokenIssuanceV1'])
         if 'TokenTransferV1' in obj:
-            return TokenTransferV1.load(obj['TokenTransferV1'])
+            return DataTokenTransferV1.load(obj['TokenTransferV1'])
         return None
 
     def type_string(self):
         return 'OutputData'
 
 
-class TokenIssuanceV1():
+class DataTokenIssuanceV1(OutputData):
     def __init__(self, token_ticker, amount_to_issue, number_of_decimals, metadata_uri):
         self.token_ticker = token_ticker
         self.amount_to_issue = amount_to_issue
         self.number_of_decimals = number_of_decimals
         self.metadata_uri = metadata_uri
 
-    def type_string(self):
-        return 'TokenIssuanceV1'
+    # def type_string(self):
+    #     return 'TokenIssuanceV1'
 
     @staticmethod
     def load(obj):
-        return TokenIssuanceV1(obj['token_ticker'], obj['amount_to_issue'], obj['number_of_decimals'], obj['metadata_uri'])
+        return DataTokenIssuanceV1(obj['token_ticker'], obj['amount_to_issue'], obj['number_of_decimals'], obj['metadata_uri'])
 
     def json(self):
         return { 'TokenIssuanceV1': { 'token_ticker': self.token_ticker, 'amount_to_issue': self.amount_to_issue, 'number_of_decimals': self.number_of_decimals, 'metadata_uri': self.metadata_uri } }
 
-class TokenTransferV1():
+class DataTokenTransferV1(OutputData):
     def __init__(self, token_id, amount):
         self.token_id = token_id
         self.amount = amount
@@ -293,7 +301,7 @@ class TokenTransferV1():
 
     @staticmethod
     def load(obj):
-        return TokenTransferV1(obj['token_id'], obj['amount'])
+        return DataTokenTransferV1(obj['token_id'], obj['amount'])
 
     def json(self):
         return { 'TokenTransferV1': { 'token_id': self.token_id, 'amount': self.amount } }
@@ -397,5 +405,5 @@ class Transaction():
     def token_id(self):
         input0 = self.inputs[0].json()
         encoded = self.client.substrate.encode_scale('TransactionInput', input0)
-        id = '0x' + str(substrateinterface.utils.hasher.blake2_256(encoded.data)[0:40])
-        return { 'inner': id, }
+        id = '0x' + str(substrateinterface.utils.hasher.blake2_256(encoded.data))[0:40]
+        return { 'inner': id }

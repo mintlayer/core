@@ -1028,7 +1028,7 @@ fn test_tokens_issuance_too_big_decimals() {
         number_of_decimals: 19,
         metadata_uri: "mintlayer.org".as_bytes().to_vec(),
     };
-    test_tx!(data, Err, "too long decimals");
+    test_tx!(data, Err, "too many decimals");
 }
 
 #[test]

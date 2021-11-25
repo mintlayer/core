@@ -72,7 +72,7 @@ class ExampleTest(MintlayerTestFramework):
             ],
             outputs=[
                 utxo.Output(
-                    value=50,
+                    value=utxo.OVERFLOW_PART_OF_VALUE,
                     destination=utxo.DestPubkey(bob.public_key),
                     data=None
                 ),
@@ -92,7 +92,7 @@ class ExampleTest(MintlayerTestFramework):
                     data=None
                 ),
                 utxo.Output(
-                    value=20,
+                    value=utxo.OVERFLOW_PART_OF_VALUE - 30,
                     destination=utxo.DestPubkey(bob.public_key),
                     data=None
                 ),

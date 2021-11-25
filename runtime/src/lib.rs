@@ -611,8 +611,8 @@ impl_runtime_apis! {
                 match pallet_utxo::validate_transaction::<Runtime>(&tx) {
                     Ok(valid_tx) => { return Ok(valid_tx); }
                     Err(e) => {
-                        log::error!("utxo validation failed: {:?}",e);
-                        return Err(TransactionValidityError::Invalid(InvalidTransaction::Custom(1)));
+                        log::error!("utxo validation failed: {:?}", e.message);
+                        return Err(TransactionValidityError::Invalid(InvalidTransaction::Custom(e.code)));
                     }
                 }
             }
