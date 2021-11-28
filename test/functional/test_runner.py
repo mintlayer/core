@@ -56,6 +56,7 @@ TEST_EXIT_SKIPPED = 77
 BASE_SCRIPTS= [
     'example_test.py',
     'feature_alice_bob_test.py',
+    'feature_alice_rain_test.py',
     'feature_staking_extra.py',
     'feature_staking_extra_not_validator.py',
     'feature_staking_extra_wrong_controller.py',
