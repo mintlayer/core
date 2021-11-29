@@ -565,36 +565,36 @@ pub mod pallet {
     }
 
     pub fn create<T: Config>(
-        caller: &T::AccountId,
-        code: &Vec<u8>,
-        utxo_hash: H256,
-        utxo_value: u128,
-        data: &Vec<u8>,
+        _caller: &T::AccountId,
+        _code: &Vec<u8>,
+        _utxo_hash: H256,
+        _utxo_value: u128,
+        _data: &Vec<u8>,
     ) -> Result<(), &'static str> {
-        let weight: Weight = 6000000000;
-
-        T::ProgrammablePool::create(caller, weight, code, utxo_hash, utxo_value, data)
+        // let weight: Weight = 6000000000;
+        // T::ProgrammablePool::create(caller, weight, code, utxo_hash, utxo_value, data)
+        Ok(())
     }
 
     pub fn call<T: Config>(
-        caller: &T::AccountId,
-        dest: &T::AccountId,
-        utxo_hash: H256,
-        utxo_value: u128,
-        fund_contract: bool,
-        data: &Vec<u8>,
+        _caller: &T::AccountId,
+        _dest: &T::AccountId,
+        _utxo_hash: H256,
+        _utxo_value: u128,
+        _fund_contract: bool,
+        _data: &Vec<u8>,
     ) -> Result<(), &'static str> {
-        let weight: Weight = 6000000000;
-
-        T::ProgrammablePool::call(
-            caller,
-            dest,
-            weight,
-            utxo_hash,
-            utxo_value,
-            fund_contract,
-            data,
-        )
+        // let weight: Weight = 6000000000;
+        // T::ProgrammablePool::call(
+        //     caller,
+        //     dest,
+        //     weight,
+        //     utxo_hash,
+        //     utxo_value,
+        //     fund_contract,
+        //     data,
+        // )
+        Ok(())
     }
 
     pub fn validate_transaction<T: Config>(
