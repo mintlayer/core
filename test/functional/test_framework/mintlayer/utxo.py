@@ -3,9 +3,11 @@
 import substrateinterface
 from substrateinterface import SubstrateInterface, Keypair
 from substrateinterface.exceptions import SubstrateRequestException
+from substrateinterface.utils.ss58 import ss58_decode
 import scalecodec
 import os
 import logging
+from staking import Staking
 
 """ Client. A thin wrapper over SubstrateInterface """
 class Client():
@@ -21,6 +23,8 @@ class Client():
             type_registry_preset='substrate-node-template',
             type_registry=custom_type_registry
         )
+
+        self.staking = Staking(self.substrate)
 
     """ SCALE-encode given object in JSON format """
     def encode_obj(self, ty, obj):
@@ -47,7 +51,10 @@ class Client():
 
     """ Get UTXOs for given key """
     def utxos_for(self, keypair):
-        matching = lambda e: e[1].destination.get_pubkey() == keypair.public_key
+        if type(keypair) == str:
+            matching = lambda e: e[1].destination.get_pubkey() == keypair
+        else:
+            matching = lambda e: e[1].destination.get_pubkey() == keypair.public_key
         return filter(matching, self.utxos('UtxoStore'))
 
     """ Get UTXOs for given key """
@@ -72,47 +79,42 @@ class Client():
         return filter(matching , staking_count)
 
 
-    # TODO: move to a separate file
     """ accesses pallet-staking to retrieve the ledger """
     def get_staking_ledger(self):
-        query = self.substrate.query_map(
-            module='Staking',
-            storage_function='Ledger'
-        )
+        return self.staking.get_staking_ledger()
 
-        return ((h, o.value) for (h, o) in query)
-
-    # TODO: move to a separate file
     """ accesses current era """
     def current_era(self):
-        query = self.substrate.query(
-            module='Staking',
-            storage_function='CurrentEra'
-        )
-        return query
+        return self.staking.current_era()
 
-    # TODO: move to a separate file
     """ gets the staking ledger of the given key """
     def get_ledger(self, keypair):
-        query = self.substrate.query_map(
-            module='Staking',
-            storage_function='Ledger'
-        )
+        return self.staking.get_ledger()
 
-        matching = lambda e: e[0].value == keypair.ss58_address
-
-        return filter(matching, ((h, o.value) for (h, o) in query))
-
-    # TODO: move to a separate file
     """ returns what era for the user to be able to withdraw funds """
     def withdrawal_era(self, keypair):
-        ledger = list(self.get_ledger(keypair))
-        if ledger:
-            return ledger[0][1]['unlocking'][0]['era']
-        else:
-            print("no funds to withdraw")
+        return self.staking.withdrawal_era(keypair)
 
+    def submit_extrinsic(self, extrinsic):
+        extrinsic.extrinsic_hash = extrinsic.generate_hash()
+        def result_handler(message, update_nr, sub_id):
+            print('Msg:', message)
+            if 'params' in message and type(message['params']['result']) is dict:
+                res = message['params']['result']
+                if 'inBlock' in res:
+                    return substrateinterface.ExtrinsicReceipt(
+                        substrate = self.substrate,
+                        block_hash = res['inBlock'],
+                        extrinsic_hash = '0x{}'.format(extrinsic.extrinsic_hash)
+                    )
 
+        result = self.substrate.rpc_request(
+            "author_submitAndWatchExtrinsic",
+            [str(extrinsic.data)],
+            result_handler=result_handler
+        )
+
+        return result
 
     """ Submit a transaction onto the blockchain """
     def submit(self, keypair, tx):
@@ -121,15 +123,16 @@ class Client():
             call_function = 'spend',
             call_params = { 'tx': tx.json() },
         )
-        extrinsic = self.substrate.create_signed_extrinsic(call=call, keypair=keypair)
-        self.log.debug("extrinsic submitted...")
+        extrinsic = self.substrate.create_unsigned_extrinsic(call=call)
 
         try:
-            receipt = self.substrate.submit_extrinsic(extrinsic, wait_for_inclusion=True)
+            self.log.debug("Submitting extrinsic")
+            receipt = self.submit_extrinsic(extrinsic)
             self.log.debug("Extrinsic '{}' sent and included in block '{}'".format(receipt.extrinsic_hash, receipt.block_hash))
-            return (receipt.extrinsic_hash, receipt.block_hash, receipt.triggered_events)
+            return (receipt.extrinsic_hash, receipt.block_hash, None)
         except SubstrateRequestException as e:
             self.log.debug("Failed to send: {}".format(e))
+            raise e
 
     """ Submit a transaction onto the blockchain: unlock """
     def unlock_request_for_withdrawal(self, keypair):
@@ -235,10 +238,13 @@ class DestCallPP(Destination):
 
     @staticmethod
     def load(obj):
-        return DestCallPP(obj['dest_account'], obj['fund'], obj['input_data'])
+        return DestCallPP(ss58_decode(obj['dest_account']), obj['fund'], obj['input_data'])
 
     def json(self):
         return { 'CallPP': { 'dest_account': self.acct, 'fund': self.fund, 'input_data': self.data } }
+
+    def get_pubkey(self):
+        return str(self.acct)
 
 class DestLockForStaking(Destination):
     def __init__(self, stash_account, controller_account, session_key):
@@ -270,7 +276,6 @@ class DestLockExtraForStaking(Destination):
 
     def get_ss58_address(self):
         return self.stash
-
 
 class Output():
     def __init__(self, value, destination, data):

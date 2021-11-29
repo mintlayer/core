@@ -56,6 +56,7 @@ TEST_EXIT_SKIPPED = 77
 BASE_SCRIPTS= [
     'example_test.py',
     'feature_alice_bob_test.py',
+    'feature_alice_rain_test.py',
     'feature_staking_extra.py',
     'feature_staking_extra_not_validator.py',
     'feature_staking_extra_wrong_controller.py',
@@ -64,9 +65,9 @@ BASE_SCRIPTS= [
     'feature_staking_diff_addresses.py',
     'feature_staking_unlock_not_validator.py',
     'feature_staking_withdraw_no_unlock.py',
-    'feature_staking_withdraw_not_validator.py'
-#     'feature_staking_unlock_and_withdraw.py' ## should be ran on 20 secs
-    # 'feature_smart_contract_test.py',
+    'feature_staking_withdraw_not_validator.py',
+    'feature_staking_unlock_and_withdraw.py' ## should be ran on 20 secs
+    # 'feature_smart_contract_test.py',  ## fix this when we have the time.
     # Don't append tests at the end to avoid merge conflicts
     # Put them in a random line within the section that fits their approximate run-time
 ]
@@ -326,6 +327,13 @@ class TestHandler:
                               log_stderr))
         if not self.jobs:
             raise IndexError('pop from empty list')
+
+        # print test names that are running
+        running_test_names = [test_data[0] for test_data in self.jobs]
+        running_test_names_list = ["{}{}{}".format(BOLD[1], nm, BOLD[0]) for nm in running_test_names]
+        running_test_names_list = ", ".join(running_test_names_list)
+        logging.debug("Test%s currently running: %s", "s" if len(running_test_names) > 1 else "", running_test_names_list)
+
         while True:
             # Return first proc that finishes
             time.sleep(.5)
@@ -336,6 +344,7 @@ class TestHandler:
                     # providing useful output.
                     proc.send_signal(signal.SIGINT)
                 if proc.poll() is not None:
+                    # check if the test has finished
                     log_out.seek(0), log_err.seek(0)
                     [stdout, stderr] = [l.read().decode('utf-8') for l in (log_out, log_err)]
                     log_out.close(), log_err.close()
@@ -403,7 +412,7 @@ def check_script_list(src_dir):
     python_files = set([t for t in os.listdir(script_dir) if t[-3:] == ".py"])
     missed_tests = list(python_files - set(map(lambda x: x.split()[0], ALL_SCRIPTS + NON_SCRIPTS)))
     if len(missed_tests) != 0:
-        print("%sWARNING!%s The following scripts are not being run: %s. Check the test lists in test_runner.py." % (BOLD[1], BOLD[0], str(missed_tests)))
+        print("%sWARNING!%s The following scripts are not being run: %s. Check the test lists in test_runner.py." % (BOLD[1], BOLD[0], str(missed_tests)), flush=True)
         if os.getenv('TRAVIS') == 'true':
             # On travis this warning is an error to prevent merging incomplete commits into master
             sys.exit(1)

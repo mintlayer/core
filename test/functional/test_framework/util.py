@@ -5,6 +5,7 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Helpful routines for regression testing."""
 
+from substrateinterface.exceptions import SubstrateRequestException
 from base64 import b64encode
 from binascii import hexlify, unhexlify
 from decimal import Decimal, ROUND_DOWN
@@ -67,6 +68,14 @@ def assert_raises_message(exc, message, fun, *args, **kwds):
         raise AssertionError("Unexpected exception raised: " + type(e).__name__)
     else:
         raise AssertionError("No exception raised")
+
+def assert_raises_substrate_exception(fun, *args, **kwds):
+    try:
+        fun(*args, **kwds)
+    except SubstrateRequestException as e:
+        return True
+    else:
+        raise AssertionError("No SubstrateRequestException raised")
 
 def assert_raises_process_error(returncode, output, fun, *args, **kwds):
     """Execute a process and asserts the process return code and output.

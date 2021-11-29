@@ -1,4 +1,4 @@
-use node_template_runtime::{
+use mintlayer_runtime::{
     pallet_utxo, AccountId, BalancesConfig, GenesisConfig, PpConfig, SessionConfig, Signature,
     StakerStatus, StakingConfig, SudoConfig, SystemConfig, UtxoConfig, MINIMUM_STAKE,
     NUM_OF_VALIDATOR_SLOTS, WASM_BINARY,
@@ -222,7 +222,7 @@ fn testnet_genesis(
             session_keys.push((
                 auth_keys.stash_account_id(),
                 auth_keys.stash_account_id(),
-                node_template_runtime::opaque::SessionKeys {
+                mintlayer_runtime::opaque::SessionKeys {
                     aura: AuraId::from(auth_keys.sr25519_public_controller),
                     grandpa: GrandpaId::from(auth_keys.ed25519_public),
                 },

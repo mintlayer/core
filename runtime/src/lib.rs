@@ -47,9 +47,6 @@ use pallet_transaction_payment::CurrencyAdapter;
 pub use sp_runtime::BuildStorage;
 pub use sp_runtime::{Perbill, Percent, Permill};
 
-/// Import the template pallet.
-pub use pallet_template;
-
 pub use pallet_pp;
 pub use pallet_utxo;
 use pallet_utxo::MLT_UNIT;
@@ -125,7 +122,10 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 /// up by `pallet_aura` to implement `fn slot_duration()`.
 ///
 /// Change this to adjust the block time.
-pub const MILLISECS_PER_BLOCK: u64 = 60_000; //1 min
+#[cfg(not(feature = "short-block-time"))]
+pub const MILLISECS_PER_BLOCK: u64 = 60_000; // 1 min
+#[cfg(feature = "short-block-time")]
+pub const MILLISECS_PER_BLOCK: u64 = 3_000; // 3 sec
 
 // NOTE: Currently it is not possible to change the slot duration after the chain has started.
 //       Attempting to do so will brick block production.
@@ -305,11 +305,6 @@ impl pallet_transaction_payment::Config for Runtime {
 impl pallet_sudo::Config for Runtime {
     type Event = Event;
     type Call = Call;
-}
-
-/// Configure the pallet-template in pallets/template.
-impl pallet_template::Config for Runtime {
-    type Event = Event;
 }
 
 parameter_types! {
@@ -508,8 +503,6 @@ construct_runtime!(
         Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
         TransactionPayment: pallet_transaction_payment::{Pallet, Storage},
         Sudo: pallet_sudo::{Pallet, Call, Config<T>, Storage, Event<T>},
-        // Include the custom logic from the pallet-template in the runtime.
-        TemplateModule: pallet_template::{Pallet, Call, Storage, Event<T>},
         Utxo: pallet_utxo::{Pallet, Call, Config<T>, Storage, Event<T>},
         Pp: pallet_pp::{Pallet, Call, Config<T>, Storage, Event<T>},
         Contracts: pallet_contracts::{Pallet, Call, Storage, Event<T>},
@@ -769,7 +762,6 @@ impl_runtime_apis! {
             add_benchmark!(params, batches, frame_system, SystemBench::<Runtime>);
             add_benchmark!(params, batches, pallet_balances, Balances);
             add_benchmark!(params, batches, pallet_timestamp, Timestamp);
-            add_benchmark!(params, batches, pallet_template, TemplateModule);
             add_benchmark!(params, batches, pallet_utxo, Utxo);
             add_benchmark!(params, batches, pallet_pp, Pp);
 

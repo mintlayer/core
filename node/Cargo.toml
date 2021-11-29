@@ -21,7 +21,7 @@ substrate-build-script-utils = {version = '3.0.0', git = 'https://github.com/par
 [dependencies]
 jsonrpc-core = '18.0.0'
 structopt = '0.3.8'
-node-template-runtime = {version = '3.0.0', path = '../runtime'}
+mintlayer-runtime = {version = '3.0.0', path = '../runtime'}
 pallet-utxo-rpc = { path = "../pallets/utxo/rpc" }
 pallet-utxo-rpc-runtime-api = { path = "../pallets/utxo/rpc/runtime-api" }
 log = "0.4.8"
@@ -227,4 +227,4 @@ branch = "master"
 
 [features]
 default = []
-runtime-benchmarks = ['node-template-runtime/runtime-benchmarks']
+runtime-benchmarks = ['mintlayer-runtime/runtime-benchmarks']
