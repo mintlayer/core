@@ -26,7 +26,6 @@ use frame_support::{
     sp_io::crypto,
     sp_runtime::traits::{BlakeTwo256, Hash},
 };
-
 use crate::script::test::gen_block_time_real;
 use crate::tokens::OutputData;
 use proptest::prelude::*;
