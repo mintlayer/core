@@ -7,7 +7,7 @@ At a glance, Mintlayer offers:
 - Native tokenization, including NFTs and confidential tokens
 - Support for WebAssembly smart contracts
 - Formidable security and privacy features, by virtue of its UTXO system and the Chainscript scripting language
-- Signature aggregation through BLS 
+- Signature aggregation through BLS
 - Fully interoperablity with bitcoin and the lightning network
 
 ## Native tokenization ##:
@@ -88,4 +88,9 @@ In addition to offering simplicity, Chainscript eliminates entire classes of sec
 
 Furthermore, the stack-based execution model of Chainscript ensures that the time and processing resources necessary to execute a script is proportional to the size of the script. As the maximum valid size for a script is bounded, so are the resources needed to execute it. In this way, the need for gas fees is eliminated in the case of simple (Chainscript) smart contracts.
 
-## BLS Signatures
+## Signature aggregation through BLS
+A significant part of every transaction in a utxo system consists of the sender's signature. For example, in Bitcoin's ECDSA, the signature makes up over 1/3 of the entire transaction.
+
+Signature aggregation is a technique which dramatically reduces the space occupied by transaction signatures on the blockchain. After a validator has selected the transactions for the next block, it uses all of the transaction signatrues as input to a _signature aggregation scheme_ (in Mintlayer's case, BLS) in order to compute a single "aggregated signature" (of the same size as the individual transaction signatures). Only the aggregated signature is stored in the block, and other validators can use it to verify all transactions in that block.
+
+In this way, signature aggregation enables more transactions within a block of a given size. The advantages of this are manifold. The most direct benefit is storage space saved in the long run, which in in turn improves the speed of onboarding new nodes onto the chain. Having more transactions per block also makes it easier for any given transaction to be selected for the next block, which results in lower transaction processing times, and thus lower transaction fees.
