@@ -8,9 +8,10 @@ At a glance, Mintlayer offers:
 - Support for WebAssembly smart contracts
 - Formidable security and privacy features, by virtue of its UTXO system and the Chainscript scripting language
 - Signature aggregation through BLS
+- Confidential transactions
 - Fully interoperablity with bitcoin and the lightning network
 
-## Native tokenization ##:
+## Native tokenization
 
 Mintlayer's native token, MLT, is used for staking and for paying transaction fees (**TODO** not sure about the transaction fees).
 In addition, minting your own token on Mintlayer is as easy as submitting a transaction. No smart contract is required!
@@ -24,7 +25,7 @@ Currently, there are three types of tokens that can be issued on Mintlayer:
 - **MLS-02**: confidential tokens, whose transactions are not publicly available on the blockchain (**TODO** I want to understand these better, also in relation to BLS)
 - **MLS-03**: NFTs
 
-## WebAssembly Smart Contracts ##
+## WebAssembly smart contracts ##
 
 Decentralized applications of any complexity invariably require the use of smart contracts.
 
@@ -94,3 +95,5 @@ A significant part of every transaction in a utxo system consists of the sender'
 Signature aggregation is a technique which dramatically reduces the space occupied by transaction signatures on the blockchain. After a validator has selected the transactions for the next block, it uses all of the transaction signatrues as input to a _signature aggregation scheme_ (in Mintlayer's case, BLS) in order to compute a single "aggregated signature" (of the same size as the individual transaction signatures). Only the aggregated signature is stored in the block, and other validators can use it to verify all transactions in that block.
 
 In this way, signature aggregation enables more transactions within a block of a given size. The advantages of this are manifold. The most direct benefit is storage space saved in the long run, which in in turn improves the speed of onboarding new nodes onto the chain. Having more transactions per block also makes it easier for any given transaction to be selected for the next block, which results in lower transaction processing times, and thus lower transaction fees.
+
+## Confidential Transactions
