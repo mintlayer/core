@@ -320,7 +320,6 @@ class TestHandler:
                               time.time(),
                               subprocess.Popen([self.tests_dir + test_argv[0]] + test_argv[1:] + self.flags + portseed_arg + tmpdir_arg,
                                                universal_newlines=True,
-                                               stdout=log_stdout,
                                                stderr=log_stderr),
                               testdir,
                               log_stdout,
@@ -358,7 +357,7 @@ class TestHandler:
                     self.jobs.remove(j)
 
                     return TestResult(name, status, int(time.time() - time0)), testdir, stdout, stderr
-            print('.', end='', flush=True)
+            #print('.', end='', flush=True)
 
 class TestResult():
     def __init__(self, name, status, time):
