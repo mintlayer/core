@@ -90,7 +90,7 @@ In addition to offering simplicity, Chainscript eliminates entire classes of sec
 Furthermore, the stack-based execution model of Chainscript ensures that the time and processing resources necessary to execute a script is proportional to the size of the script. As the maximum valid size for a script is bounded, so are the resources needed to execute it. In this way, the need for gas fees is eliminated in the case of simple (Chainscript) smart contracts.
 
 ## Signature aggregation through BLS
-A significant part of every transaction in a utxo system consists of the sender's signature. For example, in Bitcoin's ECDSA, the signature makes up over 1/3 of the entire transaction.
+A significant part of every transaction in a utxo system consists of the sender's signature. For example, in Bitcoin's ECDSA, the signature makes up around 1/3 of the entire transaction.
 
 Signature aggregation is a technique which dramatically reduces the space occupied by transaction signatures on the blockchain. After a validator has selected the transactions for the next block, it uses all of the transaction signatrues as input to a _signature aggregation scheme_ (in Mintlayer's case, BLS) in order to compute a single "aggregated signature" (of the same size as the individual transaction signatures). Only the aggregated signature is stored in the block, and other validators can use it to verify all transactions in that block.
 
