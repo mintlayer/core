@@ -1,5 +1,7 @@
 # Mintlayer core
 
+## NOTE THIS REPO IS NOT LONGER UNDER ACTIVE DEVELOPMENT GO TO [OUR NEW REPO](https://github.com/mintlayer/mintlayer-core)
+
 https://www.mintlayer.org/
 
 For a more technical introduction to Mintlayer visit [our docs](https://docs.mintlayer.org/).
